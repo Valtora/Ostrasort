@@ -11,6 +11,7 @@ public sealed class PatchInfo
     public bool Exists { get; init; }
     public string? Dir { get; init; }
     public string? ToolVersion { get; set; }
+    public int ExcludedCount { get; set; }        // items the player rejected outright
     public List<string> CoveredKeys { get; } = new();
     public List<string> StaleReasons { get; } = new();
     public List<string> UnneededKeys { get; } = new();
@@ -26,7 +27,9 @@ public sealed record MergeOption(string SourceId, string SourceLabel, string Ent
 /// <summary>
 /// One item of a merged pool. Options are in claimant load order. An item is
 /// contested when two claimants disagree on the full entry text; contested
-/// items need a decision - the player's, or the headless fallback.
+/// items need a decision - the player's, or the headless fallback. ANY item
+/// (contested or carried-over) can instead be Excluded: dropped from the
+/// merged pool entirely, for rejecting a mod's unwanted strays.
 /// </summary>
 public sealed class MergeItem
 {
@@ -34,9 +37,10 @@ public sealed class MergeItem
     public required List<MergeOption> Options { get; init; }
     public string? ChosenSourceId { get; set; }
     public bool AutoResolved { get; set; }        // decided by the headless fallback, not a person
+    public bool Excluded { get; set; }            // stock this item from nobody
 
     public bool Contested => Options.Select(o => o.Entry).Distinct(StringComparer.Ordinal).Count() > 1;
-    public bool NeedsDecision => Contested && ChosenSourceId is null;
+    public bool NeedsDecision => Contested && ChosenSourceId is null && !Excluded;
     public MergeOption Resolved =>
         Options.LastOrDefault(o => o.SourceId == ChosenSourceId) ?? Options[^1];
 }
@@ -125,6 +129,8 @@ public static class Patcher
             foreach (var s in (p?["sources"] as JsonArray) ?? new JsonArray())
                 sources.Add((s?["id"]?.GetValue<string>() ?? "", s?["hash"]?.GetValue<string>() ?? ""));
             markerPools[key] = sources;
+            if (p?["choices"] is JsonObject choices)
+                info.ExcludedCount += choices.Count(kv => (kv.Value as JsonObject)?["excluded"]?.GetValue<bool>() == true);
         }
 
         var current = PatchableConflicts(a);
@@ -214,11 +220,16 @@ public static class Patcher
     }
 
     private static MergeItem BuildItem(string token, List<MergeOption> options,
-                                       Dictionary<string, (string Source, string Entry, bool Auto)>? prior)
+                                       Dictionary<string, (string Source, string Entry, bool Auto, bool Excluded)>? prior)
     {
         var item = new MergeItem { Token = token, Options = options };
-        if (item.Contested && prior is not null && prior.TryGetValue(token, out var p) &&
-            options.Any(o => o.SourceId == p.Source && o.Entry == p.Entry))
+        if (prior is null || !prior.TryGetValue(token, out var p)) return item;
+        if (p.Excluded)
+        {
+            // exclusion is intent about the ITEM - it survives entry/source changes
+            item.Excluded = true;
+        }
+        else if (item.Contested && options.Any(o => o.SourceId == p.Source && o.Entry == p.Entry))
         {
             item.ChosenSourceId = p.Source;   // decision still valid - keep it
             item.AutoResolved = p.Auto;
@@ -236,9 +247,9 @@ public static class Patcher
         }
     }
 
-    private static Dictionary<string, Dictionary<string, (string Source, string Entry, bool Auto)>> ReadPriorChoices(GameEnv env)
+    private static Dictionary<string, Dictionary<string, (string Source, string Entry, bool Auto, bool Excluded)>> ReadPriorChoices(GameEnv env)
     {
-        var result = new Dictionary<string, Dictionary<string, (string, string, bool)>>(StringComparer.Ordinal);
+        var result = new Dictionary<string, Dictionary<string, (string, string, bool, bool)>>(StringComparer.Ordinal);
         var marker = Path.Combine(env.ModsDir, FolderName, MarkerFile);
         if (!File.Exists(marker)) return result;
         JsonNode? root;
@@ -249,14 +260,15 @@ public static class Patcher
         {
             var key = $"{p?["type"]?.GetValue<string>()}/{p?["strName"]?.GetValue<string>()}";
             if (p?["choices"] is not JsonObject choices) continue;
-            var map = new Dictionary<string, (string, string, bool)>(StringComparer.Ordinal);
+            var map = new Dictionary<string, (string, string, bool, bool)>(StringComparer.Ordinal);
             foreach (var (token, val) in choices)
             {
                 if (val is not JsonObject o) continue;
                 map[token] = (
                     o["source"]?.GetValue<string>() ?? "",
                     o["entry"]?.GetValue<string>() ?? "",
-                    o["auto"]?.GetValue<bool>() ?? false);
+                    o["auto"]?.GetValue<bool>() ?? false,
+                    o["excluded"]?.GetValue<bool>() ?? false);
             }
             result[key] = map;
         }
@@ -283,8 +295,8 @@ public static class Patcher
         foreach (var p in plan.Pools)
         {
             var obj = p.BaseObject;
-            obj["aLoots"] = new JsonArray(p.LootItems.Select(i => (JsonNode)i.Resolved.Entry).ToArray());
-            obj["aCOs"] = new JsonArray(p.CoItems.Select(i => (JsonNode)i.Resolved.Entry).ToArray());
+            obj["aLoots"] = new JsonArray(p.LootItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
+            obj["aCOs"] = new JsonArray(p.CoItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
             poolNodes.Add(obj);
 
             var sources = new JsonArray();
@@ -297,7 +309,9 @@ public static class Patcher
                 });
 
             var choices = new JsonObject();
-            foreach (var i in p.AllItems.Where(i => i.Contested))
+            foreach (var i in p.AllItems.Where(i => i.Excluded))
+                choices[i.Token] = new JsonObject { ["excluded"] = true };
+            foreach (var i in p.AllItems.Where(i => i.Contested && !i.Excluded))
                 choices[i.Token] = new JsonObject
                 {
                     ["source"] = i.Resolved.SourceId,

@@ -119,7 +119,8 @@ public static class Report
         }
         else
         {
-            Line($"  fresh (v{patch.ToolVersion ?? "?"}) - covering {string.Join(", ", patch.CoveredKeys)}", ConsoleColor.Green);
+            Line($"  fresh (v{patch.ToolVersion ?? "?"}) - covering {string.Join(", ", patch.CoveredKeys)}" +
+                 (patch.ExcludedCount > 0 ? $"; {patch.ExcludedCount} item(s) excluded by you" : ""), ConsoleColor.Green);
             if (patch.UnneededKeys.Count > 0)
                 Line($"  note: no longer needed for {string.Join(", ", patch.UnneededKeys)} (resolved upstream)", ConsoleColor.Yellow);
         }

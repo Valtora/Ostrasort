@@ -33,7 +33,7 @@ public partial class ResolverDialog : Window
             };
 
             var contested = pool.AllItems.Where(i => i.Contested).ToList();
-            var carried = pool.AllItems.Count(i => !i.Contested);
+            var carried = pool.AllItems.Where(i => !i.Contested).ToList();
 
             if (contested.Count > 0)
             {
@@ -60,6 +60,7 @@ public partial class ResolverDialog : Window
                             foreach (var item in contested.Where(i => i.Options.Any(o => o.SourceId == src.SourceId)))
                             {
                                 item.ChosenSourceId = src.SourceId;
+                                item.Excluded = false;
                                 item.AutoResolved = false;
                             }
                             SyncRadios();
@@ -67,6 +68,13 @@ public partial class ResolverDialog : Window
                         };
                         shortcuts.Children.Add(btn);
                     }
+                    shortcuts.Children.Add(new TextBlock
+                    {
+                        Text = "(per row: pick a mod's value, or Exclude to stock it from nobody)",
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Foreground = Brushes.Gray,
+                        Margin = new Thickness(8, 0, 0, 0),
+                    });
                     body.Children.Add(shortcuts);
                 }
 
@@ -97,17 +105,40 @@ public partial class ResolverDialog : Window
                             Margin = new Thickness(0, 0, 16, 0),
                             VerticalAlignment = VerticalAlignment.Center,
                             Tag = opt,
-                            IsChecked = item.ChosenSourceId == opt.SourceId,
+                            IsChecked = !item.Excluded && item.ChosenSourceId == opt.SourceId,
                         };
                         rb.Checked += (_, _) =>
                         {
                             item.ChosenSourceId = opt.SourceId;
+                            item.Excluded = false;
                             item.AutoResolved = false;   // a human decided
                             UpdateButtons();
                         };
                         radios.Children.Add(rb);
                         wiredRadios.Add(rb);
                     }
+
+                    var exclude = new RadioButton
+                    {
+                        GroupName = $"p{poolIndex}:{item.Token}",
+                        Content = "Exclude",
+                        Foreground = Brushes.Firebrick,
+                        Margin = new Thickness(0, 0, 16, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Tag = null,
+                        ToolTip = "Stock this item from nobody - it is dropped from the merged pool entirely.",
+                        IsChecked = item.Excluded,
+                    };
+                    exclude.Checked += (_, _) =>
+                    {
+                        item.Excluded = true;
+                        item.ChosenSourceId = null;
+                        item.AutoResolved = false;
+                        UpdateButtons();
+                    };
+                    radios.Children.Add(exclude);
+                    wiredRadios.Add(exclude);
+
                     if (item.AutoResolved)
                         radios.Children.Add(new TextBlock
                         {
@@ -121,13 +152,42 @@ public partial class ResolverDialog : Window
                 }
             }
 
-            if (carried > 0)
-                body.Children.Add(new TextBlock
+            if (carried.Count > 0)
+            {
+                var list = new StackPanel();
+                foreach (var item in carried)
                 {
-                    Text = $"+ {carried} uncontested item(s) carried over automatically",
-                    Foreground = Brushes.Gray,
+                    var opt = item.Resolved;
+                    var value = opt.Entry.Contains('=') ? opt.Entry[(opt.Entry.IndexOf('=') + 1)..] : opt.Entry;
+                    var cb = new CheckBox
+                    {
+                        IsChecked = !item.Excluded,
+                        Margin = new Thickness(0, 2, 0, 2),
+                        Content = new TextBlock
+                        {
+                            Text = $"{item.Token}   ({opt.SourceLabel}: {value})",
+                            FontFamily = new FontFamily("Consolas"),
+                        },
+                        ToolTip = "Untick to exclude this item from the merged pool.",
+                    };
+                    cb.Checked += (_, _) => { item.Excluded = false; UpdateButtons(); };
+                    cb.Unchecked += (_, _) => { item.Excluded = true; UpdateButtons(); };
+                    list.Children.Add(cb);
+                }
+                var expander = new Expander
+                {
+                    Header = $"{carried.Count} uncontested item(s) carried over — expand to review or exclude",
                     Margin = new Thickness(0, 6, 0, 0),
-                });
+                    Content = new ScrollViewer
+                    {
+                        MaxHeight = 220,
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                        Content = list,
+                        Margin = new Thickness(18, 4, 0, 0),
+                    },
+                };
+                body.Children.Add(expander);
+            }
 
             PoolsHost.Children.Add(box);
         }
@@ -138,14 +198,18 @@ public partial class ResolverDialog : Window
     {
         foreach (var (item, radios) in _wired)
             foreach (var rb in radios)
-                rb.IsChecked = item.ChosenSourceId == ((MergeOption)rb.Tag).SourceId;
+                rb.IsChecked = rb.Tag is MergeOption o
+                    ? !item.Excluded && item.ChosenSourceId == o.SourceId
+                    : item.Excluded;
     }
 
     private void UpdateButtons()
     {
         var remaining = _plan.Unresolved.Count();
+        var excluded = _plan.Pools.SelectMany(p => p.AllItems).Count(i => i.Excluded);
         BtnOk.IsEnabled = remaining == 0;
-        TxtRemaining.Text = remaining == 0 ? "all items decided" : $"{remaining} item(s) still undecided";
+        TxtRemaining.Text = (remaining == 0 ? "all items decided" : $"{remaining} item(s) still undecided")
+                          + (excluded > 0 ? $"  ·  {excluded} excluded" : "");
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e) => DialogResult = true;
