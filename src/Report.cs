@@ -56,46 +56,15 @@ public static class Report
         // --------------------------------------------------------- collisions
         Line("");
         Line($"COLLISIONS ({a.Collisions.Count})", ConsoleColor.Cyan);
-        if (a.Collisions.Count == 0) Line("  (none - no two mods claim the same object)");
-        foreach (var col in a.Collisions)
-        {
-            Line($"  {col.Key}  - last loaded wins the whole object");
-            for (var i = 0; i < col.Claimants.Count; i++)
-                Line($"    {i + 1}. {col.Claimants[i].Label}");
-            foreach (var p in col.Pairs)
+        foreach (var v in CollisionView.Build(a))   // same grouped view as the GUI
+            Line(new string(' ', 2 + v.Indent * 2) + v.Text, v.Sev switch
             {
-                switch (p.Rel)
-                {
-                    case Relation.SupersetOk:
-                        Line($"    OK: {p.Later.Label} is a superset of {p.Earlier.Label} " +
-                             $"(+{p.AddedByLater.Length} items) - order is correct", ConsoleColor.Green);
-                        break;
-                    case Relation.Equal:
-                        Line("    OK: identical item sets - only quantities differ; last loaded wins them");
-                        break;
-                    case Relation.SubsetViolation:
-                        Line($"    WRONG ORDER: {p.Later.Label} drops {p.LostFromEarlier.Length} item(s) that " +
-                             $"{p.Earlier.Label} stocks - the superset must load last", ConsoleColor.Red);
-                        break;
-                    case Relation.Partial when col.ResolvedByPatch:
-                        Line($"    RESOLVED: the Ostrasort Patch merges both pools ({p.LostFromEarlier.Length + p.AddedByLater.Length} " +
-                             "one-sided item(s) all kept) and loads last", ConsoleColor.Green);
-                        break;
-                    case Relation.Partial:
-                        Line($"    CONFLICT: neither pool covers the other. {p.Later.Label} drops: " +
-                             $"{string.Join(", ", p.LostFromEarlier.Take(8))}{(p.LostFromEarlier.Length > 8 ? $" (+{p.LostFromEarlier.Length - 8} more)" : "")}",
-                             ConsoleColor.Red);
-                        Line("      No load order fixes this - run with --patch to generate a merged patch mod.", ConsoleColor.Red);
-                        break;
-                    case Relation.NonLoot:
-                        Line($"    last loaded ({p.Later.Label}) replaces the object entirely - " +
-                             "verify that is intended", ConsoleColor.Yellow);
-                        break;
-                }
-            }
-            foreach (var n in col.FieldNotes)
-                Line($"    {n}", n.StartsWith("BOTH") ? ConsoleColor.Red : ConsoleColor.DarkGray);
-        }
+                LineSev.Good => ConsoleColor.Green,
+                LineSev.Warn => ConsoleColor.Yellow,
+                LineSev.Bad => ConsoleColor.Red,
+                LineSev.Dim => ConsoleColor.DarkGray,
+                _ => (ConsoleColor?)null,
+            });
 
         // -------------------------------------------------------------- patch
         Line("");

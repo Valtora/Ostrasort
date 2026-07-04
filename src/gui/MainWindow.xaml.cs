@@ -14,7 +14,10 @@ namespace Ostrasort.Gui;
 public sealed record ModRow(string Pos, string Name, string Source, string Class, string Data,
                             string WorkshopId, string Notes, Brush Brush, string? Dir, string Tooltip,
                             ModEntry M, bool Draggable);
-public sealed record LineVm(string Text, Brush Brush, Thickness Margin);
+public sealed record LineVm(string Text, Brush Brush, Thickness Margin, bool Bold = false)
+{
+    public FontWeight Weight => Bold ? FontWeights.Bold : FontWeights.Normal;
+}
 
 public partial class MainWindow : Window
 {
@@ -38,6 +41,7 @@ public partial class MainWindow : Window
     private System.Collections.ObjectModel.ObservableCollection<ModRow> _rows = new();
     private bool _manualDirty;
     private bool _busy;
+    private int _attentionCount;
     private DateTime _lastScan = DateTime.MinValue;
     private Point _dragStart;
     private ModRow? _dragRow;
@@ -142,32 +146,7 @@ public partial class MainWindow : Window
     {
         var a = s.Analysis;
 
-        var col = new List<LineVm>();
-        foreach (var c in a.Collisions)
-        {
-            col.Add(L($"{c.Key}   — last loaded wins the whole object", Normal));
-            for (var i = 0; i < c.Claimants.Count; i++)
-                col.Add(L($"{i + 1}. {c.Claimants[i].Label}", Dim, 1));
-            foreach (var p in c.Pairs)
-            {
-                var line = p.Rel switch
-                {
-                    Relation.SupersetOk => L($"OK — {p.Later.Label} is a superset of {p.Earlier.Label} (+{p.AddedByLater.Length} items); order correct", Good, 1),
-                    Relation.Equal => L("OK — identical item sets; only quantities differ, last loaded wins them", Good, 1),
-                    Relation.SubsetViolation => L($"WRONG ORDER — {p.Later.Label} drops {p.LostFromEarlier.Length} item(s) {p.Earlier.Label} stocks; the superset must load last", Bad, 1),
-                    Relation.Partial when c.ResolvedByPatch => L("RESOLVED — the Ostrasort Patch merges both pools and loads last", Good, 1),
-                    Relation.Partial => L($"CONFLICT — neither pool covers the other ({p.Later.Label} drops: {string.Join(", ", p.LostFromEarlier.Take(6))}{(p.LostFromEarlier.Length > 6 ? " …" : "")}). Use the patch button below.", Bad, 1),
-                    _ => L($"last loaded ({p.Later.Label}) replaces the object entirely — see field analysis:", Warn, 1),
-                };
-                col.Add(line);
-            }
-            foreach (var n in c.FieldNotes)
-                col.Add(L(n, n.StartsWith("BOTH") ? Bad : n.StartsWith("disjoint") ? Good : Dim, 2));
-            col.Add(L("", Normal));
-        }
-        if (col.Count == 0) col.Add(L("No two mods claim the same object.", Good));
-        ListCollisions.ItemsSource = col;
-        TabCollisions.Header = $"Collisions ({a.Collisions.Count})";
+        ListCollisions.ItemsSource = BuildCollisionLines(a);
 
         var ord = new List<LineVm>();
         if (!a.OrderChanged) ord.Add(L("The current load order satisfies every rule — nothing to change.", Good));
@@ -185,7 +164,6 @@ public partial class MainWindow : Window
                 ord.Add(L($"{i + 1,2}. {a.SuggestedOrder[i]}", Dim, 1));
         }
         ListOrder.ItemsSource = ord;
-        TabOrder.Header = a.OrderChanged ? $"Order changes ({a.Changes.Count})" : "Order changes";
 
         var pat = new List<LineVm>();
         if (!s.Patch.Exists)
@@ -216,8 +194,48 @@ public partial class MainWindow : Window
         var warnCount = warn.Count;
         if (warn.Count == 0) warn.Add(L("No warnings.", Good));
         ListWarnings.ItemsSource = warn;
-        TabWarnings.Header = warnCount == 0 ? "Warnings" : $"Warnings ({warnCount})";
+
+        // tab highlighting: bold + orange headers on tabs that need action,
+        // and the same set drives the "N things need attention" status line
+        var collAttention = a.Collisions.Any(c => !c.ResolvedByPatch &&
+            c.Pairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation));
+        var orderAttention = a.OrderChanged;
+        var patchAttention = s.Patch.Stale || s.Patch.Obsolete;
+        var warnAttention = warnCount > 0;
+
+        SetTabHeader(TabCollisions, $"Collisions ({a.Collisions.Count})", collAttention);
+        SetTabHeader(TabOrder, a.OrderChanged ? $"Order changes ({a.Changes.Count})" : "Order changes", orderAttention);
+        SetTabHeader(TabPatch, "Patch", patchAttention);
+        SetTabHeader(TabWarnings, warnCount == 0 ? "Warnings" : $"Warnings ({warnCount})", warnAttention);
+
+        _attentionCount = new[] { collAttention, orderAttention, patchAttention, warnAttention }.Count(x => x);
     }
+
+    private void SetTabHeader(TabItem tab, string text, bool attention)
+    {
+        var tb = new System.Windows.Controls.TextBlock { Text = text };
+        if (attention)
+        {
+            tb.FontWeight = FontWeights.Bold;
+            tb.Foreground = Warn;
+        }
+        tab.Header = tb;
+    }
+
+    // Collision rendering lives in CollisionView (UI-agnostic + testable);
+    // here we just map its severity to a brush.
+    private List<LineVm> BuildCollisionLines(Analysis a) =>
+        CollisionView.Build(a).Select(v => new LineVm(v.Text, SevBrush(v.Sev),
+            new Thickness(v.Indent * 18, 1, 0, 1), v.Bold)).ToList();
+
+    private static Brush SevBrush(LineSev sev) => sev switch
+    {
+        LineSev.Dim => Dim,
+        LineSev.Good => Good,
+        LineSev.Warn => Warn,
+        LineSev.Bad => Bad,
+        _ => Normal,
+    };
 
     private void UpdateActionBar(EngineState s)
     {
@@ -263,11 +281,9 @@ public partial class MainWindow : Window
             RunStatus.Foreground = issues.Count == 0 ? Warn : Bad;
             ((TextBlock)RunStatus.Parent!).ToolTip = issues.Count == 0 ? null : string.Join("\n", issues);
         }
-        else if (Engine.Actionable(s))
+        else if (_attentionCount > 0)
         {
-            var n = (a.OrderChanged ? 1 : 0) + (a.HasUnresolvedConflicts ? 1 : 0) +
-                    (s.Patch.Stale ? 1 : 0) + (s.Patch.Obsolete ? 1 : 0);
-            RunStatus.Text = $"{n} thing(s) need attention — see the highlighted tabs.  ";
+            RunStatus.Text = $"{_attentionCount} thing(s) need attention — see the highlighted tabs.  ";
             RunStatus.Foreground = Warn;
             ((TextBlock)RunStatus.Parent!).ToolTip = null;
         }
@@ -281,8 +297,8 @@ public partial class MainWindow : Window
         LinkReset.Inlines.Add(_manualDirty ? "reset arrangement" : "");
     }
 
-    private static LineVm L(string text, Brush brush, int indent = 0) =>
-        new(text, brush, new Thickness(indent * 18, 1, 0, 1));
+    private static LineVm L(string text, Brush brush, int indent = 0, bool bold = false) =>
+        new(text, brush, new Thickness(indent * 18, 1, 0, 1), bold);
 
     // ------------------------------------------------------------- filtering ---
 

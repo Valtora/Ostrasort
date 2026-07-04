@@ -5,7 +5,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <AssemblyName>Ostrasort</AssemblyName>
     <RootNamespace>Ostrasort</RootNamespace>
-    <Version>0.7.2</Version>
+    <Version>0.7.3</Version>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <Nullable>enable</Nullable>

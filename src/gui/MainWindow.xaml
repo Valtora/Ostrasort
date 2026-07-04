@@ -9,7 +9,7 @@
         <DataTemplate x:Key="LineTemplate">
             <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}"
                        FontFamily="Consolas" FontSize="12.5" TextWrapping="Wrap"
-                       Margin="{Binding Margin}"/>
+                       FontWeight="{Binding Weight}" Margin="{Binding Margin}"/>
         </DataTemplate>
     </Window.Resources>
 

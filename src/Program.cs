@@ -51,6 +51,7 @@ public static class Program
                 case "--tidy": tidy = true; break;
                 case "--smoke-gui": smokeGui = true; break;   // undocumented: construct windows without showing (CI/self-test)
                 case "--smoke-undo": smokeUndo = true; break; // undocumented: exercise snapshot undo/redo against a fixture
+                case "--dump-collisions": break;              // undocumented: print the collision view as text (handled below)
                 case "--apply": apply = true; break;
                 case "--patch": patch = true; break;
                 case "--fresh": fresh = true; break;
@@ -110,6 +111,14 @@ public static class Program
             _ = new Gui.MainWindow(smokeEnv);                                       // ctor runs a full rescan/render
             _ = new Gui.ResolverDialog(Patcher.PlanMerge(smokeEnv, smokeState.Analysis));
             Console.WriteLine("gui-smoke ok (windows constructed, not shown)");
+            return 0;
+        }
+
+        if (args.Contains("--dump-collisions"))   // undocumented: print the GUI collision view as text
+        {
+            var env2 = GameEnv.Locate(gameRoot);
+            foreach (var v in CollisionView.Build(Engine.Analyze(env2).Analysis))
+                Console.WriteLine(new string(' ', v.Indent * 2) + v.Text);
             return 0;
         }
 
