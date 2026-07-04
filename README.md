@@ -46,10 +46,12 @@ before you apply them.
 When two mods stock the same shop pool and neither covers the other,
 someone's wares vanish no matter the order. "Resolve conflicts & generate
 patch" opens the resolver: every **contested item** (both mods stock it with
-different values) is a row — pick which mod's entry wins, or use "Take all
-from *<mod>*" for a whole column. Items only one mod stocks are always
-carried over automatically. The result is written as a `Mods\OstrasortPatch`
-mod that loads last.
+different values) is a row — pick which mod's entry wins, use "Take all
+from *<mod>*" for a whole column, or pick **Exclude** to stock the item from
+nobody. Items only one mod stocks carry over automatically, but expand the
+"uncontested items" list to **reject unwanted strays** individually — handy
+when a mod ships a stale copy of a whole kiosk and you only want its one new
+item. The result is written as a `Mods\OstrasortPatch` mod that loads last.
 
 - **Your decisions are remembered** (stored in the patch's marker file). When
   a merged mod updates, the patch is flagged **stale**; regenerating re-asks
