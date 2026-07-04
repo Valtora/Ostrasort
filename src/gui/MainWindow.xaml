@@ -147,6 +147,11 @@
                     <ItemsControl x:Name="ListCollisions" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
                 </ScrollViewer>
             </TabItem>
+            <TabItem x:Name="TabResolved" Header="Resolved collisions">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ListResolved" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
+                </ScrollViewer>
+            </TabItem>
             <TabItem x:Name="TabOrder" Header="Order changes">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl x:Name="ListOrder" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>

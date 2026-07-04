@@ -38,7 +38,11 @@ The table lists every mod in load order with its name, source
 any problems. Below it, four tabs:
 
 - **Collisions** — who claims the same objects and whether the order handles
-  it, including field-level analysis of non-shop overrides.
+  it, including field-level analysis of non-shop overrides. Only **active**
+  conflicts appear here.
+- **Resolved collisions** — conflicts the generated patch already merges away,
+  kept on their own tab so the Collisions tab shows only what still needs
+  attention.
 - **Order changes** — the current order and the suggested order side by side,
   applied with one button.
 - **Patch** — state of the generated conflict patch, with *Rebuild from

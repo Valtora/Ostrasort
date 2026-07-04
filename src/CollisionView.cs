@@ -37,12 +37,31 @@ public static class CollisionView
         items.Length <= n ? string.Join(", ", items)
         : string.Join(", ", items.Take(n)) + $", +{items.Length - n} more";
 
-    public static List<ViewLine> Build(Analysis a)
+    public static List<ViewLine> Build(Analysis a) =>
+        Render(a.Collisions, "No two mods claim the same object — no conflicts.");
+
+    /// <summary>Only collisions still in effect — the Collisions tab. Patch-resolved ones move to <see cref="BuildResolved"/>.</summary>
+    public static List<ViewLine> BuildActive(Analysis a)
+    {
+        var active = a.Collisions.Where(c => !c.ResolvedByPatch).ToList();
+        var resolved = a.Collisions.Count - active.Count;
+        var empty = resolved > 0
+            ? $"No active conflicts — {resolved} resolved by the patch (see the Resolved collisions tab)."
+            : "No two mods claim the same object — no conflicts.";
+        return Render(active, empty);
+    }
+
+    /// <summary>Only collisions the generated patch merges away — the Resolved collisions tab.</summary>
+    public static List<ViewLine> BuildResolved(Analysis a) =>
+        Render(a.Collisions.Where(c => c.ResolvedByPatch).ToList(),
+               "No collisions have been merged into a patch yet.");
+
+    private static List<ViewLine> Render(IReadOnlyList<Collision> collisions, string emptyMessage)
     {
         var lines = new List<ViewLine>();
-        if (a.Collisions.Count == 0)
+        if (collisions.Count == 0)
         {
-            lines.Add(new ViewLine("No two mods claim the same object — no conflicts.", LineSev.Good, 0));
+            lines.Add(new ViewLine(emptyMessage, LineSev.Good, 0));
             return lines;
         }
 
@@ -50,7 +69,7 @@ public static class CollisionView
             lines.Add(new ViewLine(text, sev, indent, bold));
 
         // one group per distinct set of conflicting mods (in load order)
-        foreach (var group in a.Collisions
+        foreach (var group in collisions
             .GroupBy(c => string.Join("", c.Claimants.Select(m =>
                 m.Kind == EntryKind.Workshop ? m.Name : "local:" + m.Name)))
             .OrderByDescending(g => g.Count()).ThenBy(g => g.Key))

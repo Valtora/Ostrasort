@@ -148,7 +148,8 @@ public partial class MainWindow : Window
     {
         var a = s.Analysis;
 
-        ListCollisions.ItemsSource = BuildCollisionLines(a);
+        ListCollisions.ItemsSource = ToLineVms(CollisionView.BuildActive(a));
+        ListResolved.ItemsSource = ToLineVms(CollisionView.BuildResolved(a));
 
         ListOrder.ItemsSource = OrderChangeView.Build(a)
             .Select(v => new LineVm(v.Text, SevBrush(v.Sev), new Thickness(v.Indent * 18, 1, 0, 1), v.Bold)).ToList();
@@ -193,7 +194,10 @@ public partial class MainWindow : Window
         var patchAttention = s.Patch.Stale || s.Patch.Obsolete;
         var warnAttention = warnCount > 0;
 
-        SetTabHeader(TabCollisions, $"Collisions ({a.Collisions.Count})", collAttention);
+        var activeColl = a.Collisions.Count(c => !c.ResolvedByPatch);
+        var resolvedColl = a.Collisions.Count - activeColl;
+        SetTabHeader(TabCollisions, $"Collisions ({activeColl})", collAttention);
+        SetTabHeader(TabResolved, resolvedColl == 0 ? "Resolved collisions" : $"Resolved collisions ({resolvedColl})", attention: false);
         SetTabHeader(TabOrder, a.OrderChanged ? $"Order changes ({a.Changes.Count})" : "Order changes", orderAttention);
         SetTabHeader(TabPatch, "Patch", patchAttention);
         SetTabHeader(TabWarnings, warnCount == 0 ? "Warnings" : $"Warnings ({warnCount})", warnAttention);
@@ -214,8 +218,8 @@ public partial class MainWindow : Window
 
     // Collision rendering lives in CollisionView (UI-agnostic + testable);
     // here we just map its severity to a brush.
-    private List<LineVm> BuildCollisionLines(Analysis a) =>
-        CollisionView.Build(a).Select(v => new LineVm(v.Text, SevBrush(v.Sev),
+    private List<LineVm> ToLineVms(IEnumerable<ViewLine> lines) =>
+        lines.Select(v => new LineVm(v.Text, SevBrush(v.Sev),
             new Thickness(v.Indent * 18, 1, 0, 1), v.Bold)).ToList();
 
     private static Brush SevBrush(LineSev sev) => sev switch
