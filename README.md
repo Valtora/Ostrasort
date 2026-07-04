@@ -1,30 +1,60 @@
-# Ostrasort — load-order analyzer & conflict patcher for Ostranauts
+# Ostrasort — load-order manager for Ostranauts
 
-A LOOT-style (Skyrim's Load Order Optimisation Tool) console tool. Run it
-before launching the game: it scans **core + every local and
-Workshop-subscribed mod**, understands what each one actually contains, finds
-data collisions, suggests a `loading_order.json` that satisfies the rules —
-and for the conflicts **no load order can fix**, it can generate a merged
-patch mod. Read-only unless you pass a write flag.
+Ostrasort scans **core + every local and Workshop-subscribed mod** in your
+Ostranauts install, understands what each one actually contains, finds data
+collisions, suggests a `loading_order.json` that satisfies the rules — and
+for the conflicts **no load order can fix**, generates a merged patch mod
+with **you deciding the contested items** in a visual resolver. Run it before
+launching the game.
 
 ## For players
 
-Download `Ostrasort.exe` (single file, ~36 MB, no .NET install needed) and
-either **double-click it** (the window stays open so you can read the report)
-or run it from a terminal. It finds your Ostranauts install by itself via the
-Steam registry and `libraryfolders.vdf`, whatever drive it's on.
+Download `Ostrasort.exe` (single file, ~58 MB, nothing to install) and
+**double-click it** — the app window opens. It finds your Ostranauts install
+by itself via the Steam registry and `libraryfolders.vdf`, whatever drive
+it's on.
+
+The window shows every mod in load order with its class and any problems,
+plus four detail tabs: **Collisions** (who claims the same objects and
+whether the order handles it), **Order changes** (what a sort would do and
+why, applied with one button), **Patch** (state of the generated patch mod),
+and **Warnings** (dead entries, unregistered mods, version lag, broken JSON).
+Nothing is written until you press a button, every `loading_order.json` write
+keeps a `.bak`, and all writes are disabled while the game is running.
+
+### The conflict resolver
+
+When two mods stock the same shop pool and neither covers the other,
+someone's wares vanish no matter the order. "Resolve conflicts & generate
+patch" opens the resolver: every **contested item** (both mods stock it with
+different values) is a row — pick which mod's entry wins, or use "Take all
+from *<mod>*" for a whole column. Items only one mod stocks are always
+carried over automatically. The result is written as a `Mods\OstrasortPatch`
+mod that loads last.
+
+- **Your decisions are remembered** (stored in the patch's marker file). When
+  a merged mod updates, the patch is flagged **stale**; regenerating re-asks
+  only the new or changed items.
+- The folder is wholly owned by Ostrasort — never edit it by hand; remove it
+  with the "Remove patch" button (or `--unpatch`).
+
+### Command line (for scripts and automation)
 
 ```
-Ostrasort.exe             analyze and report; writes nothing
-Ostrasort.exe --apply     write the suggested load order (keeps loading_order.json.bak)
-Ostrasort.exe --patch     generate/refresh the "Ostrasort Patch" mod (see below)
-Ostrasort.exe --unpatch   remove the generated patch mod again
-Ostrasort.exe --game <p>  point at a non-Steam / unusual install manually
-Ostrasort.exe --no-pause  for scripts: never wait for a key press
+Ostrasort.exe             open the GUI (same as double-clicking)
+Ostrasort.exe --report    console analysis report; writes nothing (exit 2 = suggestions remain)
+Ostrasort.exe --apply     write the suggested load order
+Ostrasort.exe --patch     generate/refresh the patch; contested items open the
+                          resolver window unless --no-gui
+Ostrasort.exe --unpatch   remove the generated patch mod
+Ostrasort.exe --no-gui    headless: contested items fall back to the later-loaded
+                          mod's entry, marked for review in the GUI
+Ostrasort.exe --game <p>  point at a non-standard install manually
+Ostrasort.exe --no-pause  never wait for a key press
 ```
 
-Exit codes: `0` = nothing left to do, `2` = actionable suggestions remain,
-`1` = error.
+Console exit codes: `0` = nothing left to do, `2` = actionable suggestions
+remain, `1` = error.
 
 ## Why load order matters in Ostranauts
 
@@ -59,46 +89,21 @@ the comparison is at item granularity (the token before `=` in each
 - later pool ⊇ earlier → **order correct** ✔
 - later pool ⊂ earlier → **wrong order**: the superset is moved to load after
   the subset
-- partial overlap → **conflict**: no order fixes it → `--patch`
+- partial overlap → **conflict**: no order fixes it → the resolver + patch
 - identical item sets → note (only quantities differ; last loaded wins)
-
-**Hygiene** in the same report: dead `aLoadOrder` paths (unsubscribed items),
-local mod folders missing from `aLoadOrder`, subscribed Workshop items not
-yet registered, duplicate entries, `strGameVersion` lagging the installed
-game (read from `Ostranauts_Data\globalgamemanagers`), and mod data files
-that only parse leniently (trailing commas — the game's loader ERRORs on
-those).
 
 **Minimal churn**: the suggestion starts from the current order and applies
 only the moves a rule demands.
 
-## The Ostrasort Patch (`--patch`)
-
-When two mods both override the same shop pool and neither covers the other,
-someone's wares vanish no matter the order. `--patch` writes a
-`Mods\OstrasortPatch` mod containing the **per-item union** of each
-conflicting pool and registers it last:
-
-- Items only one mod stocks are all kept.
-- Items both stock: the **later-loaded mod's quantity wins** (provisional
-  rule — the same last-wins the game applies to whole objects, at item
-  grain).
-- The folder is wholly owned by Ostrasort: a marker file
-  (`ostrasort_patch.json`) records exactly which pools it merged and their
-  content hashes. Never edit it by hand; it is safe to delete.
-- When a merged mod later updates, the analyzer flags the patch **STALE** —
-  re-run `--patch`. When the underlying conflict disappears, it suggests
-  `--unpatch`.
-
 ## Safety
 
 - Analysis never writes anything and is safe while the game runs.
-- `--apply`, `--patch`, and `--unpatch` refuse while Ostranauts is running,
-  save the previous `loading_order.json` as `.bak` before writing it, keep
-  the file a **top-level JSON array** (the game silently drops all local mods
-  and regenerates the file otherwise), and strict-re-parse their own output
-  before writing. Workshop entries keep their absolute-path form; local
-  entries keep their `|edit` markers.
+- Every write path refuses while Ostranauts is running, saves the previous
+  `loading_order.json` as `.bak`, keeps the file a **top-level JSON array**
+  (the game silently drops all local mods and regenerates the file
+  otherwise), and strict-re-parses its own output before writing. Workshop
+  entries keep their absolute-path form; local entries keep their `|edit`
+  markers.
 
 ## For developers
 
@@ -108,17 +113,17 @@ dotnet build -c Release        # dev build -> bin\Release\Ostrasort.exe (needs .
 ```
 
 Layout: `src\GameEnv.cs` (install discovery), `src\Mods.cs` (model + scanner),
-`src\Analysis.cs` (collisions + sorting rules), `src\Patcher.cs` (the patch
-mod), `src\LoadOrderFile.cs` (guarded loading_order.json IO), `src\Report.cs`,
-`src\Program.cs`.
+`src\Analysis.cs` (collisions + sorting rules), `src\Patcher.cs` (merge plans
++ the patch mod), `src\Engine.cs` (shared analyze pass), `src\LoadOrderFile.cs`
+(guarded loading_order.json IO), `src\Report.cs` (console report),
+`src\Program.cs` (CLI + GUI routing), `src\gui\` (WPF main window + resolver).
 
 Releasing (repo owner): flip the repo public when ready, tag, and attach
 `publish\Ostrasort.exe` as a GitHub Release asset.
 
 ## Roadmap
 
-- Settle the shared-item quantity rule for `--patch` (later-wins is
-  provisional).
 - Machine-readable (`--json`) report output.
-- NativeAOT packaging (~4–8 MB, faster start) once the SDK/vswhere hiccup is
-  sorted.
+- NativeAOT packaging once the SDK/vswhere hiccup is sorted (would shrink the
+  exe considerably, though WPF is not AOT-compatible — likely paired with a
+  console-only build).

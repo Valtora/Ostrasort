@@ -1,0 +1,90 @@
+<Window x:Class="Ostrasort.Gui.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ostrasort" Height="760" Width="1120" MinHeight="560" MinWidth="860"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <DataTemplate x:Key="LineTemplate">
+            <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}"
+                       FontFamily="Consolas" FontSize="12.5" TextWrapping="Wrap"
+                       Margin="{Binding Margin}"/>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2*"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="1.4*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- header -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,10">
+            <Button x:Name="BtnRescan" DockPanel.Dock="Right" Content="Rescan" Padding="16,4"
+                    VerticalAlignment="Center" Click="Rescan_Click"/>
+            <StackPanel>
+                <TextBlock x:Name="TxtTitle" FontSize="18" FontWeight="SemiBold" Text="Ostrasort"/>
+                <TextBlock x:Name="TxtGameInfo" Foreground="Gray" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                <TextBlock x:Name="TxtCoreInfo" Foreground="Gray" TextWrapping="Wrap"/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- mod table -->
+        <DataGrid Grid.Row="1" x:Name="ModsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                  CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  HorizontalGridLinesBrush="#EEE" RowHeaderWidth="0" FontSize="12.5">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Foreground" Value="{Binding Brush}"/>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="#" Binding="{Binding Pos}" Width="36"/>
+                <DataGridTextColumn Header="Mod" Binding="{Binding Entry}" Width="3*"/>
+                <DataGridTextColumn Header="Class" Binding="{Binding Class}" Width="110"/>
+                <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="130"/>
+                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="4*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                      Height="6" Background="Transparent"/>
+
+        <!-- detail tabs -->
+        <TabControl Grid.Row="3" x:Name="Tabs" FontSize="12.5">
+            <TabItem x:Name="TabCollisions" Header="Collisions">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ListCollisions" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem x:Name="TabOrder" Header="Order changes">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ListOrder" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem x:Name="TabPatch" Header="Patch">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ListPatch" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem x:Name="TabWarnings" Header="Warnings">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ListWarnings" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- action bar -->
+        <DockPanel Grid.Row="4" Margin="0,10,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="BtnApply" Content="Apply suggested order" Padding="14,6" Margin="8,0,0,0" Click="Apply_Click"/>
+                <Button x:Name="BtnPatch" Content="Resolve conflicts &amp; generate patch" Padding="14,6" Margin="8,0,0,0" Click="Patch_Click"/>
+                <Button x:Name="BtnUnpatch" Content="Remove patch" Padding="14,6" Margin="8,0,0,0" Click="Unpatch_Click"/>
+            </StackPanel>
+            <TextBlock x:Name="TxtStatus" VerticalAlignment="Center" FontWeight="SemiBold"/>
+        </DockPanel>
+    </Grid>
+</Window>
