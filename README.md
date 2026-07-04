@@ -7,12 +7,46 @@ for the conflicts **no load order can fix**, generates a merged patch mod
 with **you deciding the contested items** in a visual resolver. Run it before
 launching the game.
 
+> ## ⚠️ Early development — use at your own risk
+>
+> Ostrasort is **in active development and not yet stable.** It edits your
+> `loading_order.json` and can create a mod folder (`OstrasortPatch`) inside
+> your game install. While it keeps a `.bak` of every load-order write and
+> refuses to run while the game is open, **it can still misbehave in ways that
+> break your mod setup, a save, or require you to verify/reinstall the game.**
+>
+> **The author accepts no responsibility for any damage to your game, mods, or
+> saves.** Back up your save folder before using it, and only proceed if you
+> are comfortable recovering your setup yourself. By using Ostrasort you accept
+> that risk.
+
 ## For players
 
 **Windows only** (64-bit Windows 10/11). Download `Ostrasort.exe` (single
-file, ~58 MB, nothing to install) and **double-click it** — the app window
+file, ~62 MB, nothing to install) and **double-click it** — the app window
 opens. It finds your Ostranauts install by itself via the Steam registry and
 `libraryfolders.vdf`, whatever drive it's on.
+
+### Typical workflow
+
+1. **Close Ostranauts** (Ostrasort disables all writes while the game runs).
+2. **Double-click `Ostrasort.exe`.** It scans your install and lists every
+   mod in load order.
+3. **Read the tabs.** *Warnings* and *Collisions* light up when something
+   needs attention; *Order changes* shows what a tidy-up would do.
+4. **Apply the suggested order** (one button) if you're happy with it — the
+   old file is saved as `loading_order.json.bak` first.
+5. **Resolve shop conflicts** if the *Patch* tab reports any: click
+   *Resolve conflicts & generate patch*, decide the contested items (or
+   *Exclude* the ones you don't want), and Ostrasort writes an
+   `OstrasortPatch` mod that loads last so no mod's wares are lost.
+6. **Undo anything** with Ctrl+Z — applied orders, patches, and `.bak`
+   restores are all reversible within the session.
+7. **Launch the game** (there's a button) and check the in-game MODS screen.
+
+If something ever looks wrong, **Restore .bak** swaps back to the previous
+`loading_order.json`, and **Delete patch** removes the generated patch mod
+entirely.
 
 The window shows every mod in load order — name, source, class, data counts,
 Workshop ID, problems — plus four detail tabs: **Collisions** (who claims the

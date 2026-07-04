@@ -3,15 +3,28 @@
 $ErrorActionPreference = 'Stop'
 $out = Join-Path $PSScriptRoot 'publish'
 
+# IncludeNativeLibrariesForSelfExtract is REQUIRED for WPF: WPF's native DLLs
+# (PresentationNative, wpfgfx, D3DCompiler) cannot be loaded from the bundle
+# in memory, so without this the app dies at first window with a
+# DllNotFoundException deep in HwndSubclass. This flag extracts native libs to
+# a temp folder on first run so LoadLibrary finds them.
 dotnet publish (Join-Path $PSScriptRoot 'Ostrasort.csproj') -c Release -r win-x64 `
     --self-contained true `
     -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
     -p:DebugType=None `
     -o $out --nologo
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
 $exe = Get-Item (Join-Path $out 'Ostrasort.exe')
-"`n{0}`n  v{1}   {2:N1} MB   single-file, self-contained win-x64" -f
+
+# Smoke-test the PUBLISHED single-file exe (not just bin\Release): construct the
+# WPF windows the way a real launch does. This is what catches single-file-only
+# native-load failures that a bin\Release smoke test cannot.
+& $exe.FullName --smoke-gui --no-pause | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Published exe failed its GUI smoke test (exit $LASTEXITCODE) - single-file WPF is broken, do NOT ship this build." }
+
+"`n{0}`n  v{1}   {2:N1} MB   single-file, self-contained win-x64   (GUI smoke passed)" -f
     $exe.FullName, $exe.VersionInfo.ProductVersion, ($exe.Length / 1MB)
 exit 0
