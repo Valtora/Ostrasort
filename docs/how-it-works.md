@@ -134,6 +134,13 @@ later refresh only re-asks about things that genuinely changed. See
   `loading_order.json` as `loading_order.json.bak` first, keeps the file a
   **top-level JSON array** (if it ever becomes a bare object the game silently
   drops all local mods and regenerates it), and strict-re-parses its own
-  output before committing it. Workshop entries keep their absolute-path form;
-  local entries keep their `|edit` markers; exact-duplicate entries are
-  dropped on write.
+  output before committing it. Local entries keep their `|edit` markers, and
+  exact-duplicate entries are dropped on write.
+- **Workshop paths are written in the game's own on-disk case.** The Steam
+  registry hands out a lowercase drive (`c:\program files…`), but Ostranauts
+  writes `C:\Program Files…`. If Ostrasort wrote the lowercase form the game
+  would not recognise its own subscription and would re-add it every launch,
+  duplicating the mod — so every absolute path is canonicalised to its real
+  filesystem case before writing.
+- **Everything Ostrasort writes is logged** to the Logs tab (and to
+  `%LOCALAPPDATA%\Ostrasort\ostrasort.log`), so you can always see what it did.

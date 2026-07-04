@@ -20,6 +20,14 @@ public sealed class GameEnv
 
     public string LoadingOrderPath => Path.Combine(ModsDir, "loading_order.json");
 
+    /// <summary>The game's own log (Unity), in the per-user LocalLow folder.</summary>
+    public static string PlayerLogPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        @"AppData\LocalLow\Blue Bottle Games\Ostranauts\Player.log");
+
+    /// <summary>BepInEx's log (code-mod loading), in the game folder.</summary>
+    public string BepInExLogPath => Path.Combine(GameRoot, "BepInEx", "LogOutput.log");
+
     public static GameEnv Locate(string? gameRootOverride)
     {
         string root, via;
@@ -47,6 +55,11 @@ public sealed class GameEnv
                 "library, and the default path). Run with:  ostrasort --game \"<path to the " +
                 "Ostranauts folder inside steamapps\\common>\"");
         }
+
+        // Use the true on-disk case for the root (the Steam registry gives a
+        // lowercase drive). Everything derived - workshop paths especially -
+        // then matches what the game itself writes, so it won't re-add mods.
+        root = PathCase.Canonical(root);
 
         var dataDir = Path.Combine(root, "Ostranauts_Data");
         var modsDir = Path.Combine(dataDir, "Mods");

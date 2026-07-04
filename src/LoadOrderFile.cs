@@ -42,13 +42,22 @@ public sealed class LoadOrderFile
 
     public void Write(IReadOnlyList<string> newOrder)
     {
-        // self-heal: the game has been seen re-appending an already-registered
-        // subscription, and a duplicated entry double-loads the mod - every
-        // write through this choke point drops exact duplicates (first wins)
+        // Two self-heals at this single choke point, both to stop the game
+        // duplicating mods on launch:
+        //   1. Canonicalise every absolute (workshop) path to its real on-disk
+        //      case. The game writes C:\Program Files (x86)\Steam\...; if we
+        //      write a lowercase c:\program files\... form (as the Steam
+        //      registry hands out), the game does not match its own
+        //      subscription and re-adds it every launch.
+        //   2. Drop exact duplicates (first wins) - the game has also been seen
+        //      re-appending an already-registered subscription.
         var deduped = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var e in newOrder)
+        foreach (var raw in newOrder)
+        {
+            var e = PathCase.CanonicalIfPath(raw);
             if (seen.Add(e)) deduped.Add(e);
+        }
         newOrder = deduped;
 
         Root[0]!["aLoadOrder"] = new JsonArray(newOrder.Select(e => (JsonNode)e).ToArray());

@@ -61,6 +61,7 @@ public partial class MainWindow : Window
         Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
+        OpLog.Add($"Ostrasort v{Program.Version} opened ({_env.GameRoot}).");
         Rescan();
         _ = CheckForUpdateAsync();
     }
@@ -109,6 +110,7 @@ public partial class MainWindow : Window
 
         RenderTabs(s);
         UpdateActionBar(s);
+        RenderLogs();
     }
 
     private ModRow BuildRow(string pos, ModEntry m)
@@ -224,6 +226,53 @@ public partial class MainWindow : Window
         LineSev.Bad => Bad,
         _ => Normal,
     };
+
+    // ---------------------------------------------------------------- logs ---
+
+    private void RenderLogs()
+    {
+        if (ListLogs is null) return;   // called during XAML init before the list exists
+        var idx = CmbLogSource?.SelectedIndex ?? 0;
+        IEnumerable<string> lines = idx switch
+        {
+            1 => OpLog.Tail(GameEnv.PlayerLogPath, 300),
+            2 => OpLog.Tail(_env.BepInExLogPath, 300),
+            _ => OpLog.Recent(),
+        };
+        var brush = idx == 0 ? Normal : Dim;
+        var vms = lines.Select(t => new LineVm(t, LineColour(t, brush), new Thickness(0, 0, 0, 0))).ToList();
+        if (vms.Count == 0) vms.Add(new LineVm("(nothing logged yet)", Dim, new Thickness(0)));
+        ListLogs.ItemsSource = vms;
+        LogScroller?.ScrollToBottom();
+    }
+
+    private static Brush LineColour(string line, Brush fallback)
+    {
+        if (line.Contains("ERROR", StringComparison.OrdinalIgnoreCase) || line.Contains("Exception")) return Bad;
+        if (line.Contains("WARN", StringComparison.OrdinalIgnoreCase)) return Warn;
+        return fallback;
+    }
+
+    private void LogSource_Changed(object sender, SelectionChangedEventArgs e) => RenderLogs();
+    private void RefreshLog_Click(object sender, RoutedEventArgs e) => RenderLogs();
+
+    private void CopyLog_Click(object sender, RoutedEventArgs e)
+    {
+        if (ListLogs.ItemsSource is IEnumerable<LineVm> vms)
+            Clipboard.SetText(string.Join(Environment.NewLine, vms.Select(v => v.Text)));
+    }
+
+    private void OpenLog_Click(object sender, RoutedEventArgs e)
+    {
+        var path = (CmbLogSource?.SelectedIndex ?? 0) switch
+        {
+            1 => GameEnv.PlayerLogPath,
+            2 => _env.BepInExLogPath,
+            _ => OpLog.FilePath,
+        };
+        if (File.Exists(path))
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+    }
 
     private void UpdateActionBar(EngineState s)
     {
@@ -438,6 +487,7 @@ public partial class MainWindow : Window
             var snap = _undo.Pop();
             _redo.Push(UndoOps.Capture(_env, snap.Label));
             UndoOps.Restore(_env, snap);
+            OpLog.Add($"Undid: {snap.Label}.");
             Rescan();
             RunStatus.Text = $"Undid: {snap.Label}.  ";
             RunStatus.Foreground = Good;
@@ -464,6 +514,7 @@ public partial class MainWindow : Window
             var snap = _redo.Pop();
             _undo.Push(UndoOps.Capture(_env, snap.Label));
             UndoOps.Restore(_env, snap);
+            OpLog.Add($"Redid: {snap.Label}.");
             Rescan();
             RunStatus.Text = $"Redid: {snap.Label}.  ";
             RunStatus.Foreground = Good;
@@ -522,6 +573,7 @@ public partial class MainWindow : Window
 
             CaptureOp(_manualDirty ? "apply manual order" : "apply suggested order");
             LoadOrderFile.Read(_env.LoadingOrderPath).Write(newOrder);
+            OpLog.Add($"Applied {(_manualDirty ? "manual" : "suggested")} load order ({newOrder.Count} entries).");
             Rescan();
             MessageBox.Show(this, "Load order applied. The previous file was saved as loading_order.json.bak.",
                 "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -566,6 +618,8 @@ public partial class MainWindow : Window
             CaptureOp(fresh ? "rebuild patch from scratch"
                     : _state.Patch.Exists ? "refresh patch (incl. decisions)" : "generate patch");
             var result = Patcher.Generate(_env, plan, _env.InstalledVersion, Program.Version);
+            OpLog.Add($"Generated Ostrasort Patch: {string.Join("; ", result.Merged)}.");
+            foreach (var w in result.SchemaWarnings) OpLog.Add($"  patch schema warning: {w}");
             Rescan();
             var msg = "Patch generated and registered last in the load order.";
             if (result.SchemaWarnings.Count > 0)
@@ -592,6 +646,7 @@ public partial class MainWindow : Window
         {
             CaptureOp("remove patch");
             Patcher.Remove(_env);
+            OpLog.Add("Removed the Ostrasort Patch.");
             Rescan();
         }
         catch (Exception ex)
@@ -626,6 +681,7 @@ public partial class MainWindow : Window
             var liveText = File.ReadAllText(live);
             File.WriteAllText(live, bakText);
             File.WriteAllText(bak, liveText);
+            OpLog.Add("Restored loading_order.json from the .bak (swapped).");
             Rescan();
         }
         catch (Exception ex)
@@ -640,6 +696,7 @@ public partial class MainWindow : Window
         try
         {
             Process.Start(new ProcessStartInfo("steam://rungameid/1022980") { UseShellExecute = true });
+            OpLog.Add("Launched Ostranauts via Steam.");
             RunStatus.Text = "Launching Ostranauts via Steam…  ";
             RunStatus.Foreground = Dim;
         }

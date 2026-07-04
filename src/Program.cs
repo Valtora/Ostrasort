@@ -52,6 +52,7 @@ public static class Program
                 case "--smoke-gui": smokeGui = true; break;   // undocumented: construct windows without showing (CI/self-test)
                 case "--smoke-undo": smokeUndo = true; break; // undocumented: exercise snapshot undo/redo against a fixture
                 case "--dump-collisions": break;              // undocumented: print the collision view as text (handled below)
+                case "--normalize": break;                    // undocumented: rewrite loading_order in canonical case (handled below)
                 case "--apply": apply = true; break;
                 case "--patch": patch = true; break;
                 case "--fresh": fresh = true; break;
@@ -117,6 +118,20 @@ public static class Program
                 return 1;
             }
             Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()})");
+            return 0;
+        }
+
+        if (args.Contains("--normalize"))   // undocumented: rewrite loading_order in canonical path case, deduped
+        {
+            var nenv = GameEnv.Locate(gameRoot);
+            if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
+            var nlo = LoadOrderFile.Read(nenv.LoadingOrderPath);
+            var before = nlo.Order.ToList();
+            nlo.Write(nlo.Order);                        // Write canonicalises case + drops duplicates
+            var after = LoadOrderFile.Read(nenv.LoadingOrderPath).Order;
+            Console.WriteLine(before.SequenceEqual(after)
+                ? "loading_order.json already canonical - no change."
+                : $"Normalized loading_order.json: {before.Count} -> {after.Count} entries, canonical path case (.bak kept).");
             return 0;
         }
 
@@ -221,6 +236,7 @@ public static class Program
             state = Engine.Analyze(env, tidy);
         }
 
+        foreach (var act in performed) OpLog.Add($"[cli] {act}");   // record CLI writes in the shared log
         Report.Print(env, state.Scanner, state.Analysis, state.Patch, Version, performed);
         return Engine.Actionable(state) ? 2 : 0;
     }

@@ -51,4 +51,39 @@ public class LoadOrderFileTests : IDisposable
         Write("""{"strName":"Mod Loading Order","aLoadOrder":["core"]}""");   // bare object, not an array
         Assert.ThrowsAny<Exception>(() => LoadOrderFile.Read(_path));
     }
+
+    [Fact]
+    public void Write_CanonicalisesAbsolutePathCase()
+    {
+        // a real folder with known case, referenced by a wrong-case path
+        var dir = Path.Combine(Path.GetTempPath(), "OstraCase_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(dir, "SubFolder"));
+        try
+        {
+            var misCased = Path.Combine(dir, "subfolder");   // exists on disk as "SubFolder"
+            LoadOrderFile.Read(_path).Write(new[] { "core", misCased });
+
+            var written = LoadOrderFile.Read(_path).Order;
+            Assert.Contains(written, w => w.EndsWith("SubFolder", StringComparison.Ordinal));   // corrected
+            Assert.DoesNotContain(written, w => w.EndsWith("subfolder", StringComparison.Ordinal));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
+    public void Write_CollapsesCaseVariantsOfSameWorkshopPath()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "OstraDup_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(dir, "Item"));
+        try
+        {
+            var upper = Path.Combine(dir, "Item");
+            var lower = Path.Combine(dir, "item");
+            LoadOrderFile.Read(_path).Write(new[] { "core", lower, upper });   // same folder, two cases
+
+            var paths = LoadOrderFile.Read(_path).Order.Where(o => o != "core").ToList();
+            Assert.Single(paths);   // collapsed to one canonical entry
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
 }

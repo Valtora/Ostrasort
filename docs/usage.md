@@ -39,11 +39,16 @@ any problems. Below it, four tabs:
 
 - **Collisions** — who claims the same objects and whether the order handles
   it, including field-level analysis of non-shop overrides.
-- **Order changes** — what a sort would do and why, applied with one button.
+- **Order changes** — the current order and the suggested order side by side,
+  applied with one button.
 - **Patch** — state of the generated conflict patch, with *Rebuild from
   scratch* and *Delete patch* buttons.
 - **Warnings** — dead entries, unregistered mods, version lag, broken JSON,
   image overrides, BepInEx problems.
+- **Logs** — a record of everything Ostrasort has done (applies, patches,
+  restores, undo/redo), and a viewer for the game's own logs (Player.log and
+  the BepInEx log) so you can see what happened after a launch. Copy or open
+  any of them.
 
 Nothing is written until you press a button, every `loading_order.json` write
 keeps a `.bak`, and all writes are disabled while the game is running.

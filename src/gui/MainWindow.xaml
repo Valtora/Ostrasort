@@ -172,6 +172,33 @@
                     <ItemsControl x:Name="ListWarnings" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
                 </ScrollViewer>
             </TabItem>
+            <TabItem x:Name="TabLogs" Header="Logs">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="8,6,8,2">
+                        <TextBlock DockPanel.Dock="Left" Text="Show:" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="CmbLogSource" Width="260" VerticalAlignment="Center"
+                                  SelectionChanged="LogSource_Changed">
+                            <ComboBoxItem Content="Ostrasort operations" IsSelected="True"/>
+                            <ComboBoxItem Content="Game log (Player.log)"/>
+                            <ComboBoxItem Content="BepInEx log (code mods)"/>
+                        </ComboBox>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <TextBlock VerticalAlignment="Center" Margin="0,0,10,0">
+                                <Hyperlink Click="RefreshLog_Click">Refresh</Hyperlink>
+                            </TextBlock>
+                            <TextBlock VerticalAlignment="Center" Margin="0,0,10,0">
+                                <Hyperlink Click="CopyLog_Click">Copy</Hyperlink>
+                            </TextBlock>
+                            <TextBlock VerticalAlignment="Center">
+                                <Hyperlink Click="OpenLog_Click">Open file</Hyperlink>
+                            </TextBlock>
+                        </StackPanel>
+                    </DockPanel>
+                    <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="ListLogs" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
         </TabControl>
 
         <!-- action bar -->
