@@ -56,6 +56,10 @@ item. The result is written as a `Mods\OstrasortPatch` mod that loads last.
 - **Your decisions are remembered** (stored in the patch's marker file). When
   a merged mod updates, the patch is flagged **stale**; regenerating re-asks
   only the new or changed items.
+- **Managing the patch**: the Patch tab has *Rebuild patch from scratch…*
+  (discard every stored decision — source picks and exclusions — and resolve
+  again; also `--patch --fresh`) and *Delete patch* (same as the Remove patch
+  button / `--unpatch`). Both are undoable like every other operation.
 - The folder is wholly owned by Ostrasort — never edit it by hand; remove it
   with the "Remove patch" button (or `--unpatch`).
 
@@ -69,6 +73,7 @@ Ostrasort.exe --headless  console only, never any window or key-press wait; alon
 Ostrasort.exe --apply     write the suggested load order
 Ostrasort.exe --patch     generate/refresh the patch; contested items open the
                           resolver window unless headless
+Ostrasort.exe --fresh     with --patch: discard all stored decisions and rebuild
 Ostrasort.exe --unpatch   remove the generated patch mod
 Ostrasort.exe --tidy      opt-in cosmetic grouping in the suggestion (core,
                           infrastructure, code, shells, additive data, overrides, patch)

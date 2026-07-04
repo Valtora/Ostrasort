@@ -164,10 +164,14 @@ public static class Patcher
     /// Builds the merge plan for every patchable conflict. Prior decisions are
     /// pre-applied from the marker when the chosen source still offers exactly
     /// the same entry; anything new or changed comes back as needing a decision.
+    /// With <paramref name="fresh"/>, prior decisions (including exclusions)
+    /// are discarded and everything contested is asked again.
     /// </summary>
-    public static MergePlan PlanMerge(GameEnv env, Analysis a)
+    public static MergePlan PlanMerge(GameEnv env, Analysis a, bool fresh = false)
     {
-        var prior = ReadPriorChoices(env);
+        var prior = fresh
+            ? new Dictionary<string, Dictionary<string, (string, string, bool, bool)>>()
+            : ReadPriorChoices(env);
         var pools = new List<PoolPlan>();
 
         foreach (var c in PatchableConflicts(a))

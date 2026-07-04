@@ -154,9 +154,19 @@
                 </ScrollViewer>
             </TabItem>
             <TabItem x:Name="TabPatch" Header="Patch">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <ItemsControl x:Name="ListPatch" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
-                </ScrollViewer>
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8,2,8,8">
+                        <Button x:Name="BtnPatchFresh" Content="Rebuild patch from scratch…" Padding="10,4"
+                                Click="PatchFresh_Click"
+                                ToolTip="Discard every stored decision (source picks AND exclusions) and resolve all conflicts again from a blank slate."/>
+                        <Button x:Name="BtnPatchDelete" Content="Delete patch" Padding="10,4" Margin="8,0,0,0"
+                                Click="Unpatch_Click"
+                                ToolTip="Remove the generated patch mod and its load-order entry (same as the Remove patch button)."/>
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="ListPatch" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
+                    </ScrollViewer>
+                </DockPanel>
             </TabItem>
             <TabItem x:Name="TabWarnings" Header="Warnings">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">

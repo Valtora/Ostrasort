@@ -230,6 +230,8 @@ public partial class MainWindow : Window
         BtnPatch.IsEnabled = Patcher.PatchableConflicts(a).Count > 0 && !running;
         BtnPatch.Content = s.Patch.Stale ? "Refresh patch (decisions kept)" : "Resolve conflicts & generate patch";
         BtnUnpatch.IsEnabled = s.Patch.Exists && !running;
+        BtnPatchFresh.IsEnabled = BtnPatch.IsEnabled;
+        BtnPatchDelete.IsEnabled = BtnUnpatch.IsEnabled;
         BtnRestoreBak.IsEnabled = File.Exists(bak) && !running;
         BtnRestoreBak.ToolTip = File.Exists(bak)
             ? $"Swap loading_order.json with the backup from {File.GetLastWriteTime(bak):yyyy-MM-dd HH:mm:ss} (restoring is reversible - it swaps)"
@@ -527,13 +529,25 @@ public partial class MainWindow : Window
         finally { _busy = false; }
     }
 
-    private void Patch_Click(object sender, RoutedEventArgs e)
+    private void Patch_Click(object sender, RoutedEventArgs e) => GeneratePatch(fresh: false);
+
+    private void PatchFresh_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is { Patch.Exists: true } &&
+            MessageBox.Show(this,
+                "Discard ALL stored decisions (source picks and exclusions) and resolve every conflict again from scratch?",
+                "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+        GeneratePatch(fresh: true);
+    }
+
+    private void GeneratePatch(bool fresh)
     {
         if (_state is null || !GateRunning()) return;
         _busy = true;
         try
         {
-            var plan = Patcher.PlanMerge(_env, _state.Analysis);
+            var plan = Patcher.PlanMerge(_env, _state.Analysis, fresh);
             if (plan.Pools.Count == 0)
             {
                 MessageBox.Show(this, "There are no partial-overlap shop-pool conflicts to merge.",
@@ -545,7 +559,8 @@ public partial class MainWindow : Window
                 var dlg = new ResolverDialog(plan) { Owner = this };
                 if (dlg.ShowDialog() != true) return;
             }
-            CaptureOp(_state.Patch.Exists ? "refresh patch (incl. decisions)" : "generate patch");
+            CaptureOp(fresh ? "rebuild patch from scratch"
+                    : _state.Patch.Exists ? "refresh patch (incl. decisions)" : "generate patch");
             Patcher.Generate(_env, plan, _env.InstalledVersion, Program.Version);
             Rescan();
             MessageBox.Show(this, "Patch generated and registered last in the load order.",

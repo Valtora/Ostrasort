@@ -40,7 +40,7 @@ public static class Program
 
     private static int Run(string[] args, ref bool ranGui)
     {
-        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false;
+        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false;
         string? gameRoot = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -53,6 +53,7 @@ public static class Program
                 case "--smoke-undo": smokeUndo = true; break; // undocumented: exercise snapshot undo/redo against a fixture
                 case "--apply": apply = true; break;
                 case "--patch": patch = true; break;
+                case "--fresh": fresh = true; break;
                 case "--unpatch": unpatch = true; break;
                 case "--gui": gui = true; break;
                 case "--no-gui": noGui = true; break;
@@ -75,6 +76,8 @@ public static class Program
                           --patch     generate/refresh the "Ostrasort Patch" mod that merges shop
                                       pools two mods both override (conflicts no load order can fix);
                                       contested items open the resolver window unless headless
+                          --fresh     with --patch: discard all previously stored decisions
+                                      (source picks AND exclusions) and rebuild from scratch
                           --unpatch   remove the generated patch mod and its load-order entry
                           --tidy      opt-in cosmetic grouping in the suggestion: core,
                                       infrastructure, code, shells, additive data, overrides, patch
@@ -162,7 +165,7 @@ public static class Program
 
         if (patch)
         {
-            var plan = Patcher.PlanMerge(env, state.Analysis);
+            var plan = Patcher.PlanMerge(env, state.Analysis, fresh);
             if (plan.Pools.Count == 0)
             {
                 performed.Add(state.Patch.Exists
