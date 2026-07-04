@@ -56,11 +56,17 @@ leaves to load order.
 
 **Windows only** (64-bit Windows 10/11). Nothing to install:
 
-1. **Close Ostranauts** (Ostrasort won't write while the game is running).
-2. Download and **double-click `Ostrasort.exe`.** It finds your install
-   automatically and lists every mod in load order.
-3. Read the highlighted tabs, **Apply the suggested order** and **Resolve
+1. **Download `Ostrasort.exe`** from the
+   [latest release](https://github.com/Valtora/Ostrasort/releases/latest).
+2. **Close Ostranauts** (Ostrasort won't write while the game is running).
+3. **Double-click `Ostrasort.exe`.** It finds your install automatically and
+   lists every mod in load order.
+4. Read the highlighted tabs, **Apply the suggested order** and **Resolve
    conflicts** as needed, then launch the game. Ctrl+Z undoes anything.
+
+> Windows SmartScreen may warn on first run because the exe isn't
+> code-signed — choose *More info → Run anyway*, or unblock it in the file's
+> Properties.
 
 Full walkthrough: **[docs/usage.md](docs/usage.md)**.
 

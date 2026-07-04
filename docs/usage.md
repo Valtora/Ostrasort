@@ -1,10 +1,14 @@
 # Using Ostrasort
 
-**Windows only** (64-bit Windows 10/11). Download `Ostrasort.exe` — a single
-self-contained file, nothing to install — and **double-click it**. It finds
-your Ostranauts install by itself via the Steam registry and
+**Windows only** (64-bit Windows 10/11). Download `Ostrasort.exe` from the
+[latest release](https://github.com/Valtora/Ostrasort/releases/latest) — a
+single self-contained file, nothing to install — and **double-click it**. It
+finds your Ostranauts install by itself via the Steam registry and
 `libraryfolders.vdf`, whatever drive it's on. (For an unusual install, point
 it manually with `--game <path>`.)
+
+On first run Windows SmartScreen may warn because the exe isn't code-signed —
+choose *More info → Run anyway*, or unblock it in the file's Properties.
 
 > Close Ostranauts first — Ostrasort disables all writes while the game is
 > running.
