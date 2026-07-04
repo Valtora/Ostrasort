@@ -26,6 +26,10 @@ public sealed class ModEntry
     public string? GameVersion { get; set; }         // strGameVersion from mod_info.json
     public bool Registered { get; set; } = true;
 
+    private bool? _isPatch;
+    /// <summary>True for the folder Ostrasort itself generates (identified by its marker file).</summary>
+    public bool IsPatch => _isPatch ??= Dir is not null && File.Exists(Path.Combine(Dir, Patcher.MarkerFile));
+
     // filled by the scanner
     public ModClass Class { get; set; } = ModClass.Shell;
     public bool HasPatchers { get; set; }

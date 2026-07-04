@@ -5,7 +5,7 @@ public enum Relation
     SupersetOk,      // later pool contains everything the earlier adds - order correct
     SubsetViolation, // later pool is a strict subset - the earlier mod's items vanish; swap suggested
     Equal,           // same item set - only quantities differ, last-loaded wins
-    Partial,         // each side has items the other lacks - a real conflict, human decision
+    Partial,         // each side has items the other lacks - no order fixes it; --patch merges it
     NonLoot,         // whole-object replacement, no item-level analysis - last-loaded wins
 }
 
@@ -20,6 +20,7 @@ public sealed class Collision
     public required string ObjName { get; init; }
     public required List<ModEntry> Claimants { get; init; }   // in effective load order
     public List<PairRelation> Pairs { get; } = new();
+    public bool ResolvedByPatch { get; set; }                 // a fresh OstrasortPatch covers this pool
     public string Key => $"{Type}/{ObjName}";
 }
 
@@ -32,7 +33,6 @@ public sealed class Analysis
     public List<ModEntry> UnregisteredWorkshop { get; } = new();
     public List<Collision> Collisions { get; } = new();
     public List<string> Warnings { get; } = new();
-    public List<string> Errors { get; } = new();
 
     public List<string> SuggestedOrder { get; private set; } = new();
     public List<Change> Changes { get; } = new();
@@ -46,9 +46,12 @@ public sealed class Analysis
 
     public void FindCollisions()
     {
-        // effective order: current registration order, then would-be additions
+        // effective order: current registration order, then would-be additions.
+        // The Ostrasort-generated patch never counts as a claimant - it IS the
+        // resolution of a collision, not a party to one.
         var mods = Registered.Where(m => m.Kind != EntryKind.Core && m.Dir is not null)
-            .Concat(UnregisteredLocal).Concat(UnregisteredWorkshop).ToList();
+            .Concat(UnregisteredLocal).Concat(UnregisteredWorkshop)
+            .Where(m => !m.IsPatch).ToList();
 
         var byKey = new Dictionary<(string, string), List<ModEntry>>();
         foreach (var m in mods)
@@ -91,6 +94,10 @@ public sealed class Analysis
         };
         return new PairRelation(earlier, later, rel, lost, added);
     }
+
+    /// <summary>Partial-overlap loot conflicts not (freshly) covered by the generated patch.</summary>
+    public bool HasUnresolvedConflicts =>
+        Collisions.Any(c => !c.ResolvedByPatch && c.Pairs.Any(p => p.Rel == Relation.Partial));
 
     // ------------------------------------------------------------- sorting ---
 
@@ -164,8 +171,10 @@ public sealed class Analysis
         foreach (var m in UnregisteredLocal)
         {
             work.Add(m);
-            Changes.Add(new Change("add", $"{m.Name}|edit",
-                "local mod folder present but unregistered - invisible to the MODS screen"));
+            Changes.Add(new Change("add", SuggestedRaw(m),
+                m.IsPatch
+                    ? "the generated Ostrasort Patch exists on disk but is unregistered"
+                    : "local mod folder present but unregistered - invisible to the MODS screen"));
         }
         foreach (var m in UnregisteredWorkshop)
         {
@@ -174,10 +183,24 @@ public sealed class Analysis
                 "subscribed Workshop item not in aLoadOrder (the game will add it on next launch anyway)"));
         }
 
-        SuggestedOrder = work.Select(m => m.Registered
-            ? m.Raw
-            : m.Kind == EntryKind.Local ? $"{m.Name}|edit" : m.Dir!).ToList();
+        // rule 5: the generated patch merges other mods' pools - it must load
+        // after everything it merges, i.e. last
+        var patchIdx = work.FindIndex(m => m.IsPatch);
+        if (patchIdx >= 0 && patchIdx != work.Count - 1)
+        {
+            var patch = work[patchIdx];
+            work.RemoveAt(patchIdx);
+            work.Add(patch);
+            Changes.Add(new Change("move", SuggestedRaw(patch), "the generated Ostrasort Patch must load last"));
+        }
 
+        SuggestedOrder = work.Select(SuggestedRaw).ToList();
         OrderChanged = !SuggestedOrder.SequenceEqual(Registered.Select(m => m.Raw));
     }
+
+    private static string SuggestedRaw(ModEntry m) =>
+        m.Registered ? m.Raw
+        : m.Kind == EntryKind.Workshop ? m.Dir!
+        : m.IsPatch ? m.Name                 // the patch registers plain, nothing to upload
+        : $"{m.Name}|edit";
 }

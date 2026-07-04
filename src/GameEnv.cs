@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 namespace Ostrasort;
 
@@ -10,6 +11,7 @@ public sealed class GameEnv
     public const string DefaultGameRoot = @"C:\Program Files (x86)\Steam\steamapps\common\Ostranauts";
 
     public required string GameRoot { get; init; }
+    public required string DiscoveredVia { get; init; }
     public required string CoreDataDir { get; init; }   // StreamingAssets\data
     public required string ModsDir { get; init; }       // holds loading_order.json + local mods
     public string? WorkshopContentDir { get; init; }    // steamapps\workshop\content\1022980
@@ -19,19 +21,42 @@ public sealed class GameEnv
 
     public static GameEnv Locate(string? gameRootOverride)
     {
-        var root = gameRootOverride ?? DefaultGameRoot;
-        if (!Directory.Exists(root))
+        string root, via;
+        if (gameRootOverride is not null)
+        {
+            root = Path.GetFullPath(gameRootOverride);
+            via = "--game";
+            if (!Directory.Exists(Path.Combine(root, "Ostranauts_Data")))
+                throw new DirectoryNotFoundException(
+                    $"'{root}' does not look like an Ostranauts install (no Ostranauts_Data folder inside it).");
+        }
+        else if (LocateViaSteam() is { } steamHit)
+        {
+            (root, via) = steamHit;
+        }
+        else if (Directory.Exists(Path.Combine(DefaultGameRoot, "Ostranauts_Data")))
+        {
+            root = DefaultGameRoot;
+            via = "default install path";
+        }
+        else
+        {
             throw new DirectoryNotFoundException(
-                $"Game install not found at '{root}'. Pass --game <path-to-Ostranauts-folder>.");
+                "Could not find the Ostranauts install (checked the Steam registry, every Steam " +
+                "library, and the default path). Run with:  ostrasort --game \"<path to the " +
+                "Ostranauts folder inside steamapps\\common>\"");
+        }
 
         var dataDir = Path.Combine(root, "Ostranauts_Data");
         var modsDir = Path.Combine(dataDir, "Mods");
 
-        // settings.json can relocate the Mods folder via strPathMods
+        // settings.json can relocate the Mods folder via strPathMods - but only
+        // honor that for the auto-detected install: with an explicit --game the
+        // caller means THAT install's own Mods folder (e.g. a test fixture)
         var settings = Path.Combine(
             Environment.GetEnvironmentVariable("USERPROFILE") ?? "",
             @"AppData\LocalLow\Blue Bottle Games\Ostranauts\settings.json");
-        if (File.Exists(settings))
+        if (gameRootOverride is null && File.Exists(settings))
         {
             try
             {
@@ -54,11 +79,54 @@ public sealed class GameEnv
         return new GameEnv
         {
             GameRoot = root,
+            DiscoveredVia = via,
             CoreDataDir = Path.Combine(dataDir, "StreamingAssets", "data"),
             ModsDir = modsDir,
             WorkshopContentDir = workshop,
             InstalledVersion = ReadInstalledVersion(dataDir),
         };
+    }
+
+    /// <summary>
+    /// Standard Steam locator: registry SteamPath -> parse libraryfolders.vdf ->
+    /// probe every library for steamapps\common\Ostranauts. Handles installs on
+    /// any drive without the user telling us anything.
+    /// </summary>
+    private static (string Root, string Via)? LocateViaSteam()
+    {
+        string? steam = null;
+        try
+        {
+            steam = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath", null) as string
+                 ?? Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath", null) as string;
+        }
+        catch { /* no registry access -> fall through to the default path */ }
+        if (string.IsNullOrWhiteSpace(steam)) return null;
+        steam = Path.GetFullPath(steam.Replace('/', '\\'));
+
+        var libraries = new List<string> { steam };
+        foreach (var vdf in new[]
+                 {
+                     Path.Combine(steam, "steamapps", "libraryfolders.vdf"),
+                     Path.Combine(steam, "config", "libraryfolders.vdf"),
+                 })
+        {
+            if (!File.Exists(vdf)) continue;
+            foreach (Match m in Regex.Matches(File.ReadAllText(vdf), "\"path\"\\s+\"((?:[^\"\\\\]|\\\\.)*)\""))
+            {
+                try { libraries.Add(Regex.Unescape(m.Groups[1].Value)); }
+                catch (ArgumentException) { /* malformed escape in vdf - skip that entry */ }
+            }
+            break;   // the steamapps copy is authoritative on modern clients
+        }
+
+        foreach (var lib in libraries.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var candidate = Path.Combine(lib, "steamapps", "common", "Ostranauts");
+            if (Directory.Exists(Path.Combine(candidate, "Ostranauts_Data")))
+                return (candidate, $"Steam library at {lib}");
+        }
+        return null;
     }
 
     /// <summary>
