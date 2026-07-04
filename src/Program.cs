@@ -109,8 +109,14 @@ public static class Program
             var smokeEnv = GameEnv.Locate(gameRoot);
             var smokeState = Engine.Analyze(smokeEnv);
             _ = new Gui.MainWindow(smokeEnv);                                       // ctor runs a full rescan/render
-            _ = new Gui.ResolverDialog(Patcher.PlanMerge(smokeEnv, smokeState.Analysis));
-            Console.WriteLine("gui-smoke ok (windows constructed, not shown)");
+            var smokePlan = Patcher.PlanMerge(smokeEnv, smokeState.Analysis);
+            var resolver = new Gui.ResolverDialog(smokePlan);
+            if (smokePlan.ContestedItems.Any() && resolver.SelectorsInTree() == 0)
+            {
+                Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");
+                return 1;
+            }
+            Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()})");
             return 0;
         }
 

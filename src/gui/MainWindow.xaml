@@ -40,7 +40,7 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                    <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
                 </Grid.RowDefinitions>
                 <Grid.Resources>
                     <Style x:Key="HdrLabel" TargetType="TextBlock">
@@ -55,27 +55,24 @@
                     </Style>
                 </Grid.Resources>
 
-                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" FontSize="18"
-                           FontWeight="SemiBold" Text="Ostrasort" Margin="0,0,0,6"/>
-
-                <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Game folder"/>
-                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HdrValue}">
+                <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Game folder"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HdrValue}">
                     <Run x:Name="RunGamePath"/>
                     <Hyperlink Click="OpenGame_Click">open</Hyperlink>
                     <Run x:Name="RunFoundVia" Foreground="Gray"/>
                 </TextBlock>
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Mods folder"/>
-                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HdrValue}">
+                <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Mods folder"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HdrValue}">
                     <Run x:Name="RunModsPath"/>
                     <Hyperlink Click="OpenMods_Click">open</Hyperlink>
                 </TextBlock>
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Game version"/>
-                <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HdrValue}" x:Name="TxtVersions"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Game version"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HdrValue}" x:Name="TxtVersions"/>
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Core data"/>
-                <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HdrValue}" x:Name="TxtCoreInfo"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Core data"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HdrValue}" x:Name="TxtCoreInfo"/>
             </Grid>
         </DockPanel>
 

@@ -148,22 +148,8 @@ public partial class MainWindow : Window
 
         ListCollisions.ItemsSource = BuildCollisionLines(a);
 
-        var ord = new List<LineVm>();
-        if (!a.OrderChanged) ord.Add(L("The current load order satisfies every rule — nothing to change.", Good));
-        else
-        {
-            foreach (var ch in a.Changes)
-            {
-                var brush = ch.Action switch { "add" => Good, "remove" => Bad, _ => Warn };
-                ord.Add(L($"{ch.Action.ToUpperInvariant(),-8} {ch.Entry}", brush));
-                ord.Add(L(ch.Reason, Dim, 1));
-            }
-            ord.Add(L("", Normal));
-            ord.Add(L("Resulting order:", Normal));
-            for (var i = 0; i < a.SuggestedOrder.Count; i++)
-                ord.Add(L($"{i + 1,2}. {a.SuggestedOrder[i]}", Dim, 1));
-        }
-        ListOrder.ItemsSource = ord;
+        ListOrder.ItemsSource = OrderChangeView.Build(a)
+            .Select(v => new LineVm(v.Text, SevBrush(v.Sev), new Thickness(v.Indent * 18, 1, 0, 1), v.Bold)).ToList();
 
         var pat = new List<LineVm>();
         if (!s.Patch.Exists)

@@ -210,6 +210,7 @@ public partial class ResolverDialog : Window
                 VerticalAlignment = VerticalAlignment.Center,
             });
 
+        row.Children.Add(radios);
         _wired.Add((item, wired));
         return row;
     }
@@ -234,4 +235,24 @@ public partial class ResolverDialog : Window
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e) => DialogResult = true;
+
+    /// <summary>
+    /// Test hook: count the RadioButtons actually attached to the dialog's tree.
+    /// A contested plan must yield selectors here - if it renders zero, the
+    /// resolver is broken (this exact regression shipped once).
+    /// </summary>
+    internal int SelectorsInTree()
+    {
+        var n = 0;
+        void Walk(DependencyObject d)
+        {
+            foreach (var child in LogicalTreeHelper.GetChildren(d))
+            {
+                if (child is RadioButton) n++;
+                if (child is DependencyObject dep) Walk(dep);
+            }
+        }
+        Walk(PoolsHost);
+        return n;
+    }
 }

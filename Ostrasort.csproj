@@ -5,7 +5,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <AssemblyName>Ostrasort</AssemblyName>
     <RootNamespace>Ostrasort</RootNamespace>
-    <Version>0.8.0</Version>
+    <Version>0.8.1</Version>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
@@ -13,6 +13,11 @@
     <LangVersion>latest</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
+
+  <!-- the test project lives under tests\ and must not be compiled into the app -->
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <Resource Include="app.ico" />

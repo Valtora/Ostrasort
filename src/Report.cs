@@ -105,32 +105,19 @@ public static class Report
 
         // --------------------------------------------------------- suggestion
         Line("");
-        if (!a.OrderChanged)
-        {
-            Line("SUGGESTED ORDER: no changes - the current load order satisfies every rule.", ConsoleColor.Green);
-        }
-        else
-        {
-            Line($"SUGGESTED ORDER ({a.Changes.Count} change(s))", ConsoleColor.Cyan);
-            foreach (var c in a.Changes)
+        Line("SUGGESTED ORDER", ConsoleColor.Cyan);
+        foreach (var v in OrderChangeView.Build(a))
+            Line(new string(' ', 2 + v.Indent * 2) + v.Text, v.Sev switch
             {
-                var color = c.Action switch
-                {
-                    "add" => ConsoleColor.Green,
-                    "remove" => ConsoleColor.Red,
-                    _ => ConsoleColor.Yellow,
-                };
-                Line($"  {c.Action,-7} {c.Entry}", color);
-                Line($"          {c.Reason}");
-            }
-            Line("");
-            Line("  resulting aLoadOrder:");
-            for (var i = 0; i < a.SuggestedOrder.Count; i++)
-                Line($"    {i + 1,2}. {a.SuggestedOrder[i]}");
-            Line("");
-            Line("Analysis only - nothing more written. Re-run with --apply to write this order (a .bak is kept).",
+                LineSev.Good => ConsoleColor.Green,
+                LineSev.Warn => ConsoleColor.Yellow,
+                LineSev.Bad => ConsoleColor.Red,
+                LineSev.Dim => ConsoleColor.DarkGray,
+                _ => (ConsoleColor?)null,
+            });
+        if (a.OrderChanged)
+            Line("\nAnalysis only - nothing more written. Re-run with --apply to write this order (a .bak is kept).",
                  ConsoleColor.Cyan);
-        }
 
         foreach (var act in performed)
             Line(act, ConsoleColor.Green);

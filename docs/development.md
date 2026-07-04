@@ -60,14 +60,31 @@ Operational gotchas:
 used for headless verification. `--smoke-undo` exercises the snapshot
 undo/redo against a fixture install.
 
+## Tests
+
+Unit tests live in `tests\Ostrasort.Tests.csproj` (xUnit) and cover the pure
+logic — the field-merge engine, the schema validator, the guarded
+`loading_order.json` read/write, and the sort rules:
+
+```powershell
+dotnet test tests\Ostrasort.Tests.csproj
+```
+
+The test project references the app project; the app project excludes
+`tests\**` from its own compilation. GUI code isn't unit-tested directly, but
+`--smoke-gui` constructs the real windows and **asserts the resolver renders
+selectors** for a contested plan (a regression that shipped once), and
+`--smoke-undo` exercises the snapshot undo/redo.
+
 ## Testing against a fixture
 
 The analysis and patch paths can be exercised against a fake install with
 `--game <path>`: a directory containing `Ostranauts_Data\StreamingAssets\data`
-(core), `Ostranauts_Data\Mods\` with mod folders and a `loading_order.json`,
-and a `globalgamemanagers` file with a version string. This isolates tests
-from the real install (and `strPathMods` is ignored when `--game` is passed,
-so fixtures stay self-contained).
+(core, including a `schemas\` folder to exercise schema validation),
+`Ostranauts_Data\Mods\` with mod folders and a `loading_order.json`, and a
+`globalgamemanagers` file with a version string. This isolates tests from the
+real install (and `strPathMods` is ignored when `--game` is passed, so
+fixtures stay self-contained).
 
 ## Releasing
 
