@@ -113,6 +113,17 @@ them in game.
 - Both are undoable. The `OstrasortPatch` folder is wholly owned by Ostrasort
   — don't edit it by hand; it's safe to delete.
 
+## FFU / Thunderstore mod stacks
+
+Ostrasort manages **Steam Workshop** (and local) mods. If it finds the
+Thunderstore / **FFU** stack on your install — Robyn's OstraAutoloader, any
+`Autoload.Meta.toml` mod, or MonoMod patches in `BepInEx\monomod\` — it shows a
+**blocking notice at startup** and **refuses to write anything**. That stack's
+autoloader generates `loading_order.json` itself, so letting Ostrasort touch the
+same file would break it. Use one or the other on a given install, not both;
+Ostrasort doesn't support Thunderstore/FFU. (In the console this is a refusal on
+every write flag, overridable with `--allow-rival-stack` at your own risk.)
+
 ## Command-line reference
 
 The GUI is the default (double-clicking = no arguments). These flags drive it
@@ -133,6 +144,9 @@ Ostrasort.exe --no-gui    like --headless but only for the resolver: contested i
                           fall back to the later-loaded mod's entry, marked for review
 Ostrasort.exe --game <p>  point at a non-standard install manually
 Ostrasort.exe --no-pause  never wait for a key press
+Ostrasort.exe --allow-rival-stack
+                          proceed on an FFU/Thunderstore (OstraAutoloader) install anyway;
+                          by default every write is refused there
 Ostrasort.exe --version   print the version and exit
 ```
 

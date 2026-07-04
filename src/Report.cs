@@ -20,6 +20,17 @@ public static class Report
         Line($"Core: {scanner.CoreIndex.Count:N0} data objects across {scanner.CoreTypes} types" +
              (scanner.CoreProblemFiles > 0 ? $" ({scanner.CoreProblemFiles} file(s) with non-standard JSON skipped or lenient-parsed)" : ""));
 
+        if (a.Rival is { } rival)
+        {
+            Line("");
+            Line("  !!! FFU / THUNDERSTORE STACK DETECTED - Ostrasort is Steam-Workshop-only !!!", ConsoleColor.Red);
+            foreach (var e in rival.Evidence) Line($"      - {e}", ConsoleColor.Red);
+            Line("      Robyn's OstraAutoloader generates loading_order.json itself; running it alongside", ConsoleColor.Yellow);
+            Line("      Ostrasort makes both fight over that file and will likely break your FFU setup.", ConsoleColor.Yellow);
+            Line("      Use one or the other, not both. Ostrasort refuses to write here (override:", ConsoleColor.Yellow);
+            Line("      --allow-rival-stack, at your own risk).", ConsoleColor.Yellow);
+        }
+
         // ---------------------------------------------------------- mod table
         Line("");
         Line($"MODS ({a.Registered.Count} registered)", ConsoleColor.Cyan);

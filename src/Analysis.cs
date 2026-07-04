@@ -36,6 +36,9 @@ public sealed class Analysis
     public List<Collision> Collisions { get; } = new();
     public List<string> Warnings { get; } = new();
 
+    /// <summary>A rival, non-Workshop mod stack (FFU / OstraAutoloader) on this install, or null. See <see cref="RivalStack"/>.</summary>
+    public RivalStack? Rival { get; set; }
+
     public List<string> SuggestedOrder { get; private set; } = new();
     public List<Change> Changes { get; } = new();
 

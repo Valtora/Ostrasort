@@ -24,6 +24,7 @@ public static class Engine
         FieldDiff.Annotate(env, analysis);
         CheckImages(analysis);
         CheckBepInEx(env, analysis);
+        DetectRivalStack(env, analysis);
         var patch = Patcher.Inspect(env, analysis);   // marks collisions the patch resolves
         analysis.BuildSuggestion(tidy);
         return new EngineState(lo, scanner, analysis, patch);
@@ -90,6 +91,20 @@ public static class Engine
         foreach (var (dll, who) in owners.Where(kv => kv.Value.Count > 1).OrderBy(kv => kv.Key))
             a.Warnings.Add($"plugin {dll} is shipped by more than one source ({string.Join(", ", who)}) " +
                            "- the same plugin loading twice usually breaks its Harmony patches");
+    }
+
+    /// <summary>
+    /// Flag a rival, non-Workshop mod framework (Robyn's OstraAutoloader / the
+    /// FFU MonoMod stack from Thunderstore). Both manage loading_order.json
+    /// themselves, so Ostrasort - Steam-Workshop-only - must not fight them.
+    /// </summary>
+    private static void DetectRivalStack(GameEnv env, Analysis a)
+    {
+        a.Rival = RivalStack.Detect(env);
+        if (a.Rival is { } r)
+            a.Warnings.Add($"FFU / Thunderstore stack detected ({r.Summary}) - Ostrasort is Steam-Workshop-only " +
+                           "and will not modify this install. Robyn's OstraAutoloader generates loading_order.json " +
+                           "itself; use one or the other, not both.");
     }
 
     public static bool Actionable(EngineState s) =>

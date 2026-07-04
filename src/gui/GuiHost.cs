@@ -15,6 +15,8 @@ public static class GuiHost
             return 1;
         }
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
+        if (RivalStack.Detect(env) is { } rival && !RivalStackDialog.Confirm(rival))
+            return 0;   // FFU/Thunderstore stack present and the user chose to quit
         app.Run(new MainWindow(env));
         return 0;
     }

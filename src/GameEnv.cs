@@ -25,8 +25,11 @@ public sealed class GameEnv
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         @"AppData\LocalLow\Blue Bottle Games\Ostranauts\Player.log");
 
+    /// <summary>The BepInEx folder in the game install (mod loader, plugins, patchers, monomod).</summary>
+    public string BepInExDir => Path.Combine(GameRoot, "BepInEx");
+
     /// <summary>BepInEx's log (code-mod loading), in the game folder.</summary>
-    public string BepInExLogPath => Path.Combine(GameRoot, "BepInEx", "LogOutput.log");
+    public string BepInExLogPath => Path.Combine(BepInExDir, "LogOutput.log");
 
     public static GameEnv Locate(string? gameRootOverride)
     {

@@ -40,7 +40,7 @@ public static class Program
 
     private static int Run(string[] args, ref bool ranGui)
     {
-        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false;
+        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false;
         string? gameRoot = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -57,6 +57,7 @@ public static class Program
                 case "--patch": patch = true; break;
                 case "--fresh": fresh = true; break;
                 case "--unpatch": unpatch = true; break;
+                case "--allow-rival-stack": allowRival = true; break;   // override the FFU/Thunderstore write-block (at your own risk)
                 case "--gui": gui = true; break;
                 case "--no-gui": noGui = true; break;
                 case "--no-pause": break;
@@ -81,6 +82,10 @@ public static class Program
                           --fresh     with --patch: discard all previously stored decisions
                                       (source picks AND exclusions) and rebuild from scratch
                           --unpatch   remove the generated patch mod and its load-order entry
+                          --allow-rival-stack
+                                      proceed on an FFU/Thunderstore (OstraAutoloader) install;
+                                      by default every write is refused there
+
                           --tidy      opt-in cosmetic grouping in the suggestion: core,
                                       infrastructure, code, shells, additive data, overrides, patch
                           --no-gui    never open a window: contested items fall back to the
@@ -112,6 +117,7 @@ public static class Program
             _ = new Gui.MainWindow(smokeEnv);                                       // ctor runs a full rescan/render
             var smokePlan = Patcher.PlanMerge(smokeEnv, smokeState.Analysis);
             var resolver = new Gui.ResolverDialog(smokePlan);
+            _ = new Gui.RivalStackDialog(new RivalStack(true, true, true, new[] { "self-test evidence" }));
             if (smokePlan.ContestedItems.Any() && resolver.SelectorsInTree() == 0)
             {
                 Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");
@@ -125,6 +131,7 @@ public static class Program
         {
             var nenv = GameEnv.Locate(gameRoot);
             if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
+            GateNoRival(RivalStack.Detect(nenv), allowRival, "normalize the load order");
             var nlo = LoadOrderFile.Read(nenv.LoadingOrderPath);
             var before = nlo.Order.ToList();
             nlo.Write(nlo.Order);                        // Write canonicalises case + drops duplicates
@@ -179,6 +186,9 @@ public static class Program
         var env = GameEnv.Locate(gameRoot);
         var state = Engine.Analyze(env, tidy);
         var performed = new List<string>();
+
+        if (apply || patch || unpatch)
+            GateNoRival(state.Analysis.Rival, allowRival, "modify");
 
         if (unpatch)
         {
@@ -251,6 +261,21 @@ public static class Program
     {
         if (GameEnv.IsGameRunning())
             throw new InvalidOperationException($"Ostranauts is running - close it before {action}. Nothing was written.");
+    }
+
+    /// <summary>
+    /// Refuse to write on an install that runs a rival, non-Workshop load-order
+    /// manager (FFU / Robyn's OstraAutoloader) - they generate loading_order.json
+    /// themselves, so writing here would fight them. Overridable with
+    /// --allow-rival-stack for anyone who knows what they're doing.
+    /// </summary>
+    private static void GateNoRival(RivalStack? rival, bool allow, string action)
+    {
+        if (rival is { } r && !allow)
+            throw new InvalidOperationException(
+                $"FFU / Thunderstore stack detected ({r.Summary}). Ostrasort is Steam-Workshop-only and won't {action} " +
+                "on this install - Robyn's OstraAutoloader manages loading_order.json itself, so the two fight and will " +
+                "likely break your FFU setup. Use one or the other, not both. Override at your own risk with --allow-rival-stack.");
     }
 
     // ------------------------------------------------------- console plumbing ---

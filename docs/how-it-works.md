@@ -84,6 +84,31 @@ Surfaced in the same pass:
   installed, and the same plugin DLL shipped by two different sources
   (double-patching)
 
+## Rival load-order managers (FFU / Thunderstore)
+
+Ostrasort is a **Steam-Workshop-first** tool and manages `loading_order.json`
+for core, local, and Workshop mods. It deliberately does **not** support the
+Thunderstore / **FFU** (Fight for Universe: Beyond Reach) stack, because that
+stack ships its *own* load-order manager: Robyn's **OstraAutoloader** discovers
+mods (by an `Autoload.Meta.toml` file, under `BepInEx\plugins\` or `Mods\`),
+topologically sorts them by their declared `LoadGroup` and dependencies, and
+**regenerates `loading_order.json` itself at every launch**. FFU also patches the
+game with **MonoMod** (`*.mm.dll` in `BepInEx\monomod\`) rather than Harmony.
+
+Two managers writing the same file fight each other, so Ostrasort detects the
+stack — the autoloader plugin, any `Autoload.Meta.toml`, or MonoMod patches — and
+steps aside rather than corrupting an FFU setup:
+
+- the **GUI shows a blocking notice at startup**: quit (the default), or continue
+  at your own risk;
+- the **console report prints a banner**, and every **write path refuses**
+  (`--apply` / `--patch` / `--unpatch` / `--normalize` exit with an error).
+  `--allow-rival-stack` overrides the refusal for anyone who knows what they're
+  doing.
+
+Use one or the other on a given install, not both. Ostrasort has no plans to
+support Thunderstore or FFU.
+
 ## The conflict patch
 
 When two mods both change the same thing and the game would keep only one,
@@ -142,5 +167,8 @@ later refresh only re-asks about things that genuinely changed. See
   would not recognise its own subscription and would re-add it every launch,
   duplicating the mod — so every absolute path is canonicalised to its real
   filesystem case before writing.
+- **A rival load-order manager blocks writes.** If the FFU / OstraAutoloader
+  stack is present (see above), Ostrasort refuses to modify `loading_order.json`
+  at all — that stack owns the file — unless you explicitly override.
 - **Everything Ostrasort writes is logged** to the Logs tab (and to
   `%LOCALAPPDATA%\Ostrasort\ostrasort.log`), so you can always see what it did.

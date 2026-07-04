@@ -39,6 +39,13 @@ It does **not** yet merge objects that have no base-game version (two mods
 adding the *same new* object with no common ancestor) — those it reports and
 leaves to load order.
 
+**Steam Workshop only.** Ostrasort manages `loading_order.json` for core, local,
+and Steam-Workshop mods. It does **not** support the Thunderstore/**FFU** (Fight
+for Universe) stack: those mods load through Robyn's **OstraAutoloader**, which
+generates `loading_order.json` itself, so the two tools would fight over that
+file. When Ostrasort detects the autoloader / FFU / MonoMod on your install it
+**blocks with a warning and refuses to write** — use one or the other, not both.
+
 > ## ⚠️ Early development — use at your own risk
 >
 > Ostrasort is **in active development and not yet stable.** It edits your
