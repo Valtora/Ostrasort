@@ -21,23 +21,30 @@ public sealed class PatchInfo
 
 // ------------------------------------------------------------- merge plan ---
 
-/// <summary>One mod's candidate entry for an item ("ItmChair01Loose=1.0x21").</summary>
-public sealed record MergeOption(string SourceId, string SourceLabel, string Entry);
+/// <summary>
+/// One mod's candidate for a merge item. For a loot pool the candidate is the
+/// entry string ("ItmChair01Loose=1.0x21"); for an object field the candidate
+/// is a JSON value carried in <see cref="Node"/> (with Entry a compact display
+/// of it). The synthetic source id "__union__" marks a computed array union.
+/// </summary>
+public sealed record MergeOption(string SourceId, string SourceLabel, string Entry, JsonNode? Node = null);
 
 /// <summary>
-/// One item of a merged pool. Options are in claimant load order. An item is
-/// contested when two claimants disagree on the full entry text; contested
-/// items need a decision - the player's, or the headless fallback. ANY item
-/// (contested or carried-over) can instead be Excluded: dropped from the
-/// merged pool entirely, for rejecting a mod's unwanted strays.
+/// One decision in a merge. For loot pools the token is an item name and each
+/// option is that item's entry from one mod; for object merges the token is a
+/// field name and each option is that field's value from one mod. Contested =
+/// the options disagree and a decision is needed (the player's, or a fallback).
+/// Excluded drops a loot item / reverts an object field to the base value.
 /// </summary>
 public sealed class MergeItem
 {
     public required string Token { get; init; }
     public required List<MergeOption> Options { get; init; }
+    public JsonNode? BaseNode { get; init; }      // object merges: the vanilla value (exclude reverts here)
+    public bool IsArrayField { get; init; }       // object merges: an a* field (a union option is offered)
     public string? ChosenSourceId { get; set; }
     public bool AutoResolved { get; set; }        // decided by the headless fallback, not a person
-    public bool Excluded { get; set; }            // stock this item from nobody
+    public bool Excluded { get; set; }            // drop (loot) / revert to vanilla (field)
 
     public bool Contested => Options.Select(o => o.Entry).Distinct(StringComparer.Ordinal).Count() > 1;
     public bool NeedsDecision => Contested && ChosenSourceId is null && !Excluded;
@@ -45,6 +52,7 @@ public sealed class MergeItem
         Options.LastOrDefault(o => o.SourceId == ChosenSourceId) ?? Options[^1];
 }
 
+/// <summary>A colliding shop/loot pool being merged into a union.</summary>
 public sealed class PoolPlan
 {
     public required Collision Collision { get; init; }
@@ -54,12 +62,30 @@ public sealed class PoolPlan
     public IEnumerable<MergeItem> AllItems => LootItems.Concat(CoItems);
 }
 
+/// <summary>A colliding non-loot object being field-merged (3-way, core = base).</summary>
+public sealed class ObjectPlan
+{
+    public required Collision Collision { get; init; }
+    public required string Type { get; init; }
+    public required JsonNode BaseObject { get; init; }     // core version (clone); merged fields overlay it
+    public required List<MergeItem> Fields { get; init; }  // only the fields that changed vs core
+    public List<string> SchemaErrors { get; } = new();
+}
+
 public sealed class MergePlan
 {
     public required List<PoolPlan> Pools { get; init; }
-    public IEnumerable<MergeItem> Unresolved => Pools.SelectMany(p => p.AllItems).Where(i => i.NeedsDecision);
-    public IEnumerable<MergeItem> ContestedItems => Pools.SelectMany(p => p.AllItems).Where(i => i.Contested);
+    public List<ObjectPlan> Objects { get; init; } = new();
+
+    public IEnumerable<MergeItem> AllItems =>
+        Pools.SelectMany(p => p.AllItems).Concat(Objects.SelectMany(o => o.Fields));
+    public IEnumerable<MergeItem> Unresolved => AllItems.Where(i => i.NeedsDecision);
+    public IEnumerable<MergeItem> ContestedItems => AllItems.Where(i => i.Contested);
+    public bool IsEmpty => Pools.Count == 0 && Objects.Count == 0;
 }
+
+/// <summary>Outcome of generating the patch: what was merged, and any schema warnings on merged objects.</summary>
+public sealed record GenerateResult(List<string> Merged, List<string> SchemaWarnings);
 
 /// <summary>
 /// Generates and maintains the "OstrasortPatch" mod: for shop-pool collisions
@@ -84,18 +110,35 @@ public static class Patcher
     };
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
-    /// <summary>Collisions --patch can merge: loot pools, every claimant has aLoots, some pair is Partial.</summary>
+    /// <summary>Loot pools --patch can merge: every claimant has aLoots and some pair is a partial overlap.</summary>
     public static List<Collision> PatchableConflicts(Analysis a) =>
         a.Collisions.Where(c =>
             c.Type == "loot" &&
             c.Claimants.All(m => m.Claims.TryGetValue((c.Type, c.ObjName), out var l) && l is not null) &&
             c.Pairs.Any(p => p.Rel == Relation.Partial)).ToList();
 
+    /// <summary>Non-loot objects a 3-way field merge would improve on (flagged by FieldDiff).</summary>
+    public static List<Collision> MergeableObjects(Analysis a) =>
+        a.Collisions.Where(c => c.ObjectMergeable).ToList();
+
+    /// <summary>Everything --patch can act on - loot pools plus mergeable objects.</summary>
+    public static bool HasWork(Analysis a) => PatchableConflicts(a).Count > 0 || MergeableObjects(a).Count > 0;
+
     public static string ItemsHash(IEnumerable<string> loots) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             string.Join("\n", loots.OrderBy(x => x, StringComparer.Ordinal)))));
 
     private static string SourceId(ModEntry m) => m.Dir ?? m.Raw;
+
+    /// <summary>Per-source signature for staleness: the aLoots for a loot pool, the whole object otherwise.</summary>
+    private static string SourceSig(GameEnv env, Collision c, ModEntry m)
+    {
+        if (m.Claims.TryGetValue((c.Type, c.ObjName), out var loots) && loots is not null)
+            return ItemsHash(loots);
+        if (m.Dir is null) return "";
+        var obj = FieldDiff.LoadObject(Path.Combine(m.Dir, "data", c.Type), c.ObjName);
+        return obj is null ? "" : ItemsHash(new[] { obj.ToJsonString() });
+    }
 
     // ------------------------------------------------------------- inspect ---
 
@@ -133,7 +176,7 @@ public static class Patcher
                 info.ExcludedCount += choices.Count(kv => (kv.Value as JsonObject)?["excluded"]?.GetValue<bool>() == true);
         }
 
-        var current = PatchableConflicts(a);
+        var current = PatchableConflicts(a).Concat(MergeableObjects(a)).ToList();
         foreach (var c in current)
         {
             if (!markerPools.TryGetValue(c.Key, out var sources))
@@ -141,12 +184,10 @@ public static class Patcher
                 info.StaleReasons.Add($"new conflict {c.Key} is not covered yet");
                 continue;
             }
-            var now = c.Claimants
-                .Select(m => (Id: SourceId(m), Hash: ItemsHash(m.Claims[(c.Type, c.ObjName)]!)))
-                .ToList();
+            var now = c.Claimants.Select(m => (Id: SourceId(m), Hash: SourceSig(env, c, m))).ToList();
             if (!now.SequenceEqual(sources))
             {
-                info.StaleReasons.Add($"{c.Key}: a source mod's pool (or the mod order) changed since generation");
+                info.StaleReasons.Add($"{c.Key}: a source mod's data (or the mod order) changed since generation");
                 continue;
             }
             info.CoveredKeys.Add(c.Key);
@@ -202,7 +243,27 @@ public static class Patcher
             };
             pools.Add(plan);
         }
-        return new MergePlan { Pools = pools };
+
+        // non-loot object merges (3-way field merge, core = base)
+        var objects = new List<ObjectPlan>();
+        foreach (var c in MergeableObjects(a))
+        {
+            var coreObj = FieldDiff.LoadObject(Path.Combine(env.CoreDataDir, c.Type), c.ObjName);
+            if (coreObj is null) continue;
+            var versions = c.Claimants.Where(m => m.Dir is not null)
+                .Select(m => (Mod: m, Obj: FieldDiff.LoadObject(Path.Combine(m.Dir!, "data", c.Type), c.ObjName)))
+                .Where(x => x.Obj is not null)
+                .Select(x => (x.Mod, x.Obj!))
+                .ToList();
+            var plan = ObjectMerge.Build(c, coreObj, versions);
+            if (plan is null) continue;
+
+            prior.TryGetValue(c.Key, out var priorChoices);
+            foreach (var f in plan.Fields) ApplyPrior(f, priorChoices);
+            objects.Add(plan);
+        }
+
+        return new MergePlan { Pools = pools, Objects = objects };
     }
 
     private static void Collect(JsonNode? array, ModEntry source, List<string> order,
@@ -227,18 +288,25 @@ public static class Patcher
                                        Dictionary<string, (string Source, string Entry, bool Auto, bool Excluded)>? prior)
     {
         var item = new MergeItem { Token = token, Options = options };
-        if (prior is null || !prior.TryGetValue(token, out var p)) return item;
+        ApplyPrior(item, prior);
+        return item;
+    }
+
+    /// <summary>Re-applies a stored decision (source pick or exclusion) to an item if still valid.</summary>
+    private static void ApplyPrior(MergeItem item,
+                                   Dictionary<string, (string Source, string Entry, bool Auto, bool Excluded)>? prior)
+    {
+        if (prior is null || !prior.TryGetValue(item.Token, out var p)) return;
         if (p.Excluded)
         {
-            // exclusion is intent about the ITEM - it survives entry/source changes
-            item.Excluded = true;
+            item.Excluded = true;               // intent about the item/field - survives value changes
+            item.ChosenSourceId = null;
         }
-        else if (item.Contested && options.Any(o => o.SourceId == p.Source && o.Entry == p.Entry))
+        else if (item.Contested && item.Options.Any(o => o.SourceId == p.Source && o.Entry == p.Entry))
         {
-            item.ChosenSourceId = p.Source;   // decision still valid - keep it
+            item.ChosenSourceId = p.Source;     // decision still valid - keep it
             item.AutoResolved = p.Auto;
         }
-        return item;
     }
 
     /// <summary>Headless fallback: unresolved contested items take the later-loaded entry, marked auto.</summary>
@@ -282,58 +350,107 @@ public static class Patcher
     // ------------------------------------------------------------ generate ---
 
     /// <summary>Writes the patch mod from a fully resolved plan and registers it last.</summary>
-    public static List<string> Generate(GameEnv env, MergePlan plan, string? installedVersion, string toolVersion)
+    public static GenerateResult Generate(GameEnv env, MergePlan plan, string? installedVersion, string toolVersion)
     {
-        if (plan.Pools.Count == 0)
-            throw new InvalidOperationException("nothing to patch - there are no partial-overlap shop-pool conflicts.");
+        if (plan.IsEmpty)
+            throw new InvalidOperationException("nothing to patch - there are no mergeable conflicts.");
         if (plan.Unresolved.Any())
             throw new InvalidOperationException("the merge plan still has undecided items - resolve them first.");
 
         var dir = Path.Combine(env.ModsDir, FolderName);
-        Directory.CreateDirectory(Path.Combine(dir, "data", "loot"));
-
-        var poolNodes = new JsonArray();
+        var validator = new SchemaValidator(env);
         var markerPools = new JsonArray();
-        var mergedDescriptions = new List<string>();
+        var descriptions = new List<string>();
+        var schemaWarnings = new List<string>();
 
-        foreach (var p in plan.Pools)
+        JsonArray SourcesFor(Collision c)
         {
-            var obj = p.BaseObject;
-            obj["aLoots"] = new JsonArray(p.LootItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
-            obj["aCOs"] = new JsonArray(p.CoItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
-            poolNodes.Add(obj);
-
-            var sources = new JsonArray();
-            foreach (var m in p.Collision.Claimants)
-                sources.Add(new JsonObject
-                {
-                    ["id"] = SourceId(m),
-                    ["label"] = m.Label,
-                    ["hash"] = ItemsHash(m.Claims[(p.Collision.Type, p.Collision.ObjName)]!),
-                });
-
+            var arr = new JsonArray();
+            foreach (var m in c.Claimants)
+                arr.Add(new JsonObject { ["id"] = SourceId(m), ["label"] = m.Label, ["hash"] = SourceSig(env, c, m) });
+            return arr;
+        }
+        JsonObject ChoicesFor(IEnumerable<MergeItem> items)
+        {
             var choices = new JsonObject();
-            foreach (var i in p.AllItems.Where(i => i.Excluded))
+            foreach (var i in items.Where(i => i.Excluded))
                 choices[i.Token] = new JsonObject { ["excluded"] = true };
-            foreach (var i in p.AllItems.Where(i => i.Contested && !i.Excluded))
+            foreach (var i in items.Where(i => i.Contested && !i.Excluded))
                 choices[i.Token] = new JsonObject
                 {
                     ["source"] = i.Resolved.SourceId,
                     ["entry"] = i.Resolved.Entry,
                     ["auto"] = i.AutoResolved,
                 };
-
-            markerPools.Add(new JsonObject
-            {
-                ["type"] = p.Collision.Type,
-                ["strName"] = p.Collision.ObjName,
-                ["sources"] = sources,
-                ["choices"] = choices,
-            });
-            mergedDescriptions.Add($"{p.Collision.ObjName} = {string.Join(" + ", p.Collision.Claimants.Select(m => m.DisplayName ?? m.Name))}");
+            return choices;
         }
 
-        File.WriteAllText(Path.Combine(dir, "data", "loot", "loot.json"), poolNodes.ToJsonString(Indented) + "\n");
+        // ---- loot pools -> data/loot/loot.json (per-item union) ----
+        if (plan.Pools.Count > 0)
+        {
+            Directory.CreateDirectory(Path.Combine(dir, "data", "loot"));
+            var poolNodes = new JsonArray();
+            foreach (var p in plan.Pools)
+            {
+                var obj = p.BaseObject;
+                obj["aLoots"] = new JsonArray(p.LootItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
+                obj["aCOs"] = new JsonArray(p.CoItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
+                poolNodes.Add(obj);
+                markerPools.Add(new JsonObject
+                {
+                    ["type"] = p.Collision.Type,
+                    ["strName"] = p.Collision.ObjName,
+                    ["kind"] = "loot",
+                    ["sources"] = SourcesFor(p.Collision),
+                    ["choices"] = ChoicesFor(p.AllItems),
+                });
+                descriptions.Add($"{p.Collision.ObjName} = {string.Join(" + ", p.Collision.Claimants.Select(m => m.DisplayName ?? m.Name))}");
+            }
+            File.WriteAllText(Path.Combine(dir, "data", "loot", "loot.json"), poolNodes.ToJsonString(Indented) + "\n");
+        }
+
+        // ---- object merges -> data/<type>/ostrasort_merged.json (field merge, schema-validated) ----
+        foreach (var byType in plan.Objects.GroupBy(o => o.Type))
+        {
+            Directory.CreateDirectory(Path.Combine(dir, "data", byType.Key));
+            var arr = new JsonArray();
+            foreach (var o in byType)
+            {
+                var merged = ObjectMerge.Assemble(o);
+                var errs = validator.Validate(merged, o.Type);
+                if (errs.Count > 0)
+                {
+                    o.SchemaErrors.AddRange(errs);
+                    schemaWarnings.Add($"{o.Type}/{o.Collision.ObjName}: " +
+                        string.Join("; ", errs.Take(3)) + (errs.Count > 3 ? $" (+{errs.Count - 3} more)" : ""));
+                }
+                arr.Add(merged);
+
+                var marker = new JsonObject
+                {
+                    ["type"] = o.Type,
+                    ["strName"] = o.Collision.ObjName,
+                    ["kind"] = "object",
+                    ["sources"] = SourcesFor(o.Collision),
+                    ["choices"] = ChoicesFor(o.Fields),
+                };
+                if (o.SchemaErrors.Count > 0)
+                    marker["schemaErrors"] = new JsonArray(o.SchemaErrors.Select(e => (JsonNode)e).ToArray());
+                markerPools.Add(marker);
+
+                var kept = o.Fields.Count(f => !f.Excluded);
+                descriptions.Add($"{o.Collision.ObjName} (merged {kept} field(s))");
+            }
+            File.WriteAllText(Path.Combine(dir, "data", byType.Key, "ostrasort_merged.json"), arr.ToJsonString(Indented) + "\n");
+        }
+
+        var poolCount = plan.Pools.Count;
+        var objCount = plan.Objects.Count;
+        var summary = string.Join(" and ", new[]
+        {
+            poolCount > 0 ? $"{poolCount} shop pool(s)" : null,
+            objCount > 0 ? $"{objCount} object(s)" : null,
+        }.Where(x => x != null));
 
         var modInfo = new JsonArray(new JsonObject
         {
@@ -342,24 +459,24 @@ public static class Patcher
             ["strModURL"] = "",
             ["strGameVersion"] = installedVersion ?? "",
             ["strModVersion"] = toolVersion,
-            ["strNotes"] = "Auto-generated by Ostrasort. Merges shop pools that conflicting mods both " +
-                           "override, so no mod's wares are lost: " + string.Join("; ", mergedDescriptions) +
+            ["strNotes"] = $"Auto-generated by Ostrasort. Merges {summary} that conflicting mods both " +
+                           "override, so no mod's changes are lost: " + string.Join("; ", descriptions) +
                            ". Must load LAST. Do not edit by hand - re-run Ostrasort's patch after any " +
                            "of the merged mods update, or remove it with --unpatch / the Remove button.",
             ["strWorkshopID"] = "",
         });
         File.WriteAllText(Path.Combine(dir, "mod_info.json"), modInfo.ToJsonString(Indented) + "\n");
 
-        var marker = new JsonObject
+        var markerRoot = new JsonObject
         {
             ["toolVersion"] = toolVersion,
             ["generatedUtc"] = DateTime.UtcNow.ToString("o"),
             ["pools"] = markerPools,
         };
-        File.WriteAllText(Path.Combine(dir, MarkerFile), marker.ToJsonString(Indented) + "\n");
+        File.WriteAllText(Path.Combine(dir, MarkerFile), markerRoot.ToJsonString(Indented) + "\n");
 
         EnsureRegisteredLast(env);
-        return mergedDescriptions;
+        return new GenerateResult(descriptions, schemaWarnings);
     }
 
     /// <summary>Finds one object by strName in a mod's data\&lt;type&gt; folder and deep-clones it.</summary>

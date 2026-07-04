@@ -21,6 +21,7 @@ public sealed class Collision
     public required List<ModEntry> Claimants { get; init; }   // in effective load order
     public List<PairRelation> Pairs { get; } = new();
     public List<string> FieldNotes { get; } = new();          // non-loot: which fields each claimant changes vs core
+    public bool ObjectMergeable { get; set; }                 // non-loot: a 3-way field merge would preserve more than last-wins
     public bool ResolvedByPatch { get; set; }                 // a fresh OstrasortPatch covers this pool
     public string Key => $"{Type}/{ObjName}";
 }

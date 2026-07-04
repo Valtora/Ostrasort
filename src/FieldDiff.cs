@@ -5,11 +5,11 @@ using System.Text.Json.Nodes;
 namespace Ostrasort;
 
 /// <summary>
-/// Field-level analysis for non-loot same-object collisions. The game replaces
-/// whole objects, so when two mods override the same strName only the later
-/// one survives - but WHICH fields each mod actually changes (vs core) tells
-/// the user whether that loss matters: disjoint field sets mean a hand-merged
-/// override could keep both, overlapping sets are a genuine tuning conflict.
+/// Field-level analysis for non-loot same-object collisions, driven by the same
+/// <see cref="ObjectMerge"/> engine that generates the merge. The game replaces
+/// whole objects (last loaded wins), but when two mods change different fields
+/// of one object a 3-way merge (core = base) can keep both - this flags those
+/// collisions as mergeable and notes what auto-merges vs what needs a decision.
 /// </summary>
 public static class FieldDiff
 {
@@ -19,7 +19,7 @@ public static class FieldDiff
         CommentHandling = JsonCommentHandling.Skip,
     };
 
-    /// <summary>Annotates every collision that has non-loot claims with field notes.</summary>
+    /// <summary>Annotates every non-loot collision with merge feasibility + field notes.</summary>
     public static void Annotate(GameEnv env, Analysis a)
     {
         foreach (var col in a.Collisions)
@@ -29,48 +29,47 @@ public static class FieldDiff
                 continue;
 
             var coreObj = LoadObject(Path.Combine(env.CoreDataDir, col.Type), col.ObjName);
-            var changed = new List<(ModEntry Mod, HashSet<string> Fields)>();
+            var versions = new List<(ModEntry Mod, JsonNode Obj)>();
             foreach (var m in col.Claimants)
             {
-                var obj = LoadObject(Path.Combine(m.Dir!, "data", col.Type), col.ObjName);
-                if (obj is null) continue;
-                changed.Add((m, ChangedFields(coreObj, obj)));
+                if (m.Dir is null) continue;
+                var obj = LoadObject(Path.Combine(m.Dir, "data", col.Type), col.ObjName);
+                if (obj is not null) versions.Add((m, obj));
             }
-            if (changed.Count < 2) continue;
+            if (versions.Count < 2) continue;
 
-            foreach (var (m, fields) in changed)
-                col.FieldNotes.Add($"{m.DisplayName ?? m.Name} changes: " +
-                    (fields.Count == 0 ? "(nothing vs core - identical copy)" : string.Join(", ", fields.OrderBy(x => x))));
+            if (coreObj is null)
+            {
+                col.FieldNotes.Add("no vanilla version to merge against — only the last-loaded mod's version applies");
+                continue;
+            }
 
-            var overlaps = changed[0].Fields.ToHashSet(StringComparer.Ordinal);
-            for (var i = 1; i < changed.Count; i++) overlaps.IntersectWith(changed[i].Fields);
-            col.FieldNotes.Add(overlaps.Count == 0
-                ? "disjoint fields - a hand-merged override could keep every change (only the last-loaded survives today)"
-                : $"BOTH change: {string.Join(", ", overlaps.OrderBy(x => x))} - genuine conflict, last loaded wins those");
+            var plan = ObjectMerge.Build(col, coreObj, versions);
+            if (plan is null)
+            {
+                col.FieldNotes.Add("the mods' versions are identical — nothing is lost");
+                continue;
+            }
+
+            // merge beats last-wins when a field the last mod left at vanilla was
+            // changed by an earlier mod, or any field is genuinely contested
+            var lastId = versions[^1].Mod.Dir ?? versions[^1].Mod.Raw;
+            col.ObjectMergeable = plan.Fields.Any(f =>
+                f.Contested || !f.Options.Any(o => o.SourceId == lastId));
+
+            var auto = plan.Fields.Where(f => !f.Contested).ToList();
+            var conflicts = plan.Fields.Where(f => f.Contested).ToList();
+            if (auto.Count > 0)
+                col.FieldNotes.Add("auto-merge: " + string.Join(", ",
+                    auto.Select(f => $"{f.Token} (from {f.Options[0].SourceLabel})")));
+            if (conflicts.Count > 0)
+                col.FieldNotes.Add("conflict — you choose: " + string.Join(", ", conflicts.Select(f => f.Token)));
+            if (!col.ObjectMergeable && conflicts.Count == 0)
+                col.FieldNotes.Add("the last-loaded mod already includes every change — nothing lost");
         }
     }
 
-    /// <summary>Top-level properties where the mod's object differs from core (added, modified, or removed).</summary>
-    private static HashSet<string> ChangedFields(JsonNode? core, JsonNode mod)
-    {
-        var fields = new HashSet<string>(StringComparer.Ordinal);
-        if (mod is not JsonObject mo) return fields;
-        var co = core as JsonObject;
-
-        foreach (var (name, value) in mo)
-        {
-            if (name == "strName") continue;
-            var coreVal = co?[name];
-            if (coreVal is null && value is null) continue;
-            if (coreVal is null || value is null || !JsonNode.DeepEquals(coreVal, value)) fields.Add(name);
-        }
-        if (co is not null)
-            foreach (var (name, _) in co)
-                if (name != "strName" && !mo.ContainsKey(name)) fields.Add($"{name} (removed)");
-        return fields;
-    }
-
-    private static JsonNode? LoadObject(string typeDir, string strName)
+    internal static JsonNode? LoadObject(string typeDir, string strName)
     {
         if (!Directory.Exists(typeDir)) return null;
         foreach (var file in Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories))

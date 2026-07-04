@@ -84,23 +84,45 @@ Surfaced in the same pass:
   installed, and the same plugin DLL shipped by two different sources
   (double-patching)
 
-## The conflict patch (shop/kiosk pools only)
+## The conflict patch
 
-When two mods both stock the same shop pool and neither pool covers the
-other, someone's wares vanish no matter the load order. Ostrasort can build a
-**merged patch mod** (`OstrasortPatch`) that takes the per-item union of the
-conflicting pools and loads last, so nothing is lost — with **you** deciding
-any item both mods define differently.
+When two mods both change the same thing and the game would keep only one,
+Ostrasort can build a **merged patch mod** (`OstrasortPatch`) that keeps both
+and loads last. It merges two kinds of conflict:
 
-This automatic resolution applies to **`loot`-type collisions only** (shops,
-kiosks, and other loot pools). Ostrasort deliberately does not auto-merge
-other data types, because merging arbitrary game objects field-by-field can't
-be done safely without understanding each field's meaning — for those, the
-report tells you what conflicts and you decide the load order (or hand-patch).
+### Shop/kiosk pools (per-item union)
+
+A loot pool's `aLoots` is an additive list, so merging two versions is the
+per-item union — every mod's wares survive, and where two mods stock the same
+item with different quantities, you pick which wins (or exclude it).
+
+### Game objects (3-way field merge)
+
+For non-loot objects (conditions, condowners, interactions, …) Ostrasort does
+a **three-way merge** using the base game as the common ancestor — the same
+idea as a version-control merge:
+
+- A field only **one** mod changed (vs the base game) merges automatically.
+- A field **several** mods changed to the **same** value merges automatically.
+- A field they changed to **different** values is a conflict you resolve: pick
+  a mod's value, take the **union** (for array `a*` fields), or keep the
+  **vanilla** value.
+
+The game's Hungarian field prefixes make this reliable: `a*` fields are arrays
+(a union is offered), everything else is a scalar (pick one).
+
+Merged objects are then **validated against the game's own JSON schemas**
+(`StreamingAssets\data\schemas`) and any that don't conform are flagged. This
+is a **best-effort** merge, not a guaranteed-correct one: two mods can change
+interdependent fields in ways no tool can reason about, so the result is
+always presented for you to verify in game. Objects with no base-game version
+(two mods adding the same brand-new object) are not auto-merged — there is no
+common ancestor to merge against — so those are reported and left to load
+order.
 
 The patch is wholly owned by Ostrasort: a marker file records exactly which
-pools it merged, their content hashes, and every decision you made, so a
-later refresh only re-asks about items that genuinely changed. See
+objects it merged, their content hashes, and every decision you made, so a
+later refresh only re-asks about things that genuinely changed. See
 [usage.md](usage.md) for the resolver workflow.
 
 ## Safety model

@@ -13,21 +13,31 @@ Ostrasort is built to do two things:
    `loading_order.json` that satisfies the rules (BepInEx after core, shop
    pools ordered correctly, dead entries pruned, unregistered mods surfaced)
    — with minimal churn to what you already have.
-2. **Resolve mod item conflicts in shops and kiosks.** When two mods stock the
-   same kiosk, the game keeps only one mod's version and silently drops the
-   other's wares. Ostrasort merges them into a compatibility patch that keeps
-   everyone's items, with **you** deciding anything the mods disagree on.
+2. **Resolve mod conflicts.** When two mods change the same thing, the game
+   keeps only one and silently drops the other's changes. Ostrasort merges
+   them into a compatibility patch that keeps both — **shop/kiosk inventories**
+   (per-item union) and **game objects** (field-by-field, with the base game
+   as the common ancestor) — while **you** decide anything the mods genuinely
+   disagree on.
 
 ## Scope — what it can and can't do
 
-Ostrasort **detects** data collisions of *every* kind (any two mods claiming
-the same object) and analyses them for you. But it can only **automatically
-resolve** conflicts in **shop/kiosk inventories** (loot pools). For other
-kinds of conflict — two mods overriding the same item, interaction, condition,
-etc. — the game merges nothing and keeps only the last-loaded version;
-Ostrasort will **tell you** it's happening (down to which fields each mod
-changes) and help you order the mods, but it can't merge those automatically.
-General cross-mod conflict resolution is a future goal, not a current feature.
+Ostrasort **detects** data collisions of *every* kind and analyses them. It
+can **automatically merge**:
+
+- **Shop/kiosk inventories** (loot pools) — the per-item union, so no mod's
+  wares are lost.
+- **Game objects** (conditions, condowners, interactions, …) — a **3-way
+  field merge** against the base game: where two mods change *different*
+  fields of one object, both changes are kept automatically; where they change
+  the *same* field, you pick the winner (or the array union, or vanilla).
+  Merged objects are **schema-validated** against the game's own schemas and
+  presented as **best-effort** — verify them in game, since two mods can
+  change interdependent fields in ways no tool can fully reason about.
+
+It does **not** yet merge objects that have no base-game version (two mods
+adding the *same new* object with no common ancestor) — those it reports and
+leaves to load order.
 
 > ## ⚠️ Early development — use at your own risk
 >

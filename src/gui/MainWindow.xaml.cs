@@ -167,8 +167,8 @@ public partial class MainWindow : Window
 
         var pat = new List<LineVm>();
         if (!s.Patch.Exists)
-            pat.Add(a.HasUnresolvedConflicts
-                ? L("No patch generated yet — use \"Resolve conflicts & generate patch\" to merge the conflicting pools.", Warn)
+            pat.Add(Patcher.HasWork(a)
+                ? L("No patch generated yet — use \"Resolve conflicts & generate patch\" to merge the conflicts.", Warn)
                 : L("No patch needed.", Good));
         else if (s.Patch.Stale)
         {
@@ -183,6 +183,8 @@ public partial class MainWindow : Window
                       (s.Patch.ExcludedCount > 0 ? $" — {s.Patch.ExcludedCount} item(s) excluded by you" : ""), Good));
             if (s.Patch.UnneededKeys.Count > 0)
                 pat.Add(L($"No longer needed for {string.Join(", ", s.Patch.UnneededKeys)} (resolved upstream).", Warn));
+            if (a.Collisions.Any(c => c.ResolvedByPatch && c.ObjectMergeable))
+                pat.Add(L("Includes merged game objects — those are best-effort, so verify them in game.", Dim));
         }
         ListPatch.ItemsSource = pat;
 
@@ -198,7 +200,7 @@ public partial class MainWindow : Window
         // tab highlighting: bold + orange headers on tabs that need action,
         // and the same set drives the "N things need attention" status line
         var collAttention = a.Collisions.Any(c => !c.ResolvedByPatch &&
-            c.Pairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation));
+            (c.ObjectMergeable || c.Pairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation)));
         var orderAttention = a.OrderChanged;
         var patchAttention = s.Patch.Stale || s.Patch.Obsolete;
         var warnAttention = warnCount > 0;
@@ -245,7 +247,7 @@ public partial class MainWindow : Window
 
         BtnApply.IsEnabled = (_manualDirty || a.OrderChanged) && !running;
         BtnApply.Content = _manualDirty ? "Apply manual order" : "Apply suggested order";
-        BtnPatch.IsEnabled = Patcher.PatchableConflicts(a).Count > 0 && !running;
+        BtnPatch.IsEnabled = Patcher.HasWork(a) && !running;
         BtnPatch.Content = s.Patch.Stale ? "Refresh patch (decisions kept)" : "Resolve conflicts & generate patch";
         BtnUnpatch.IsEnabled = s.Patch.Exists && !running;
         BtnPatchFresh.IsEnabled = BtnPatch.IsEnabled;
@@ -564,9 +566,9 @@ public partial class MainWindow : Window
         try
         {
             var plan = Patcher.PlanMerge(_env, _state.Analysis, fresh);
-            if (plan.Pools.Count == 0)
+            if (plan.IsEmpty)
             {
-                MessageBox.Show(this, "There are no partial-overlap shop-pool conflicts to merge.",
+                MessageBox.Show(this, "There are no mergeable conflicts.",
                     "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -577,10 +579,15 @@ public partial class MainWindow : Window
             }
             CaptureOp(fresh ? "rebuild patch from scratch"
                     : _state.Patch.Exists ? "refresh patch (incl. decisions)" : "generate patch");
-            Patcher.Generate(_env, plan, _env.InstalledVersion, Program.Version);
+            var result = Patcher.Generate(_env, plan, _env.InstalledVersion, Program.Version);
             Rescan();
-            MessageBox.Show(this, "Patch generated and registered last in the load order.",
-                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+            var msg = "Patch generated and registered last in the load order.";
+            if (result.SchemaWarnings.Count > 0)
+                msg += "\n\nSome merged objects did not fully match the game's schemas (best-effort — " +
+                       "verify in game). See the Patch tab for details:\n• " +
+                       string.Join("\n• ", result.SchemaWarnings.Take(6));
+            MessageBox.Show(this, msg, "Ostrasort", MessageBoxButton.OK,
+                result.SchemaWarnings.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
         }
         catch (Exception ex)
         {

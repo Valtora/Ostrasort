@@ -45,12 +45,14 @@ Operational gotchas:
 | `src\GameEnv.cs` | install discovery (Steam registry → `libraryfolders.vdf`), game version |
 | `src\Mods.cs` | mod model + the scanner that classifies and indexes each mod |
 | `src\Analysis.cs` | collision detection, sorting rules, manual-order validation |
-| `src\FieldDiff.cs` | field-level diff for non-shop same-object collisions |
-| `src\Patcher.cs` | merge plans + generating/maintaining the `OstrasortPatch` mod |
+| `src\FieldDiff.cs` | non-loot collision analysis (drives mergeability via `ObjectMerge`) |
+| `src\ObjectMerge.cs` | the 3-way field-merge engine for non-loot objects |
+| `src\SchemaValidator.cs` | compact draft-07-subset validator for the game's schema files |
+| `src\Patcher.cs` | merge plans (loot + objects) + generating/maintaining `OstrasortPatch` |
+| `src\CollisionView.cs` | the grouped, humanized collision rendering (GUI + console share it) |
 | `src\Engine.cs` | the shared analyze pass + hygiene checks (image, BepInEx) |
 | `src\LoadOrderFile.cs` | guarded `loading_order.json` read/write ritual |
-| `src\Report.cs` | console report rendering |
-| `src\TextReport.cs` | plain-text report for clipboard/file export |
+| `src\Report.cs` / `src\TextReport.cs` | console report / plain-text export |
 | `src\Program.cs` | CLI parsing + GUI/console routing |
 | `src\gui\` | WPF main window, conflict resolver, persisted settings |
 
@@ -76,6 +78,9 @@ exists.
 
 ## Roadmap
 
+- Merge objects with no base-game version (two mods adding the same new
+  object) — currently reported but not auto-merged, as there is no common
+  ancestor for a 3-way merge.
 - Machine-readable (`--json`) report output.
 - NativeAOT packaging to shrink the exe (WPF isn't AOT-compatible, so this
   would likely pair with a console-only build).

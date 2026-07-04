@@ -58,10 +58,12 @@ public static class CollisionView
             var cols = group.ToList();
             var mods = cols[0].Claimants.Select(Short).ToList();
 
-            var anyConflict = cols.Any(c => !c.ResolvedByPatch && c.Pairs.Any(p => p.Rel == Relation.Partial));
+            var anyLootConflict = cols.Any(c => !c.ResolvedByPatch && c.Pairs.Any(p => p.Rel == Relation.Partial));
+            var anyMergeableObj = cols.Any(c => !c.ResolvedByPatch && c.ObjectMergeable);
             var anyWrongOrder = cols.Any(c => !c.ResolvedByPatch && c.Pairs.Any(p => p.Rel == Relation.SubsetViolation));
             var anyResolved = cols.Any(c => c.ResolvedByPatch);
-            var anyNonLoot = cols.Any(c => c.Pairs.Any(p => p.Rel == Relation.NonLoot));
+            var anyDeadReplace = cols.Any(c => !c.ResolvedByPatch && !c.ObjectMergeable && c.Pairs.Any(p => p.Rel == Relation.NonLoot));
+            var fixableByPatch = anyLootConflict || anyMergeableObj;
 
             Add(string.Join("   +   ", mods), LineSev.Normal, 0, bold: true);
 
@@ -70,12 +72,12 @@ public static class CollisionView
             string Count(IGrouping<string, Collision> g) =>
                 $"{g.Count()} {(g.Count() == 1 ? HumanType(g.Key).One : HumanType(g.Key).Many)}";
             var what = byType.Count == 1 ? Count(byType[0])
-                : $"{cols.Count} objects ({string.Join(", ", byType.Select(Count))})";
+                : string.Join(" + ", byType.Select(Count));
 
-            if (anyConflict)
+            if (fixableByPatch)
             {
-                Add($"Both stock {what}. Neither mod's version covers the other, so whichever", LineSev.Bad, 1);
-                Add("loads last silently deletes the other's items.", LineSev.Bad, 1);
+                Add($"Both edit {what}. The game would keep only the last-loaded version and drop", LineSev.Bad, 1);
+                Add("the other mod's changes — but Ostrasort can merge them so nothing is lost.", LineSev.Bad, 1);
                 Add("→ Fixable — use “Resolve conflicts & generate patch” (or --patch) to merge them.", LineSev.Warn, 1);
             }
             else if (anyWrongOrder)
@@ -87,10 +89,10 @@ public static class CollisionView
             {
                 Add($"Both edit {what} — merged by the Ostrasort Patch, nothing lost.", LineSev.Good, 1);
             }
-            else if (anyNonLoot)
+            else if (anyDeadReplace)
             {
-                Add($"Both edit {what}. The game keeps only the last-loaded version and", LineSev.Warn, 1);
-                Add("Ostrasort can't merge these automatically — see the detail below.", LineSev.Warn, 1);
+                Add($"Both edit {what}. The game keeps only the last-loaded version and there is", LineSev.Warn, 1);
+                Add("nothing to merge (see the detail below).", LineSev.Warn, 1);
             }
             else
             {
@@ -103,18 +105,20 @@ public static class CollisionView
                 string outcome =
                     c.ResolvedByPatch ? "merged into the patch"
                     : p is null ? "claimed by multiple mods"
-                    : p.Rel switch
-                    {
-                        Relation.Partial => $"{Short(p.Later)} would drop {p.LostFromEarlier.Length} of {Short(p.Earlier)}'s items ({Sample(p.LostFromEarlier)})",
-                        Relation.SubsetViolation => $"{Short(p.Later)} drops {p.LostFromEarlier.Length} item(s) {Short(p.Earlier)} stocks",
-                        Relation.SupersetOk => $"{Short(p.Later)} adds {p.AddedByLater.Length} item(s) — fine",
-                        Relation.Equal => "same items, different quantities",
-                        _ => $"only {Short(p.Later)}'s version applies",
-                    };
+                    : p.Rel == Relation.NonLoot
+                        ? (c.ObjectMergeable ? "mergeable — see the field notes below" : $"only {Short(p.Later)}'s version applies")
+                        : p.Rel switch
+                        {
+                            Relation.Partial => $"{Short(p.Later)} would drop {p.LostFromEarlier.Length} of {Short(p.Earlier)}'s items ({Sample(p.LostFromEarlier)})",
+                            Relation.SubsetViolation => $"{Short(p.Later)} drops {p.LostFromEarlier.Length} item(s) {Short(p.Earlier)} stocks",
+                            Relation.SupersetOk => $"{Short(p.Later)} adds {p.AddedByLater.Length} item(s) — fine",
+                            Relation.Equal => "same items, different quantities",
+                            _ => $"only {Short(p.Later)}'s version applies",
+                        };
                 Add($"• {c.ObjName}  ({HumanType(c.Type).One})", LineSev.Normal, 2);
                 Add(outcome, LineSev.Dim, 3);
                 foreach (var n in c.FieldNotes)
-                    Add(n, n.StartsWith("BOTH") ? LineSev.Bad : n.StartsWith("disjoint") ? LineSev.Good : LineSev.Dim, 3);
+                    Add(n, n.StartsWith("conflict") ? LineSev.Bad : n.StartsWith("auto-merge") ? LineSev.Good : LineSev.Dim, 3);
             }
             Add("", LineSev.Normal, 0);
         }

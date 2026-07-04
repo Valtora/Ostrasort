@@ -5,7 +5,7 @@
         Icon="/app.ico" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <DockPanel Margin="12">
         <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10" Foreground="Gray"
-                   Text="These mods stock the same items with different values. Pick which mod's entry the merged pool keeps, or Exclude an item to stock it from nobody. Uncontested items carry over automatically — expand them to reject unwanted strays. All decisions are remembered for future refreshes."/>
+                   Text="Where two mods change the same shop item or object field to different values, pick which one the merged patch keeps (or the union / vanilla). Everything the mods agree on, or only one of them touched, merges automatically — expand those to review. All decisions are remembered for future refreshes. Merged game objects are best-effort: verify them in game."/>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <TextBlock x:Name="TxtRemaining" VerticalAlignment="Center" Margin="0,0,14,0" Foreground="Gray"/>
             <Button x:Name="BtnOk" Content="Generate patch" Padding="16,6" IsDefault="True" Click="Ok_Click"/>

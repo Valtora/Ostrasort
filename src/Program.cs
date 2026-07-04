@@ -127,7 +127,7 @@ public static class Program
             var env0 = GameEnv.Locate(gameRoot);
             var before = UndoOps.Capture(env0, "baseline");
             var plan0 = Patcher.PlanMerge(env0, Engine.Analyze(env0).Analysis);
-            if (plan0.Pools.Count == 0) { Console.Error.WriteLine("smoke-undo needs a fixture with conflicts"); return 1; }
+            if (plan0.IsEmpty) { Console.Error.WriteLine("smoke-undo needs a fixture with conflicts"); return 1; }
             Patcher.ResolveFallback(plan0);
             Patcher.Generate(env0, plan0, env0.InstalledVersion, Version);
             var after = UndoOps.Capture(env0, "patched");
@@ -175,11 +175,11 @@ public static class Program
         if (patch)
         {
             var plan = Patcher.PlanMerge(env, state.Analysis, fresh);
-            if (plan.Pools.Count == 0)
+            if (plan.IsEmpty)
             {
                 performed.Add(state.Patch.Exists
                     ? "--patch: no conflicts left to merge - the installed patch is obsolete; run --unpatch to remove it."
-                    : "--patch: no partial-overlap shop-pool conflicts exist - nothing to patch.");
+                    : "--patch: no mergeable conflicts exist - nothing to patch.");
             }
             else
             {
@@ -199,8 +199,10 @@ public static class Program
                         return 2;
                     }
                 }
-                var merged = Patcher.Generate(env, plan, env.InstalledVersion, Version);
-                performed.Add($"Generated the Ostrasort Patch (registered last): {string.Join("; ", merged)}");
+                var result = Patcher.Generate(env, plan, env.InstalledVersion, Version);
+                performed.Add($"Generated the Ostrasort Patch (registered last): {string.Join("; ", result.Merged)}");
+                foreach (var w in result.SchemaWarnings)
+                    performed.Add($"  schema warning (best-effort merge, verify in game): {w}");
                 state = Engine.Analyze(env, tidy);
             }
         }

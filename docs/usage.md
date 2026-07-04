@@ -70,19 +70,27 @@ removal, `.bak` restores, and individual drag moves before you apply them.
 
 ## The conflict resolver
 
-When two mods stock the same shop pool and neither covers the other,
-someone's wares vanish no matter the order. **Resolve conflicts & generate
-patch** opens the resolver:
+When two mods change the same thing and the game would keep only one,
+**Resolve conflicts & generate patch** opens the resolver. It handles two
+kinds of unit:
 
-- Every **contested item** (both mods stock it with different values) is a
-  row — pick which mod's entry wins, use **Take all from *<mod>*** for a whole
-  column, or pick **Exclude** to stock the item from nobody.
-- Items only one mod stocks carry over automatically, but expand the
-  **uncontested items** list to **reject unwanted strays** individually —
-  handy when a mod ships a stale copy of a whole kiosk and you only want its
-  one genuinely new item.
-- The result is written as a `Mods\OstrasortPatch` mod that loads last, so no
-  mod's wares are lost.
+**Shop pools** — every **contested item** (both mods stock it with different
+values) is a row: pick which mod's entry wins, use **Take all from *<mod>***
+for a whole column, or **Exclude** to stock it from nobody. Items only one mod
+stocks carry over automatically; expand the **carried-over** list to reject
+unwanted strays (handy when a mod ships a stale copy of a whole kiosk and you
+only want its one new item).
+
+**Objects** — for a conflicting game object, each **contested field** (both
+mods set it differently) is a row: pick a mod's value, the **union** (for
+array fields), or **Vanilla** to keep the base game's value. Fields only one
+mod changed merge automatically; expand the **auto-merged** list to review or
+revert any of them.
+
+The result is written as a `Mods\OstrasortPatch` mod that loads last, so no
+mod's changes are lost. Merged objects are validated against the game's
+schemas and flagged if they don't conform — they're best-effort, so verify
+them in game.
 
 ### Managing the patch
 
