@@ -42,6 +42,8 @@ public sealed class ModEntry
     public int DataObjects { get; set; }
     public int CoreOverrides { get; set; }
     public Dictionary<(string Type, string Name), string[]?> Claims { get; } = new();
+    public HashSet<string> ImagePaths { get; } = new(StringComparer.OrdinalIgnoreCase);   // relative under images\
+    public HashSet<string> PluginDlls { get; } = new(StringComparer.OrdinalIgnoreCase);   // basenames under BepInEx\plugins
     public List<string> JsonErrors { get; } = new();
 
     public string Label =>
@@ -112,6 +114,16 @@ public sealed class Scanner(GameEnv env)
         mod.HasPatchers = HasDlls(Path.Combine(mod.Dir, "BepInEx", "patchers"));
         mod.HasPlugins = HasDlls(Path.Combine(mod.Dir, "BepInEx", "plugins"));
         ReadModInfo(mod);
+
+        var imagesDir = Path.Combine(mod.Dir, "images");
+        if (Directory.Exists(imagesDir))
+            foreach (var f in Directory.EnumerateFiles(imagesDir, "*.*", SearchOption.AllDirectories))
+                mod.ImagePaths.Add(Path.GetRelativePath(imagesDir, f));
+
+        var pluginsDir = Path.Combine(mod.Dir, "BepInEx", "plugins");
+        if (Directory.Exists(pluginsDir))
+            foreach (var f in Directory.EnumerateFiles(pluginsDir, "*.dll", SearchOption.AllDirectories))
+                mod.PluginDlls.Add(Path.GetFileName(f));
 
         var dataDir = Path.Combine(mod.Dir, "data");
         if (Directory.Exists(dataDir))

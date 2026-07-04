@@ -93,6 +93,8 @@ public static class Report
                         break;
                 }
             }
+            foreach (var n in col.FieldNotes)
+                Line($"    {n}", n.StartsWith("BOTH") ? ConsoleColor.Red : ConsoleColor.DarkGray);
         }
 
         // -------------------------------------------------------------- patch

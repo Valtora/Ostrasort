@@ -14,13 +14,26 @@ Download `Ostrasort.exe` (single file, ~58 MB, nothing to install) and
 by itself via the Steam registry and `libraryfolders.vdf`, whatever drive
 it's on.
 
-The window shows every mod in load order with its class and any problems,
-plus four detail tabs: **Collisions** (who claims the same objects and
-whether the order handles it), **Order changes** (what a sort would do and
-why, applied with one button), **Patch** (state of the generated patch mod),
-and **Warnings** (dead entries, unregistered mods, version lag, broken JSON).
-Nothing is written until you press a button, every `loading_order.json` write
-keeps a `.bak`, and all writes are disabled while the game is running.
+The window shows every mod in load order — name, source, class, data counts,
+Workshop ID, problems — plus four detail tabs: **Collisions** (who claims the
+same objects and whether the order handles it, including field-level analysis
+of non-shop overrides), **Order changes** (what a sort would do and why,
+applied with one button), **Patch** (state of the generated patch mod), and
+**Warnings** (dead entries, unregistered mods, version lag, broken JSON,
+image overrides, BepInEx problems). Nothing is written until you press a
+button, every `loading_order.json` write keeps a `.bak` (one-click **Restore
+.bak** swaps back and is itself reversible), and all writes are disabled
+while the game is running.
+
+Working with the list: **drag rows to reorder manually** (rule violations
+are validated before applying), filter the table as it grows, right-click a
+mod for *Open folder / Open Steam Workshop page / Copy name or ID*,
+double-click to open its folder, and toggle **Tidy grouping** for a cosmetic
+core → infrastructure → code → data grouping. There's a **Launch game**
+button, the table rescans itself when you come back from the game, the
+window remembers its size and position, reports export via *Copy report* /
+*Save report*, and a quiet link appears in the header when a newer release
+is on GitHub.
 
 ### The conflict resolver
 
@@ -49,6 +62,8 @@ Ostrasort.exe --apply     write the suggested load order
 Ostrasort.exe --patch     generate/refresh the patch; contested items open the
                           resolver window unless headless
 Ostrasort.exe --unpatch   remove the generated patch mod
+Ostrasort.exe --tidy      opt-in cosmetic grouping in the suggestion (core,
+                          infrastructure, code, shells, additive data, overrides, patch)
 Ostrasort.exe --no-gui    like --headless but only for the resolver: contested items
                           fall back to the later-loaded mod's entry, marked for review
 Ostrasort.exe --game <p>  point at a non-standard install manually
@@ -94,6 +109,20 @@ the comparison is at item granularity (the token before `=` in each
 - partial overlap → **conflict**: no order fixes it → the resolver + patch
 - identical item sets → note (only quantities differ; last loaded wins)
 
+Non-shop objects claimed by two mods get **field-level analysis**: which
+fields each mod changes versus core — disjoint field sets mean a hand-merged
+override could keep both changes; overlapping fields are a genuine conflict
+the last-loaded mod wins.
+
+**Hygiene** in the same report: dead `aLoadOrder` paths (unsubscribed items),
+local mod folders missing from `aLoadOrder`, subscribed Workshop items not
+yet registered, duplicate entries, `strGameVersion` lagging the installed
+game, data files that only parse leniently (trailing commas — the game's
+loader ERRORs on those), **image overrides** (two mods shipping the same
+`images\` path — last wins the whole file), and **BepInEx sanity**: plugins
+that can never load because the loader isn't installed, and the same plugin
+DLL shipped by two different sources (double-patching).
+
 **Minimal churn**: the suggestion starts from the current order and applies
 only the moves a rule demands.
 
@@ -115,10 +144,12 @@ dotnet build -c Release        # dev build -> bin\Release\Ostrasort.exe (needs .
 ```
 
 Layout: `src\GameEnv.cs` (install discovery), `src\Mods.cs` (model + scanner),
-`src\Analysis.cs` (collisions + sorting rules), `src\Patcher.cs` (merge plans
-+ the patch mod), `src\Engine.cs` (shared analyze pass), `src\LoadOrderFile.cs`
-(guarded loading_order.json IO), `src\Report.cs` (console report),
-`src\Program.cs` (CLI + GUI routing), `src\gui\` (WPF main window + resolver).
+`src\Analysis.cs` (collisions + sorting rules + manual-order validation),
+`src\FieldDiff.cs` (non-shop field analysis), `src\Patcher.cs` (merge plans
++ the patch mod), `src\Engine.cs` (shared analyze pass + hygiene checks),
+`src\LoadOrderFile.cs` (guarded loading_order.json IO), `src\Report.cs`
+(console report), `src\TextReport.cs` (plain-text export), `src\Program.cs`
+(CLI + GUI routing), `src\gui\` (WPF main window, resolver, settings).
 
 Releasing (repo owner): flip the repo public when ready, tag, and attach
 `publish\Ostrasort.exe` as a GitHub Release asset.

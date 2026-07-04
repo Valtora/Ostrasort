@@ -20,6 +20,7 @@ public sealed class Collision
     public required string ObjName { get; init; }
     public required List<ModEntry> Claimants { get; init; }   // in effective load order
     public List<PairRelation> Pairs { get; } = new();
+    public List<string> FieldNotes { get; } = new();          // non-loot: which fields each claimant changes vs core
     public bool ResolvedByPatch { get; set; }                 // a fresh OstrasortPatch covers this pool
     public string Key => $"{Type}/{ObjName}";
 }
@@ -70,7 +71,7 @@ public sealed class Analysis
         }
     }
 
-    private static PairRelation Relate(string type, string name, ModEntry earlier, ModEntry later)
+    internal static PairRelation Relate(string type, string name, ModEntry earlier, ModEntry later)
     {
         var a = earlier.Claims[(type, name)];
         var b = later.Claims[(type, name)];
@@ -104,8 +105,12 @@ public sealed class Analysis
     /// <summary>
     /// Minimal-churn suggestion: start from the current order, then apply only
     /// the moves a rule demands. Everything else keeps its position.
+    /// With <paramref name="tidy"/>, additionally group the list for
+    /// readability: core, infrastructure, code, shells, additive data,
+    /// overriding data, patch - stable within each group (opt-in cosmetics;
+    /// position rarely matters for non-colliding mods).
     /// </summary>
-    public void BuildSuggestion()
+    public void BuildSuggestion(bool tidy = false)
     {
         var work = new List<ModEntry>();
         var seenIdentity = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -151,6 +156,27 @@ public sealed class Analysis
                 Changes.Add(new Change("move", infra.Raw, "mod-loader infrastructure pins right after core"));
             }
             if (work.IndexOf(infra) == insertAt) insertAt++;
+        }
+
+        // optional tidy grouping (before the hard rules so they still win)
+        if (tidy)
+        {
+            var grouped = work.OrderBy(m => m.Kind == EntryKind.Core ? 0
+                : m.Class == ModClass.Infrastructure ? 1
+                : m.IsPatch ? 6
+                : m.Class switch
+                {
+                    ModClass.Code => 2,
+                    ModClass.Shell => 3,
+                    ModClass.DataAdditive => 4,
+                    _ => 5,
+                }).ToList();   // OrderBy is stable: relative order inside each group is kept
+            if (!grouped.SequenceEqual(work))
+            {
+                work = grouped;
+                Changes.Add(new Change("tidy", "(whole list)",
+                    "grouped: core, infrastructure, code, shells, additive data, overriding data, patch"));
+            }
         }
 
         // rule 3: clean subset/superset loot collisions load subset-first.
@@ -203,4 +229,47 @@ public sealed class Analysis
         : m.Kind == EntryKind.Workshop ? m.Dir!
         : m.IsPatch ? m.Name                 // the patch registers plain, nothing to upload
         : $"{m.Name}|edit";
+
+    // ------------------------------------------------------ manual ordering ---
+
+    /// <summary>
+    /// Validates a manually arranged order (GUI drag-and-drop) against the
+    /// rules. "BLOCK:" prefixed items must stop the write; the rest are
+    /// warnings the user may consciously accept.
+    /// </summary>
+    public static List<string> ValidateOrder(List<ModEntry> order)
+    {
+        var issues = new List<string>();
+        if (order.Count == 0 || order[0].Kind != EntryKind.Core)
+            issues.Add("BLOCK: core must be first - the game loads it before everything.");
+
+        var firstNonInfra = order.FindIndex(m => m.Kind != EntryKind.Core && m.Class != ModClass.Infrastructure);
+        foreach (var infra in order.Where(m => m.Class == ModClass.Infrastructure))
+            if (firstNonInfra >= 0 && order.IndexOf(infra) > firstNonInfra)
+                issues.Add($"{infra.DisplayName ?? infra.Name}: mod-loader infrastructure should sit right after core.");
+
+        // recompute loot pool relations for the NEW adjacency
+        var byKey = new Dictionary<(string, string), List<ModEntry>>();
+        foreach (var m in order.Where(m => !m.IsPatch))
+            foreach (var claim in m.Claims.Keys)
+            {
+                if (!byKey.TryGetValue(claim, out var list)) byKey[claim] = list = new();
+                list.Add(m);
+            }
+        foreach (var ((type, name), claimants) in byKey.Where(kv => kv.Value.Count > 1))
+            for (var i = 0; i < claimants.Count - 1; i++)
+            {
+                var rel = Relate(type, name, claimants[i], claimants[i + 1]);
+                if (rel.Rel == Relation.SubsetViolation)
+                    issues.Add($"{type}/{name}: {claimants[i + 1].DisplayName ?? claimants[i + 1].Name} would drop " +
+                               $"{rel.LostFromEarlier.Length} item(s) that {claimants[i].DisplayName ?? claimants[i].Name} stocks " +
+                               "- the superset should load last.");
+            }
+
+        var patchIdx = order.FindIndex(m => m.IsPatch);
+        if (patchIdx >= 0 && patchIdx != order.Count - 1)
+            issues.Add("the generated Ostrasort Patch must load last or the pools it merges get overridden again.");
+
+        return issues;
+    }
 }

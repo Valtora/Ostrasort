@@ -40,7 +40,7 @@ public static class Program
 
     private static int Run(string[] args, ref bool ranGui)
     {
-        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, headless = false;
+        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, headless = false, tidy = false;
         string? gameRoot = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -48,6 +48,7 @@ public static class Program
             {
                 case "--report": report = true; break;
                 case "--headless": headless = true; break;
+                case "--tidy": tidy = true; break;
                 case "--smoke-gui": smokeGui = true; break;   // undocumented: construct windows without showing (CI/self-test)
                 case "--apply": apply = true; break;
                 case "--patch": patch = true; break;
@@ -74,6 +75,8 @@ public static class Program
                                       pools two mods both override (conflicts no load order can fix);
                                       contested items open the resolver window unless headless
                           --unpatch   remove the generated patch mod and its load-order entry
+                          --tidy      opt-in cosmetic grouping in the suggestion: core,
+                                      infrastructure, code, shells, additive data, overrides, patch
                           --no-gui    never open a window: contested items fall back to the
                                       later-loaded mod's entry (marked for review in the GUI)
                           --game <p>  path to the Ostranauts folder (default: auto-detect via Steam)
@@ -114,7 +117,7 @@ public static class Program
         }
 
         var env = GameEnv.Locate(gameRoot);
-        var state = Engine.Analyze(env);
+        var state = Engine.Analyze(env, tidy);
         var performed = new List<string>();
 
         if (unpatch)
@@ -126,7 +129,7 @@ public static class Program
                 GateGameClosed("--unpatch");
                 Patcher.Remove(env);
                 performed.Add("Removed the Ostrasort Patch (folder + load-order entry, .bak kept).");
-                state = Engine.Analyze(env);
+                state = Engine.Analyze(env, tidy);
             }
         }
 
@@ -159,7 +162,7 @@ public static class Program
                 }
                 var merged = Patcher.Generate(env, plan, env.InstalledVersion, Version);
                 performed.Add($"Generated the Ostrasort Patch (registered last): {string.Join("; ", merged)}");
-                state = Engine.Analyze(env);
+                state = Engine.Analyze(env, tidy);
             }
         }
 
@@ -168,7 +171,7 @@ public static class Program
             GateGameClosed("--apply");
             state.Lo.Write(state.Analysis.SuggestedOrder);
             performed.Add("Applied the suggested load order. Previous file saved as loading_order.json.bak.");
-            state = Engine.Analyze(env);
+            state = Engine.Analyze(env, tidy);
         }
 
         Report.Print(env, state.Scanner, state.Analysis, state.Patch, Version, performed);
