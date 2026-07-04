@@ -26,8 +26,10 @@
         <!-- header -->
         <DockPanel Grid.Row="0" Margin="0,0,0,8">
             <StackPanel DockPanel.Dock="Right" VerticalAlignment="Top">
-                <Button x:Name="BtnRescan" Content="Rescan" Padding="16,4" Click="Rescan_Click"/>
-                <TextBlock x:Name="TxtUpdate" Margin="0,6,0,0" HorizontalAlignment="Center"
+                <Image Source="/Ostrasort-logo.png" Height="78" HorizontalAlignment="Right"
+                       RenderOptions.BitmapScalingMode="HighQuality"
+                       ToolTip="Ostrasort"/>
+                <TextBlock x:Name="TxtUpdate" Margin="0,6,0,0" HorizontalAlignment="Right"
                            Visibility="Collapsed">
                     <Hyperlink x:Name="LinkUpdate" Click="Update_Click"/>
                 </TextBlock>
@@ -53,7 +55,7 @@
                     </Style>
                 </Grid.Resources>
 
-                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" x:Name="TxtTitle" FontSize="18"
+                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" FontSize="18"
                            FontWeight="SemiBold" Text="Ostrasort" Margin="0,0,0,6"/>
 
                 <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Game folder"/>
@@ -69,7 +71,7 @@
                     <Hyperlink Click="OpenMods_Click">open</Hyperlink>
                 </TextBlock>
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Versions"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Game version"/>
                 <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HdrValue}" x:Name="TxtVersions"/>
 
                 <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Core data"/>
@@ -178,6 +180,7 @@
         <!-- action bar -->
         <DockPanel Grid.Row="5" Margin="0,10,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="BtnRescan" Content="Rescan" Padding="14,6" Margin="8,0,0,0" Click="Rescan_Click"/>
                 <Button x:Name="BtnRestoreBak" Content="Restore .bak" Padding="14,6" Margin="8,0,0,0" Click="RestoreBak_Click"/>
                 <Button x:Name="BtnLaunch" Content="Launch game" Padding="14,6" Margin="8,0,0,0" Click="Launch_Click"/>
                 <Button x:Name="BtnApply" Content="Apply suggested order" Padding="14,6" Margin="8,0,0,0" Click="Apply_Click"/>

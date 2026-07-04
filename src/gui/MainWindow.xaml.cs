@@ -54,7 +54,7 @@ public partial class MainWindow : Window
         _settings = GuiSettings.Load();
         InitializeComponent();
         RestoreWindowState();
-        TxtTitle.Text = $"Ostrasort v{Program.Version}";
+        Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
         Rescan();
@@ -91,7 +91,7 @@ public partial class MainWindow : Window
         RunGamePath.Text = _env.GameRoot + "  ";
         RunFoundVia.Text = $"   (found via {_env.DiscoveredVia})";
         RunModsPath.Text = _env.ModsDir + "  ";
-        TxtVersions.Text = $"game {_env.InstalledVersion ?? "unknown"}    ·    Ostrasort v{Program.Version}";
+        TxtVersions.Text = _env.InstalledVersion ?? "unknown";
         TxtCoreInfo.Text = $"{s.Scanner.CoreIndex.Count:N0} objects across {s.Scanner.CoreTypes} types" +
                            (s.Scanner.CoreProblemFiles > 0 ? $"   ({s.Scanner.CoreProblemFiles} non-standard JSON file(s))" : "");
 

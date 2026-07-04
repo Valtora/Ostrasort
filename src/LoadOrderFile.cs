@@ -42,6 +42,15 @@ public sealed class LoadOrderFile
 
     public void Write(IReadOnlyList<string> newOrder)
     {
+        // self-heal: the game has been seen re-appending an already-registered
+        // subscription, and a duplicated entry double-loads the mod - every
+        // write through this choke point drops exact duplicates (first wins)
+        var deduped = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in newOrder)
+            if (seen.Add(e)) deduped.Add(e);
+        newOrder = deduped;
+
         Root[0]!["aLoadOrder"] = new JsonArray(newOrder.Select(e => (JsonNode)e).ToArray());
         var json = Root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
 

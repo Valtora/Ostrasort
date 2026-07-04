@@ -9,10 +9,10 @@ launching the game.
 
 ## For players
 
-Download `Ostrasort.exe` (single file, ~58 MB, nothing to install) and
-**double-click it** — the app window opens. It finds your Ostranauts install
-by itself via the Steam registry and `libraryfolders.vdf`, whatever drive
-it's on.
+**Windows only** (64-bit Windows 10/11). Download `Ostrasort.exe` (single
+file, ~58 MB, nothing to install) and **double-click it** — the app window
+opens. It finds your Ostranauts install by itself via the Steam registry and
+`libraryfolders.vdf`, whatever drive it's on.
 
 The window shows every mod in load order — name, source, class, data counts,
 Workshop ID, problems — plus four detail tabs: **Collisions** (who claims the

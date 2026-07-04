@@ -5,7 +5,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <AssemblyName>Ostrasort</AssemblyName>
     <RootNamespace>Ostrasort</RootNamespace>
-    <Version>0.7.0</Version>
+    <Version>0.7.1</Version>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Resource Include="app.ico" />
+    <Resource Include="Ostrasort-logo.png" />
   </ItemGroup>
 
 </Project>
