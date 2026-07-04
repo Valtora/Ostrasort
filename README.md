@@ -83,5 +83,7 @@ Full walkthrough: **[docs/usage.md](docs/usage.md)**.
 
 ## Licence / disclaimer
 
-Provided as-is, with no warranty and no liability for damage to your game,
-mods, or saves (see the notice above). Not affiliated with Blue Bottle Games.
+Released under the [MIT License](LICENSE) — do what you like with it, just keep
+the copyright notice. Provided as-is, with no warranty and no liability for
+damage to your game, mods, or saves (see the notice above). Not affiliated with
+Blue Bottle Games.

@@ -6,6 +6,7 @@
     <AssemblyName>Ostrasort</AssemblyName>
     <RootNamespace>Ostrasort</RootNamespace>
     <Version>0.8.2</Version>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
