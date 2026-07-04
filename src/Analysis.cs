@@ -49,10 +49,13 @@ public sealed class Analysis
     {
         // effective order: current registration order, then would-be additions.
         // The Ostrasort-generated patch never counts as a claimant - it IS the
-        // resolution of a collision, not a party to one.
+        // resolution of a collision, not a party to one. A duplicated aLoadOrder
+        // entry (the game can re-append a subscription) must not collide with
+        // itself - only the first occurrence claims.
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var mods = Registered.Where(m => m.Kind != EntryKind.Core && m.Dir is not null)
             .Concat(UnregisteredLocal).Concat(UnregisteredWorkshop)
-            .Where(m => !m.IsPatch).ToList();
+            .Where(m => !m.IsPatch && seen.Add(IdentityOf(m))).ToList();
 
         var byKey = new Dictionary<(string, string), List<ModEntry>>();
         foreach (var m in mods)
@@ -117,7 +120,7 @@ public sealed class Analysis
 
         foreach (var m in Registered)
         {
-            var identity = m.Kind == EntryKind.Local ? $"local:{m.Name}" : m.Raw;
+            var identity = IdentityOf(m);
             if (!seenIdentity.Add(identity))
             {
                 Changes.Add(new Change("remove", m.Raw, "duplicate entry"));
@@ -223,6 +226,9 @@ public sealed class Analysis
         SuggestedOrder = work.Select(SuggestedRaw).ToList();
         OrderChanged = !SuggestedOrder.SequenceEqual(Registered.Select(m => m.Raw));
     }
+
+    private static string IdentityOf(ModEntry m) =>
+        m.Kind == EntryKind.Local ? $"local:{m.Name}" : m.Raw;
 
     private static string SuggestedRaw(ModEntry m) =>
         m.Registered ? m.Raw

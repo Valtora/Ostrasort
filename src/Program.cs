@@ -40,7 +40,7 @@ public static class Program
 
     private static int Run(string[] args, ref bool ranGui)
     {
-        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, headless = false, tidy = false;
+        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false;
         string? gameRoot = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -50,6 +50,7 @@ public static class Program
                 case "--headless": headless = true; break;
                 case "--tidy": tidy = true; break;
                 case "--smoke-gui": smokeGui = true; break;   // undocumented: construct windows without showing (CI/self-test)
+                case "--smoke-undo": smokeUndo = true; break; // undocumented: exercise snapshot undo/redo against a fixture
                 case "--apply": apply = true; break;
                 case "--patch": patch = true; break;
                 case "--unpatch": unpatch = true; break;
@@ -107,6 +108,32 @@ public static class Program
             _ = new Gui.ResolverDialog(Patcher.PlanMerge(smokeEnv, smokeState.Analysis));
             Console.WriteLine("gui-smoke ok (windows constructed, not shown)");
             return 0;
+        }
+
+        if (smokeUndo)
+        {
+            var env0 = GameEnv.Locate(gameRoot);
+            var before = UndoOps.Capture(env0, "baseline");
+            var plan0 = Patcher.PlanMerge(env0, Engine.Analyze(env0).Analysis);
+            if (plan0.Pools.Count == 0) { Console.Error.WriteLine("smoke-undo needs a fixture with conflicts"); return 1; }
+            Patcher.ResolveFallback(plan0);
+            Patcher.Generate(env0, plan0, env0.InstalledVersion, Version);
+            var after = UndoOps.Capture(env0, "patched");
+
+            UndoOps.Restore(env0, before);                       // undo the generate
+            var chk1 = UndoOps.Capture(env0, "chk");
+            var undoOk = chk1.LoadingOrderText == before.LoadingOrderText && chk1.PatchFiles is null;
+
+            UndoOps.Restore(env0, after);                        // redo it
+            var chk2 = UndoOps.Capture(env0, "chk");
+            var redoOk = chk2.LoadingOrderText == after.LoadingOrderText
+                      && chk2.PatchFiles is not null && after.PatchFiles is not null
+                      && chk2.PatchFiles.Count == after.PatchFiles.Count
+                      && chk2.PatchFiles.All(kv => after.PatchFiles.TryGetValue(kv.Key, out var b) && kv.Value.SequenceEqual(b));
+
+            UndoOps.Restore(env0, before);                       // leave the fixture clean
+            Console.WriteLine($"undo-smoke: undo={(undoOk ? "ok" : "FAIL")} redo={(redoOk ? "ok" : "FAIL")}");
+            return undoOk && redoOk ? 0 : 1;
         }
 
         // bare launch (or explicit --gui) = the app's face

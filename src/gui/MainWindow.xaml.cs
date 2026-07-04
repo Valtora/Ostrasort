@@ -42,6 +42,12 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private ModRow? _dragRow;
 
+    // undo/redo: disk-level operation snapshots + in-memory drag arrangements
+    private readonly Stack<OpSnapshot> _undo = new();
+    private readonly Stack<OpSnapshot> _redo = new();
+    private readonly Stack<List<string>> _arrUndo = new();
+    private readonly Stack<List<string>> _arrRedo = new();
+
     public MainWindow(GameEnv env)
     {
         _env = env;
@@ -63,6 +69,8 @@ public partial class MainWindow : Window
         try
         {
             _manualDirty = false;
+            _arrUndo.Clear();
+            _arrRedo.Clear();
             _state = Engine.Analyze(_env, ChkTidy.IsChecked == true);
             RenderState(_state);
         }
@@ -227,6 +235,15 @@ public partial class MainWindow : Window
             : "No loading_order.json.bak exists yet";
         BtnLaunch.IsEnabled = !running;
         LinkReset.IsEnabled = _manualDirty;
+
+        var arrUndoable = _manualDirty && _arrUndo.Count > 0;
+        var arrRedoable = _arrRedo.Count > 0;
+        BtnUndo.IsEnabled = arrUndoable || (_undo.Count > 0 && !running);
+        BtnRedo.IsEnabled = arrRedoable || (_redo.Count > 0 && !running);
+        BtnUndo.ToolTip = arrUndoable ? "Undo row move (Ctrl+Z)"
+            : _undo.Count > 0 ? $"Undo: {_undo.Peek().Label} (Ctrl+Z)" : "Nothing to undo";
+        BtnRedo.ToolTip = arrRedoable ? "Redo row move (Ctrl+Y)"
+            : _redo.Count > 0 ? $"Redo: {_redo.Peek().Label} (Ctrl+Y)" : "Nothing to redo";
         TxtDragHint.Text = _manualDirty ? "manual arrangement pending — apply or reset" : "drag rows to reorder manually";
 
         if (running)
@@ -332,10 +349,28 @@ public partial class MainWindow : Window
         to = Math.Clamp(to, 1, lastRegistered);
         if (to == from) return;
 
+        _arrUndo.Push(CurrentArrangement());
+        _arrRedo.Clear();
         _rows.RemoveAt(from);
         _rows.Insert(to, dragged);
         Renumber();
         _manualDirty = true;
+        if (_state is not null) UpdateActionBar(_state);
+    }
+
+    private List<string> CurrentArrangement() =>
+        _rows.Where(r => r.M.Registered).Select(r => r.M.Raw).ToList();
+
+    private void ApplyArrangement(List<string> raws)
+    {
+        var byRaw = _rows.Where(r => r.M.Registered).ToDictionary(r => r.M.Raw, r => r);
+        var unregistered = _rows.Where(r => !r.M.Registered).ToList();
+        _rows = new System.Collections.ObjectModel.ObservableCollection<ModRow>(
+            raws.Where(byRaw.ContainsKey).Select(r => byRaw[r]).Concat(unregistered));
+        ModsGrid.ItemsSource = _rows;
+        ApplyFilter();
+        Renumber();
+        _manualDirty = _state is null || !raws.SequenceEqual(_state.Analysis.Registered.Select(m => m.Raw));
         if (_state is not null) UpdateActionBar(_state);
     }
 
@@ -367,6 +402,81 @@ public partial class MainWindow : Window
     }
 
     private void Rescan_Click(object sender, RoutedEventArgs e) => Rescan();
+
+    // ------------------------------------------------------------ undo/redo ---
+
+    /// <summary>Snapshot the install right before a mutating operation.</summary>
+    private void CaptureOp(string label)
+    {
+        try
+        {
+            _undo.Push(UndoOps.Capture(_env, label));
+            _redo.Clear();
+        }
+        catch { /* a failed snapshot must not block the operation itself */ }
+    }
+
+    private void Undo_Click(object sender, RoutedEventArgs e)
+    {
+        if (_manualDirty && _arrUndo.Count > 0)
+        {
+            _arrRedo.Push(CurrentArrangement());
+            ApplyArrangement(_arrUndo.Pop());
+            return;
+        }
+        if (_undo.Count == 0 || !GateRunning()) return;
+        _busy = true;
+        try
+        {
+            var snap = _undo.Pop();
+            _redo.Push(UndoOps.Capture(_env, snap.Label));
+            UndoOps.Restore(_env, snap);
+            Rescan();
+            RunStatus.Text = $"Undid: {snap.Label}.  ";
+            RunStatus.Foreground = Good;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private void Redo_Click(object sender, RoutedEventArgs e)
+    {
+        if (_arrRedo.Count > 0)
+        {
+            _arrUndo.Push(CurrentArrangement());
+            ApplyArrangement(_arrRedo.Pop());
+            return;
+        }
+        if (_redo.Count == 0 || !GateRunning()) return;
+        _busy = true;
+        try
+        {
+            var snap = _redo.Pop();
+            _undo.Push(UndoOps.Capture(_env, snap.Label));
+            UndoOps.Restore(_env, snap);
+            Rescan();
+            RunStatus.Text = $"Redid: {snap.Label}.  ";
+            RunStatus.Foreground = Good;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.FocusedElement is not TextBox)
+        {
+            if (e.Key == Key.Z && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) { Redo_Click(sender, e); e.Handled = true; }
+            else if (e.Key == Key.Z) { Undo_Click(sender, e); e.Handled = true; }
+            else if (e.Key == Key.Y) { Redo_Click(sender, e); e.Handled = true; }
+        }
+    }
 
     private void Tidy_Changed(object sender, RoutedEventArgs e)
     {
@@ -403,6 +513,7 @@ public partial class MainWindow : Window
                 newOrder = _state.Analysis.SuggestedOrder;
             }
 
+            CaptureOp(_manualDirty ? "apply manual order" : "apply suggested order");
             LoadOrderFile.Read(_env.LoadingOrderPath).Write(newOrder);
             Rescan();
             MessageBox.Show(this, "Load order applied. The previous file was saved as loading_order.json.bak.",
@@ -433,6 +544,7 @@ public partial class MainWindow : Window
                 var dlg = new ResolverDialog(plan) { Owner = this };
                 if (dlg.ShowDialog() != true) return;
             }
+            CaptureOp(_state.Patch.Exists ? "refresh patch (incl. decisions)" : "generate patch");
             Patcher.Generate(_env, plan, _env.InstalledVersion, Program.Version);
             Rescan();
             MessageBox.Show(this, "Patch generated and registered last in the load order.",
@@ -453,6 +565,7 @@ public partial class MainWindow : Window
         _busy = true;
         try
         {
+            CaptureOp("remove patch");
             Patcher.Remove(_env);
             Rescan();
         }
@@ -484,6 +597,7 @@ public partial class MainWindow : Window
                     "The current file becomes the new .bak, so restoring is reversible.",
                     "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
+            CaptureOp("restore .bak");
             var liveText = File.ReadAllText(live);
             File.WriteAllText(live, bakText);
             File.WriteAllText(bak, liveText);

@@ -35,6 +35,12 @@ window remembers its size and position, reports export via *Copy report* /
 *Save report*, and a quiet link appears in the header when a newer release
 is on GitHub.
 
+**Undo/redo** (Ctrl+Z / Ctrl+Y or the toolbar buttons) covers every key
+operation for the session: applied load orders, patch generation and
+refreshes — *including your conflict-resolution decisions, which live inside
+the patch* — patch removal, `.bak` restores, and individual drag moves
+before you apply them.
+
 ### The conflict resolver
 
 When two mods stock the same shop pool and neither covers the other,

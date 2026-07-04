@@ -351,13 +351,19 @@ public static class Patcher
         if (!Directory.Exists(typeDir)) return null;
         foreach (var file in Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories))
         {
-            JsonNode? root;
-            try { root = JsonNode.Parse(File.ReadAllText(file), null, Lenient); }
-            catch (JsonException) { continue; }
-            var objects = root is JsonArray arr ? arr.ToList() : new List<JsonNode?> { root };
-            foreach (var o in objects)
-                if (o?["strName"]?.GetValue<string>() == strName)
-                    return o.DeepClone();
+            // duplicate property names throw ArgumentException on first ACCESS
+            // of a lazily-materialized JsonNode - keep the walk inside the try
+            try
+            {
+                var root = JsonNode.Parse(File.ReadAllText(file), null, Lenient);
+                var objects = root is JsonArray arr ? arr.ToList() : new List<JsonNode?> { root };
+                foreach (var o in objects)
+                    if (o?["strName"]?.GetValue<string>() == strName)
+                        return o.DeepClone();
+            }
+            catch (JsonException) { }
+            catch (ArgumentException) { }
+            catch (InvalidOperationException) { }
         }
         return null;
     }

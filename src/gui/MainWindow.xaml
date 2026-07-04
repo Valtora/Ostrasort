@@ -2,7 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Ostrasort" Height="760" Width="1120" MinHeight="560" MinWidth="860"
-        WindowStartupLocation="CenterScreen" Activated="Window_Activated" Closing="Window_Closing">
+        Icon="/app.ico" WindowStartupLocation="CenterScreen"
+        Activated="Window_Activated" Closing="Window_Closing"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <DataTemplate x:Key="LineTemplate">
             <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}"
@@ -78,6 +80,8 @@
         <!-- toolbar -->
         <DockPanel Grid.Row="1" Margin="0,0,0,6">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="BtnUndo" Content="Undo" Padding="12,2" Margin="0,0,6,0" Click="Undo_Click"/>
+                <Button x:Name="BtnRedo" Content="Redo" Padding="12,2" Margin="0,0,18,0" Click="Redo_Click"/>
                 <CheckBox x:Name="ChkTidy" Content="Tidy grouping" VerticalAlignment="Center"
                           Margin="0,0,18,0" Checked="Tidy_Changed" Unchecked="Tidy_Changed"
                           ToolTip="Group the suggestion: core, infrastructure, code, shells, additive data, overrides, patch. Cosmetic and opt-in."/>

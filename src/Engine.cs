@@ -32,7 +32,10 @@ public static class Engine
     /// <summary>Two mods shipping the same relative image path - last loaded wins the whole file.</summary>
     private static void CheckImages(Analysis a)
     {
-        var mods = a.AllMods.Where(m => m.Dir is not null && !m.IsPatch && m.ImagePaths.Count > 0).ToList();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // a duplicated entry must not self-collide
+        var mods = a.AllMods.Where(m => m.Dir is not null && !m.IsPatch && m.ImagePaths.Count > 0)
+            .Where(m => seen.Add(m.Kind == EntryKind.Local ? $"local:{m.Name}" : m.Raw.Length > 0 ? m.Raw : m.Dir!))
+            .ToList();
         var byPath = new Dictionary<string, List<ModEntry>>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in mods)
             foreach (var p in m.ImagePaths)

@@ -75,13 +75,20 @@ public static class FieldDiff
         if (!Directory.Exists(typeDir)) return null;
         foreach (var file in Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories))
         {
-            JsonNode? root;
-            try { root = JsonNode.Parse(File.ReadAllText(file), null, Lenient); }
-            catch (JsonException) { continue; }
-            var objects = root is JsonArray arr ? arr.ToList() : new List<JsonNode?> { root };
-            foreach (var o in objects)
-                if (o?["strName"]?.GetValue<string>() == strName)
-                    return o;
+            // JsonNode materializes lazily: duplicate property names (which some
+            // mods ship and the game's parser tolerates) throw ArgumentException
+            // on first ACCESS, not at Parse - so the whole walk sits in the try
+            try
+            {
+                var root = JsonNode.Parse(File.ReadAllText(file), null, Lenient);
+                var objects = root is JsonArray arr ? arr.ToList() : new List<JsonNode?> { root };
+                foreach (var o in objects)
+                    if (o?["strName"]?.GetValue<string>() == strName)
+                        return o;
+            }
+            catch (JsonException) { }
+            catch (ArgumentException) { }
+            catch (InvalidOperationException) { }
         }
         return null;
     }
