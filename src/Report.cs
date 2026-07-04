@@ -1,0 +1,130 @@
+namespace Ostrasort;
+
+public static class Report
+{
+    private static void Line(string text, ConsoleColor? color = null)
+    {
+        if (color is { } c) Console.ForegroundColor = c;
+        Console.WriteLine(text);
+        if (color is not null) Console.ResetColor();
+    }
+
+    public static void Print(GameEnv env, Scanner scanner, Analysis a, bool applied)
+    {
+        Line("");
+        Line("Ostrasort - Ostranauts load-order analyzer", ConsoleColor.Cyan);
+        Line($"Game: {env.GameRoot}  (version {env.InstalledVersion ?? "unknown"})");
+        Line($"Mods: {env.ModsDir}");
+        Line($"Core: {scanner.CoreIndex.Count:N0} data objects across {scanner.CoreTypes} types" +
+             (scanner.CoreProblemFiles > 0 ? $" ({scanner.CoreProblemFiles} file(s) with non-standard JSON skipped or lenient-parsed)" : ""));
+
+        // ---------------------------------------------------------- mod table
+        Line("");
+        Line($"MODS ({a.Registered.Count} registered)", ConsoleColor.Cyan);
+        var rows = a.Registered.Select((m, i) => (Pos: (i + 1).ToString(), Mod: m))
+            .Concat(a.UnregisteredLocal.Concat(a.UnregisteredWorkshop).Select(m => (Pos: "-", Mod: m)));
+        Line($"  {"#",-3} {"entry",-52} {"class",-14} {"data",-18} notes");
+        foreach (var (pos, m) in rows)
+        {
+            var cls = m.Kind == EntryKind.Core ? "core" : m.Class.ToString().ToLowerInvariant();
+            var data = m.Kind == EntryKind.Core
+                ? $"{scanner.CoreIndex.Count:N0} objects"
+                : m.DataObjects > 0
+                    ? $"{m.DataObjects} objs ({m.CoreOverrides} ovr)"
+                    : "-";
+            var notes = new List<string>();
+            if (!m.Registered) notes.Add("NOT REGISTERED");
+            if (m.Dir is null && m.Kind != EntryKind.Core) notes.Add("DEAD");
+            if (m.HasPatchers) notes.Add("ships BepInEx patchers");
+            if (m.HasPlugins && !m.HasPatchers) notes.Add("plugins");
+            if (m.GameVersion is { Length: > 0 } gv && env.InstalledVersion is { } iv && gv != iv)
+                notes.Add($"gameVersion {gv} lags {iv}");
+            if (m.JsonErrors.Count > 0) notes.Add($"{m.JsonErrors.Count} JSON problem(s)");
+
+            var label = m.Label;
+            if (label.Length > 52) label = label[..49] + "...";
+            var color = notes.Any(n => n.StartsWith("NOT") || n.StartsWith("DEAD") || n.Contains("JSON"))
+                ? ConsoleColor.Yellow : (ConsoleColor?)null;
+            Line($"  {pos,-3} {label,-52} {cls,-14} {data,-18} {string.Join("; ", notes)}", color);
+        }
+
+        // --------------------------------------------------------- collisions
+        Line("");
+        Line($"COLLISIONS ({a.Collisions.Count})", ConsoleColor.Cyan);
+        if (a.Collisions.Count == 0) Line("  (none - no two mods claim the same object)");
+        foreach (var col in a.Collisions)
+        {
+            Line($"  {col.Key}  - last loaded wins the whole object");
+            for (var i = 0; i < col.Claimants.Count; i++)
+                Line($"    {i + 1}. {col.Claimants[i].Label}");
+            foreach (var p in col.Pairs)
+            {
+                switch (p.Rel)
+                {
+                    case Relation.SupersetOk:
+                        Line($"    OK: {p.Later.Label} is a superset of {p.Earlier.Label} " +
+                             $"(+{p.AddedByLater.Length} items) - order is correct", ConsoleColor.Green);
+                        break;
+                    case Relation.Equal:
+                        Line("    OK: identical item sets - only quantities differ; last loaded wins them");
+                        break;
+                    case Relation.SubsetViolation:
+                        Line($"    WRONG ORDER: {p.Later.Label} drops {p.LostFromEarlier.Length} item(s) that " +
+                             $"{p.Earlier.Label} stocks - the superset must load last", ConsoleColor.Red);
+                        break;
+                    case Relation.Partial:
+                        Line($"    CONFLICT: neither pool covers the other. {p.Later.Label} drops: " +
+                             $"{string.Join(", ", p.LostFromEarlier.Take(8))}{(p.LostFromEarlier.Length > 8 ? $" (+{p.LostFromEarlier.Length - 8} more)" : "")}",
+                             ConsoleColor.Red);
+                        Line("      No order fixes this - one mod's pool must be regenerated as the union.", ConsoleColor.Red);
+                        break;
+                    case Relation.NonLoot:
+                        Line($"    last loaded ({p.Later.Label}) replaces the object entirely - " +
+                             "verify that is intended", ConsoleColor.Yellow);
+                        break;
+                }
+            }
+        }
+
+        // ------------------------------------------------------------ hygiene
+        Line("");
+        Line($"WARNINGS ({a.Warnings.Count})", ConsoleColor.Cyan);
+        if (a.Warnings.Count == 0) Line("  (none)");
+        foreach (var w in a.Warnings) Line($"  ! {w}", ConsoleColor.Yellow);
+        foreach (var m in a.AllMods.Where(m => m.JsonErrors.Count > 0))
+            foreach (var e in m.JsonErrors)
+                Line($"  ! {m.Label}: {e}", ConsoleColor.Yellow);
+
+        // --------------------------------------------------------- suggestion
+        Line("");
+        if (!a.OrderChanged)
+        {
+            Line("SUGGESTED ORDER: no changes - the current load order satisfies every rule.", ConsoleColor.Green);
+            return;
+        }
+
+        Line($"SUGGESTED ORDER ({a.Changes.Count} change(s))", ConsoleColor.Cyan);
+        foreach (var c in a.Changes)
+        {
+            var color = c.Action switch
+            {
+                "add" => ConsoleColor.Green,
+                "remove" => ConsoleColor.Red,
+                _ => ConsoleColor.Yellow,
+            };
+            Line($"  {c.Action,-7} {c.Entry}", color);
+            Line($"          {c.Reason}");
+        }
+        Line("");
+        Line("  resulting aLoadOrder:");
+        for (var i = 0; i < a.SuggestedOrder.Count; i++)
+            Line($"    {i + 1,2}. {a.SuggestedOrder[i]}");
+
+        Line("");
+        if (applied)
+            Line("Applied. Previous file saved as loading_order.json.bak.", ConsoleColor.Green);
+        else
+            Line("Analysis only - nothing written. Re-run with --apply to write this order (a .bak is kept).",
+                 ConsoleColor.Cyan);
+    }
+}
