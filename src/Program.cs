@@ -25,7 +25,7 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        var noPause = args.Contains("--no-pause");
+        var noPause = args.Contains("--no-pause") || args.Contains("--headless");
         int code;
         var ranGui = false;
         try { code = Run(args, ref ranGui); }
@@ -40,13 +40,14 @@ public static class Program
 
     private static int Run(string[] args, ref bool ranGui)
     {
-        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false;
+        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, headless = false;
         string? gameRoot = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
             {
                 case "--report": report = true; break;
+                case "--headless": headless = true; break;
                 case "--smoke-gui": smokeGui = true; break;   // undocumented: construct windows without showing (CI/self-test)
                 case "--apply": apply = true; break;
                 case "--patch": patch = true; break;
@@ -65,10 +66,13 @@ public static class Program
                         usage: Ostrasort.exe [options]
                           (none)      open the GUI (same as double-clicking the exe)
                           --report    console analysis report; writes nothing
+                          --headless  console only, never any window, never waits for a key.
+                                      Alone it acts like --report; combine with --apply/--patch/
+                                      --unpatch for unattended runs (implies --no-gui --no-pause)
                           --apply     write the suggested load order (loading_order.json.bak kept)
                           --patch     generate/refresh the "Ostrasort Patch" mod that merges shop
                                       pools two mods both override (conflicts no load order can fix);
-                                      contested items open the resolver window unless --no-gui
+                                      contested items open the resolver window unless headless
                           --unpatch   remove the generated patch mod and its load-order entry
                           --no-gui    never open a window: contested items fall back to the
                                       later-loaded mod's entry (marked for review in the GUI)
@@ -83,6 +87,14 @@ public static class Program
             }
         }
         if (patch && unpatch) { Console.Error.WriteLine("pick one of --patch / --unpatch"); return 1; }
+
+        // --headless: console only, never a window; bare headless = the report
+        if (headless)
+        {
+            noGui = true;
+            gui = false;
+            if (!apply && !patch && !unpatch) report = true;
+        }
 
         if (smokeGui)
         {

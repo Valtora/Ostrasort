@@ -1,10 +1,12 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Ostrasort.Gui;
 
-public sealed record ModRow(string Pos, string Entry, string Class, string Data, string Notes, Brush Brush);
+public sealed record ModRow(string Pos, string Name, string Source, string Class, string Data,
+                            string WorkshopId, string Notes, Brush Brush, string? Dir, string Tooltip);
 public sealed record LineVm(string Text, Brush Brush, Thickness Margin);
 
 public partial class MainWindow : Window
@@ -46,9 +48,12 @@ public partial class MainWindow : Window
     private void RenderState(EngineState s)
     {
         var a = s.Analysis;
-        TxtGameInfo.Text = $"{_env.GameRoot}   —   game version {_env.InstalledVersion ?? "unknown"}, found via {_env.DiscoveredVia}";
-        TxtCoreInfo.Text = $"Mods: {_env.ModsDir}   —   core: {s.Scanner.CoreIndex.Count:N0} objects / {s.Scanner.CoreTypes} types" +
-                           (s.Scanner.CoreProblemFiles > 0 ? $" ({s.Scanner.CoreProblemFiles} non-standard JSON file(s))" : "");
+        RunGamePath.Text = _env.GameRoot + "  ";
+        RunFoundVia.Text = $"   (found via {_env.DiscoveredVia})";
+        RunModsPath.Text = _env.ModsDir + "  ";
+        TxtVersions.Text = $"game {_env.InstalledVersion ?? "unknown"}    ·    Ostrasort v{Program.Version}";
+        TxtCoreInfo.Text = $"{s.Scanner.CoreIndex.Count:N0} objects across {s.Scanner.CoreTypes} types" +
+                           (s.Scanner.CoreProblemFiles > 0 ? $"   ({s.Scanner.CoreProblemFiles} non-standard JSON file(s))" : "");
 
         // mod table
         var rows = new List<ModRow>();
@@ -59,6 +64,13 @@ public partial class MainWindow : Window
             var cls = m.Kind == EntryKind.Core ? "core" : m.IsPatch ? "patch" : m.Class.ToString().ToLowerInvariant();
             var data = m.Kind == EntryKind.Core ? $"{s.Scanner.CoreIndex.Count:N0} objects"
                      : m.DataObjects > 0 ? $"{m.DataObjects} objs ({m.CoreOverrides} ovr)" : "-";
+            var source = m.Kind switch
+            {
+                EntryKind.Core => "game",
+                EntryKind.Workshop => "Workshop",
+                _ when m.IsPatch => "generated",
+                _ => "local",
+            };
             var notes = new List<string>();
             if (!m.Registered) notes.Add("NOT REGISTERED");
             if (m.Dir is null && m.Kind != EntryKind.Core) notes.Add("DEAD ENTRY");
@@ -69,7 +81,11 @@ public partial class MainWindow : Window
                 notes.Add($"gameVersion {gv} lags {iv}");
             if (m.JsonErrors.Count > 0) notes.Add($"{m.JsonErrors.Count} JSON problem(s)");
             var brush = notes.Any(n => n.StartsWith("NOT") || n.StartsWith("DEAD") || n.Contains("JSON")) ? Warn : Normal;
-            rows.Add(new ModRow(pos, m.Label, cls, data, string.Join("; ", notes), brush));
+            var name = m.Kind == EntryKind.Core ? "core (base game data)" : m.DisplayName ?? m.Name;
+            var tooltip = m.Dir ?? m.Raw;
+            if (m.Kind != EntryKind.Core && m.Dir is not null) tooltip += "\n(double-click to open the folder)";
+            rows.Add(new ModRow(pos, name, source, cls, data, m.WorkshopId ?? "-",
+                string.Join("; ", notes), brush, m.Dir, tooltip));
         }
         ModsGrid.ItemsSource = rows;
 
@@ -190,6 +206,20 @@ public partial class MainWindow : Window
     }
 
     private void Rescan_Click(object sender, RoutedEventArgs e) => Rescan();
+
+    private static void OpenFolder(string? path)
+    {
+        if (path is null || !System.IO.Directory.Exists(path)) return;
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+    }
+
+    private void OpenGame_Click(object sender, RoutedEventArgs e) => OpenFolder(_env.GameRoot);
+    private void OpenMods_Click(object sender, RoutedEventArgs e) => OpenFolder(_env.ModsDir);
+
+    private void ModsGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ModsGrid.SelectedItem is ModRow { Dir: not null } row) OpenFolder(row.Dir);
+    }
 
     private void Apply_Click(object sender, RoutedEventArgs e)
     {

@@ -25,7 +25,11 @@ public sealed class ModEntry
     public bool EditMarker { get; init; }            // "<Name>|edit"
     public string? DisplayName { get; set; }         // strName from mod_info.json
     public string? GameVersion { get; set; }         // strGameVersion from mod_info.json
+    public string? PublishedId { get; set; }         // strWorkshopID from mod_info.json (published local mods)
     public bool Registered { get; set; } = true;
+
+    /// <summary>Workshop item id: the content folder for subscriptions, strWorkshopID for published local mods.</summary>
+    public string? WorkshopId => Kind == EntryKind.Workshop ? Name : PublishedId;
 
     private bool? _isPatch;
     /// <summary>True for the folder Ostrasort itself generates (identified by its marker file).</summary>
@@ -146,6 +150,9 @@ public sealed class Scanner(GameEnv env)
                 mod.DisplayName = n.GetString();
             if (root.TryGetProperty("strGameVersion", out var v) && v.ValueKind == JsonValueKind.String)
                 mod.GameVersion = v.GetString();
+            if (root.TryGetProperty("strWorkshopID", out var w) && w.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(w.GetString()))
+                mod.PublishedId = w.GetString();
         }
         catch (JsonException e)
         {

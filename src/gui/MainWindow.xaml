@@ -23,29 +23,71 @@
         <!-- header -->
         <DockPanel Grid.Row="0" Margin="0,0,0,10">
             <Button x:Name="BtnRescan" DockPanel.Dock="Right" Content="Rescan" Padding="16,4"
-                    VerticalAlignment="Center" Click="Rescan_Click"/>
-            <StackPanel>
-                <TextBlock x:Name="TxtTitle" FontSize="18" FontWeight="SemiBold" Text="Ostrasort"/>
-                <TextBlock x:Name="TxtGameInfo" Foreground="Gray" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                <TextBlock x:Name="TxtCoreInfo" Foreground="Gray" TextWrapping="Wrap"/>
-            </StackPanel>
+                    VerticalAlignment="Top" Click="Rescan_Click"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                </Grid.RowDefinitions>
+                <Grid.Resources>
+                    <Style x:Key="HdrLabel" TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="Gray"/>
+                        <Setter Property="Margin" Value="0,1,14,1"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+                    <Style x:Key="HdrValue" TargetType="TextBlock">
+                        <Setter Property="Margin" Value="0,1,0,1"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                    </Style>
+                </Grid.Resources>
+
+                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" x:Name="TxtTitle" FontSize="18"
+                           FontWeight="SemiBold" Text="Ostrasort" Margin="0,0,0,6"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Game folder"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HdrValue}">
+                    <Run x:Name="RunGamePath"/>
+                    <Hyperlink Click="OpenGame_Click">open</Hyperlink>
+                    <Run x:Name="RunFoundVia" Foreground="Gray"/>
+                </TextBlock>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Mods folder"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HdrValue}">
+                    <Run x:Name="RunModsPath"/>
+                    <Hyperlink Click="OpenMods_Click">open</Hyperlink>
+                </TextBlock>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Versions"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HdrValue}" x:Name="TxtVersions"/>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Core data"/>
+                <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HdrValue}" x:Name="TxtCoreInfo"/>
+            </Grid>
         </DockPanel>
 
         <!-- mod table -->
         <DataGrid Grid.Row="1" x:Name="ModsGrid" AutoGenerateColumns="False" IsReadOnly="True"
                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                  HorizontalGridLinesBrush="#EEE" RowHeaderWidth="0" FontSize="12.5">
+                  HorizontalGridLinesBrush="#EEE" RowHeaderWidth="0" FontSize="12.5"
+                  MouseDoubleClick="ModsGrid_MouseDoubleClick">
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Setter Property="Foreground" Value="{Binding Brush}"/>
+                    <Setter Property="ToolTip" Value="{Binding Tooltip}"/>
                 </Style>
             </DataGrid.RowStyle>
             <DataGrid.Columns>
                 <DataGridTextColumn Header="#" Binding="{Binding Pos}" Width="36"/>
-                <DataGridTextColumn Header="Mod" Binding="{Binding Entry}" Width="3*"/>
+                <DataGridTextColumn Header="Mod Name" Binding="{Binding Name}" Width="3*"/>
+                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="86"/>
                 <DataGridTextColumn Header="Class" Binding="{Binding Class}" Width="110"/>
                 <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="130"/>
+                <DataGridTextColumn Header="Workshop ID" Binding="{Binding WorkshopId}" Width="110"/>
                 <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="4*"/>
             </DataGrid.Columns>
         </DataGrid>

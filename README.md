@@ -43,12 +43,14 @@ mod that loads last.
 ```
 Ostrasort.exe             open the GUI (same as double-clicking)
 Ostrasort.exe --report    console analysis report; writes nothing (exit 2 = suggestions remain)
+Ostrasort.exe --headless  console only, never any window or key-press wait; alone it
+                          acts like --report, combine with the flags below for automation
 Ostrasort.exe --apply     write the suggested load order
 Ostrasort.exe --patch     generate/refresh the patch; contested items open the
-                          resolver window unless --no-gui
+                          resolver window unless headless
 Ostrasort.exe --unpatch   remove the generated patch mod
-Ostrasort.exe --no-gui    headless: contested items fall back to the later-loaded
-                          mod's entry, marked for review in the GUI
+Ostrasort.exe --no-gui    like --headless but only for the resolver: contested items
+                          fall back to the later-loaded mod's entry, marked for review
 Ostrasort.exe --game <p>  point at a non-standard install manually
 Ostrasort.exe --no-pause  never wait for a key press
 ```
