@@ -131,12 +131,25 @@ public static class Patcher
     private static string SourceId(ModEntry m) => m.Dir ?? m.Raw;
 
     /// <summary>Per-source signature for staleness: the aLoots for a loot pool, the whole object otherwise.</summary>
-    private static string SourceSig(GameEnv env, Collision c, ModEntry m)
+    private static string SourceSig(GameEnv env, Collision c, ModEntry m, IReadOnlyList<string>? ignore)
     {
         if (m.Claims.TryGetValue((c.Type, c.ObjName), out var loots) && loots is not null)
             return ItemsHash(loots);
         if (m.Dir is null) return "";
-        var obj = FieldDiff.LoadObject(Path.Combine(m.Dir, "data", c.Type), c.ObjName);
+        var obj = FieldDiff.LoadObject(Path.Combine(m.Dir, "data", c.Type), c.ObjName, ignore);
+        return obj is null ? "" : ItemsHash(new[] { obj.ToJsonString() });
+    }
+
+    /// <summary>
+    /// Signature of the BASE GAME's version of a merged object. The 3-way field
+    /// merge overlays mod changes onto core, so a game update that changes the
+    /// core object silently invalidates the merge - this hash catches that.
+    /// Empty when core has no such object (loot pools merge mod-vs-mod and
+    /// don't use a core base).
+    /// </summary>
+    private static string CoreSig(GameEnv env, Collision c, IReadOnlyList<string>? ignore)
+    {
+        var obj = FieldDiff.LoadObject(Path.Combine(env.CoreDataDir, c.Type), c.ObjName, ignore);
         return obj is null ? "" : ItemsHash(new[] { obj.ToJsonString() });
     }
 
@@ -163,31 +176,43 @@ public static class Patcher
         }
         info.ToolVersion = root?["toolVersion"]?.GetValue<string>();
 
-        // marker pool key -> ordered (id, hash) sources it was generated from
-        var markerPools = new Dictionary<string, List<(string Id, string Hash)>>(StringComparer.Ordinal);
+        // marker pool key -> the ordered (id, hash) sources it was generated
+        // from, plus (object merges only) the hash of the core base it overlaid
+        var markerPools = new Dictionary<string, (List<(string Id, string Hash)> Sources, string? CoreHash)>(StringComparer.Ordinal);
         foreach (var p in (root?["pools"] as JsonArray) ?? new JsonArray())
         {
             var key = $"{p?["type"]?.GetValue<string>()}/{p?["strName"]?.GetValue<string>()}";
             var sources = new List<(string, string)>();
             foreach (var s in (p?["sources"] as JsonArray) ?? new JsonArray())
                 sources.Add((s?["id"]?.GetValue<string>() ?? "", s?["hash"]?.GetValue<string>() ?? ""));
-            markerPools[key] = sources;
+            markerPools[key] = (sources, p?["coreHash"]?.GetValue<string>());
             if (p?["choices"] is JsonObject choices)
                 info.ExcludedCount += choices.Count(kv => (kv.Value as JsonObject)?["excluded"]?.GetValue<bool>() == true);
         }
 
-        var current = PatchableConflicts(a).Concat(MergeableObjects(a)).ToList();
+        var mergeableObjects = MergeableObjects(a);
+        var current = PatchableConflicts(a).Concat(mergeableObjects).ToList();
         foreach (var c in current)
         {
-            if (!markerPools.TryGetValue(c.Key, out var sources))
+            if (!markerPools.TryGetValue(c.Key, out var entry))
             {
                 info.StaleReasons.Add($"new conflict {c.Key} is not covered yet");
                 continue;
             }
-            var now = c.Claimants.Select(m => (Id: SourceId(m), Hash: SourceSig(env, c, m))).ToList();
-            if (!now.SequenceEqual(sources))
+            var now = c.Claimants.Select(m => (Id: SourceId(m), Hash: SourceSig(env, c, m, a.IgnorePatterns))).ToList();
+            if (!now.SequenceEqual(entry.Sources))
             {
                 info.StaleReasons.Add($"{c.Key}: a source mod's data (or the mod order) changed since generation");
+                continue;
+            }
+            // object merges overlay core - a changed core base (game update)
+            // invalidates the merge even when every source mod is unchanged.
+            // Markers from older Ostrasort versions have no coreHash: skip.
+            if (mergeableObjects.Contains(c) && entry.CoreHash is { Length: > 0 } coreHash
+                && coreHash != CoreSig(env, c, a.IgnorePatterns))
+            {
+                info.StaleReasons.Add($"{c.Key}: the BASE GAME's version changed since generation (game update?) - " +
+                                      "the merge overlays an outdated vanilla object");
                 continue;
             }
             info.CoveredKeys.Add(c.Key);
@@ -227,7 +252,7 @@ public static class Patcher
             {
                 // FFU command-driven edits merge at load - never fold them into the union
                 if (m.FfuArrayEditClaims.Contains((c.Type, c.ObjName))) continue;
-                var obj = LoadPoolObject(m.Dir!, c.Type, c.ObjName);
+                var obj = LoadPoolObject(m.Dir!, c.Type, c.ObjName, a.IgnorePatterns);
                 if (obj is null) continue;
                 baseObj = obj;                       // last claimant's object = base
                 Collect(obj["aLoots"], m, lootOrder, lootOptions);
@@ -250,10 +275,10 @@ public static class Patcher
         var objects = new List<ObjectPlan>();
         foreach (var c in MergeableObjects(a))
         {
-            var coreObj = FieldDiff.LoadObject(Path.Combine(env.CoreDataDir, c.Type), c.ObjName);
+            var coreObj = FieldDiff.LoadObject(Path.Combine(env.CoreDataDir, c.Type), c.ObjName, a.IgnorePatterns);
             if (coreObj is null) continue;
             var versions = c.Claimants.Where(m => m.Dir is not null)
-                .Select(m => (Mod: m, Obj: FieldDiff.LoadObject(Path.Combine(m.Dir!, "data", c.Type), c.ObjName)))
+                .Select(m => (Mod: m, Obj: FieldDiff.LoadObject(Path.Combine(m.Dir!, "data", c.Type), c.ObjName, a.IgnorePatterns)))
                 .Where(x => x.Obj is not null)
                 .Select(x => (x.Mod, x.Obj!))
                 .ToList();
@@ -373,7 +398,7 @@ public static class Patcher
         {
             var arr = new JsonArray();
             foreach (var m in c.Claimants)
-                arr.Add(new JsonObject { ["id"] = SourceId(m), ["label"] = m.Label, ["hash"] = SourceSig(env, c, m) });
+                arr.Add(new JsonObject { ["id"] = SourceId(m), ["label"] = m.Label, ["hash"] = SourceSig(env, c, m, a.IgnorePatterns) });
             return arr;
         }
         JsonObject ChoicesFor(IEnumerable<MergeItem> items)
@@ -438,6 +463,9 @@ public static class Patcher
                     ["strName"] = o.Collision.ObjName,
                     ["kind"] = "object",
                     ["sources"] = SourcesFor(o.Collision),
+                    // the merge overlays core - record which core version it overlaid
+                    // so a game update that changes it marks the patch stale
+                    ["coreHash"] = CoreSig(env, o.Collision, a.IgnorePatterns),
                     ["choices"] = ChoicesFor(o.Fields),
                 };
                 if (o.SchemaErrors.Count > 0)
@@ -480,19 +508,22 @@ public static class Patcher
             ["generatedUtc"] = DateTime.UtcNow.ToString("o"),
             ["pools"] = markerPools,
         };
-        File.WriteAllText(Path.Combine(dir, MarkerFile), markerRoot.ToJsonString(Indented) + "\n");
+        // the marker holds the player's merge decisions - never risk truncating it
+        AtomicFile.WriteAllText(Path.Combine(dir, MarkerFile), markerRoot.ToJsonString(Indented) + "\n");
 
         EnsureRegistered(env, a);
         return new GenerateResult(descriptions, schemaWarnings);
     }
 
     /// <summary>Finds one object by strName in a mod's data\&lt;type&gt; folder and deep-clones it.</summary>
-    private static JsonNode? LoadPoolObject(string modDir, string type, string strName)
+    private static JsonNode? LoadPoolObject(string modDir, string type, string strName, IReadOnlyList<string>? ignorePatterns = null)
     {
         var typeDir = Path.Combine(modDir, "data", type);
         if (!Directory.Exists(typeDir)) return null;
+        JsonNode? found = null;   // keep scanning: a later same-strName duplicate replaces the earlier (like the game)
         foreach (var file in Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories))
         {
+            if (Scanner.IsIgnored(file, ignorePatterns, out _)) continue;   // the game skips these files
             // duplicate property names throw ArgumentException on first ACCESS
             // of a lazily-materialized JsonNode - keep the walk inside the try
             try
@@ -501,13 +532,13 @@ public static class Patcher
                 var objects = root is JsonArray arr ? arr.ToList() : new List<JsonNode?> { root };
                 foreach (var o in objects)
                     if (o?["strName"]?.GetValue<string>() == strName)
-                        return o.DeepClone();
+                        found = o.DeepClone();
             }
             catch (JsonException) { }
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
         }
-        return null;
+        return found;
     }
 
     // -------------------------------------------------- register / remove ---
@@ -515,7 +546,7 @@ public static class Patcher
     private static void EnsureRegistered(GameEnv env, Analysis a)
     {
         var lo = LoadOrderFile.Read(env.LoadingOrderPath);
-        var target = lo.Order.Where(e => e != FolderName && e != FolderName + "|edit").ToList();
+        var target = lo.Order.Where(e => e.Split('|')[0] != FolderName).ToList();   // drop any marker variant
 
         // insert before the first registered FFU mod so FFU mods keep loading
         // after the patch (they merge on top of it at load); else append
@@ -539,7 +570,7 @@ public static class Patcher
             Directory.Delete(dir, recursive: true);
         }
         var lo = LoadOrderFile.Read(env.LoadingOrderPath);
-        var target = lo.Order.Where(e => e != FolderName && e != FolderName + "|edit").ToList();
+        var target = lo.Order.Where(e => e.Split('|')[0] != FolderName).ToList();   // drop any marker variant
         if (target.Count != lo.Order.Count) lo.Write(target);
     }
 }

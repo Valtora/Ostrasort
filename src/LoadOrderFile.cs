@@ -17,6 +17,13 @@ public sealed class LoadOrderFile
     public required string RawText { get; init; }
     public required JsonNode Root { get; init; }
     public required List<string> Order { get; init; }
+    /// <summary>
+    /// The [0].aIgnorePatterns array: global substring patterns the game
+    /// matches against every data file's (forward-slash) path - matching
+    /// files are skipped in core AND every mod. Sanitized like the game
+    /// sanitizes them (DataHandler.PathSanitize).
+    /// </summary>
+    public required List<string> IgnorePatterns { get; init; }
 
     public static LoadOrderFile Read(string path)
     {
@@ -37,7 +44,14 @@ public sealed class LoadOrderFile
         var order = orderArr.Select(n => n?.GetValue<string>()
             ?? throw new InvalidDataException("null entry inside aLoadOrder")).ToList();
 
-        return new LoadOrderFile { Path = path, RawText = raw, Root = root, Order = order };
+        var patterns = new List<string>();
+        if (arr[0]?["aIgnorePatterns"] is JsonArray patArr)
+            foreach (var p in patArr)
+                if (p?.GetValueKind() == JsonValueKind.String &&
+                    p.GetValue<string>() is { Length: > 0 } s)
+                    patterns.Add(s.Replace('\\', '/').Replace("//", "/"));
+
+        return new LoadOrderFile { Path = path, RawText = raw, Root = root, Order = order, IgnorePatterns = patterns };
     }
 
     public void Write(IReadOnlyList<string> newOrder)
@@ -78,6 +92,6 @@ public sealed class LoadOrderFile
         }
 
         File.WriteAllText(Path + ".bak", RawText);   // original text, before this write
-        File.WriteAllText(Path, json);
+        AtomicFile.WriteAllText(Path, json);         // never leave a truncated live file
     }
 }

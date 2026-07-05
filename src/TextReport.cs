@@ -34,10 +34,10 @@ public static class TextReport
             var notes = new List<string>();
             if (!m.Registered) notes.Add("NOT REGISTERED");
             if (m.Dir is null && m.Kind != EntryKind.Core) notes.Add("DEAD ENTRY");
+            if (m.Disabled) notes.Add("DISABLED");
             if (m.IsFfuPatch) notes.Add("FFU patch - remove after one use");
             else if (m.IsFfu) notes.Add(m.FfuGroup == FfuLoadGroup.FFUCore ? "FFU core tier" : "FFU mod");
-            if (m.GameVersion is { Length: > 0 } gv && env.InstalledVersion is { } iv && gv != iv)
-                notes.Add($"gameVersion {gv} lags {iv}");
+            if (m.GameVersionNote(env.InstalledVersion) is { } versionNote) notes.Add(versionNote);
             if (m.JsonErrors.Count > 0) notes.Add($"{m.JsonErrors.Count} JSON problem(s)");
             var name = m.Kind == EntryKind.Core ? "core" : m.DisplayName ?? m.Name;
             var id = m.WorkshopId is { } w ? $" [{w}]" : "";

@@ -194,7 +194,6 @@ Ostrasort.exe --tidy      opt-in cosmetic grouping in the suggested order
 Ostrasort.exe --no-gui    like --headless but only for the resolver: contested items
                           fall back to the later-loaded mod's entry, marked for review
 Ostrasort.exe --game <p>  point at a non-standard install manually
-Ostrasort.exe --no-pause  never wait for a key press
 Ostrasort.exe --allow-rival-stack
                           write even while Robyn's OstraAutoloader is installed; by
                           default writes are refused there because the autoloader

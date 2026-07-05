@@ -36,7 +36,7 @@ public static class UndoOps
             throw new InvalidOperationException("refusing to restore: the snapshot is not a top-level JSON array.");
         using (var doc = JsonDocument.Parse(snap.LoadingOrderText)) { }   // strict parse or throw
 
-        File.WriteAllText(env.LoadingOrderPath, snap.LoadingOrderText);
+        AtomicFile.WriteAllText(env.LoadingOrderPath, snap.LoadingOrderText);
 
         var dir = Path.Combine(env.ModsDir, Patcher.FolderName);
         if (Directory.Exists(dir))

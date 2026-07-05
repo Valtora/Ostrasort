@@ -238,7 +238,8 @@ public static class FfuAnalysis
 
     public static void Classify(GameEnv env, Analysis a)
     {
-        var mods = a.AllMods.Where(m => m.Kind != EntryKind.Core && m.Dir is not null).ToList();
+        // disabled entries never load - they join no FFU block and get no hygiene nags
+        var mods = a.AllMods.Where(m => m.Kind != EntryKind.Core && m.Dir is not null && !m.Disabled).ToList();
 
         // ---- seed FFU-ness from each mod's own signals ----
         foreach (var m in mods)

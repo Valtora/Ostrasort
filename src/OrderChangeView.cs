@@ -59,16 +59,17 @@ public static class OrderChangeView
     public static string Friendly(Analysis a, string raw)
     {
         if (raw == "core" || raw == "(whole list)") return raw;
-        var b = raw.EndsWith("|edit", StringComparison.Ordinal) ? raw[..^5] : raw;
+        var b = raw.Split('|')[0];   // strip |edit / |disabled markers
+        var suffix = raw.Contains("|disabled", StringComparison.Ordinal) ? " (disabled)" : "";
 
         if (b.Length > 2 && b[1] == ':')   // absolute path -> workshop item
         {
             var id = Path.GetFileName(b.TrimEnd('\\', '/'));
             var m = a.AllMods.FirstOrDefault(x => x.Kind == EntryKind.Workshop && x.Name == id);
-            return m?.DisplayName is { Length: > 0 } d ? $"{d}" : id;
+            return (m?.DisplayName is { Length: > 0 } d ? d : id) + suffix;
         }
         var lm = a.AllMods.FirstOrDefault(x => x.Kind == EntryKind.Local &&
                                                string.Equals(x.Name, b, StringComparison.OrdinalIgnoreCase));
-        return lm?.DisplayName is { Length: > 0 } dl ? dl : b;
+        return (lm?.DisplayName is { Length: > 0 } dl ? dl : b) + suffix;
     }
 }

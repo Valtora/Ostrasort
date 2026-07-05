@@ -19,8 +19,18 @@ Membership matters too:
 - The in-game **MODS screen only lists entries present in `aLoadOrder`** — a
   mod folder sitting under `Mods\` that isn't registered is invisible to the
   game's mod UI.
+- An entry can carry a **`|disabled` marker** (`SomeMod|disabled`) — that's how
+  the in-game MODS screen disables a mod: the entry stays in the list but is
+  skipped at load. Ostrasort understands the marker: disabled mods show dimmed,
+  keep their entry (they are never "dead paths"), and are excluded from
+  collision and FFU analysis, since they don't load.
 - The **BepInEx Workshop bridge reads `loading_order.json`** to locate
   subscribed code mods' plugins, so even code-only mods need to be there.
+- `loading_order.json` can also carry **`aIgnorePatterns`** — global substring
+  patterns matched against every data file's path, in core **and** every mod;
+  matching files are skipped entirely (this is the vanilla way to *remove*
+  data rather than override it). Ostrasort applies the same skips to its own
+  index and warns about exactly which files the patterns remove.
 
 ## How mods are classified
 
@@ -58,6 +68,10 @@ compared at **item granularity** — the token before `=` in each
   → this is what the patch generator fixes (see below)
 - identical item sets → note (only quantities differ; last loaded wins)
 
+Pools are compared **pairwise across all claimants**, not just neighbours —
+with three or more mods on one pool, a partial overlap between the first and
+last claimant is still caught even when each adjacent pair looks clean.
+
 **Every other object type** (condowners, interactions, conditions, …) gets
 **field-level analysis**: Ostrasort diffs each mod's version against the base
 game and reports which fields each one changes. If the changed field sets are
@@ -65,6 +79,14 @@ game and reports which fields each one changes. If the changed field sets are
 changes (only the last-loaded one survives today). If they **overlap**, it's
 a genuine conflict the last-loaded mod wins. Ostrasort **reports** this — it
 does not merge non-loot objects for you.
+
+One namespace subtlety: **`conditions_simple` containers define conditions in
+the same namespace as `conditions\`** — the game parses them into the
+conditions dictionary *after* every mod loads, so a simple-defined condition
+overrides a `conditions\` version of the same name **regardless of load
+order**. Ostrasort expands each container's entries into individual claims so
+those cross-folder collisions are detected, and explains the always-wins rule
+in the collision notes.
 
 ## Hygiene checks
 
@@ -75,7 +97,9 @@ Surfaced in the same pass:
   (invisible to the MODS screen)
 - **subscribed Workshop items** not yet in `aLoadOrder`
 - **duplicate entries** (the game sometimes re-appends a subscription)
-- **`strGameVersion` lag** vs the installed game version
+- **`strGameVersion` mismatch** vs the installed game version (worded by
+  direction: a mod that predates the game vs one built for a newer game)
+- **`aIgnorePatterns` removals** — which core/mod files the patterns skip
 - **invalid/lenient JSON** — files that only parse with trailing commas etc.,
   which the game's own loader treats as an ERROR
 - **image overrides** — two mods shipping the same `images\` path (last wins
@@ -168,9 +192,12 @@ common ancestor to merge against — so those are reported and left to load
 order.
 
 The patch is wholly owned by Ostrasort: a marker file records exactly which
-objects it merged, their content hashes, and every decision you made, so a
-later refresh only re-asks about things that genuinely changed. See
-[usage.md](usage.md) for the resolver workflow.
+objects it merged, their content hashes, **the hash of the base-game object
+each merge overlaid**, and every decision you made. A later refresh only
+re-asks about things that genuinely changed — and if a **game update** changes
+the vanilla version of a merged object, the patch is flagged stale even though
+no mod changed, because the merge would keep overriding it with values built
+on the old vanilla base. See [usage.md](usage.md) for the resolver workflow.
 
 ## Safety model
 
@@ -181,8 +208,11 @@ later refresh only re-asks about things that genuinely changed. See
   `loading_order.json` as `loading_order.json.bak` first, keeps the file a
   **top-level JSON array** (if it ever becomes a bare object the game silently
   drops all local mods and regenerates it), and strict-re-parses its own
-  output before committing it. Local entries keep their `|edit` markers, and
-  exact-duplicate entries are dropped on write.
+  output before committing it. The live file is swapped in **atomically**
+  (written to a scratch file first), so a crash or power cut mid-write can
+  never leave a truncated `loading_order.json` behind. Local entries keep
+  their `|edit`/`|disabled` markers, and exact-duplicate entries are dropped
+  on write.
 - **Workshop paths are written in the game's own on-disk case.** The Steam
   registry hands out a lowercase drive (`c:\program files…`), but Ostranauts
   writes `C:\Program Files…`. If Ostrasort wrote the lowercase form the game

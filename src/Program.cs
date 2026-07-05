@@ -26,18 +26,15 @@ public static class Program
     public static int Main(string[] args)
     {
         AttachConsoleIfLaunchedFromTerminal(args);   // before any Console access
-        int code;
-        var ranGui = false;
-        try { code = Run(args, ref ranGui); }
+        try { return Run(args); }
         catch (Exception e)
         {
             Console.Error.WriteLine($"ostrasort: {e.Message}");
-            code = 1;
+            return 1;
         }
-        return code;
     }
 
-    private static int Run(string[] args, ref bool ranGui)
+    private static int Run(string[] args)
     {
         bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false;
         string? gameRoot = null;
@@ -62,7 +59,7 @@ public static class Program
                 case "--delete": break;                                 // modifier: delete instead of parking as .disabled
                 case "--gui": gui = true; break;
                 case "--no-gui": noGui = true; break;
-                case "--no-pause": break;
+                case "--no-pause": break;   // vestigial (WinExe never pauses) - accepted for old scripts
                 case "--game" when i + 1 < args.Length: gameRoot = args[++i]; break;
                 case "--version":
                     Console.WriteLine(Version);
@@ -76,7 +73,7 @@ public static class Program
                           --report    console analysis report; writes nothing
                           --headless  console only, never any window, never waits for a key.
                                       Alone it acts like --report; combine with --apply/--patch/
-                                      --unpatch for unattended runs (implies --no-gui --no-pause)
+                                      --unpatch for unattended runs (implies --no-gui)
                           --apply     write the suggested load order (loading_order.json.bak kept)
                           --patch     generate/refresh the "Ostrasort Patch" mod that merges shop
                                       pools two mods both override (conflicts no load order can fix);
@@ -104,7 +101,6 @@ public static class Program
                           --no-gui    never open a window: contested items fall back to the
                                       later-loaded mod's entry (marked for review in the GUI)
                           --game <p>  path to the Ostranauts folder (default: auto-detect via Steam)
-                          --no-pause  do not wait for a key press when launched by double-click
                           --version   print the version and exit
                         """);
                     return 0;
@@ -244,10 +240,7 @@ public static class Program
 
         // bare launch (or explicit --gui) = the app's face
         if (gui || (!report && !apply && !patch && !unpatch))
-        {
-            ranGui = true;
             return RunGui(gameRoot);
-        }
 
         var env = GameEnv.Locate(gameRoot);
         var state = Engine.Analyze(env, tidy);

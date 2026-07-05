@@ -43,6 +43,24 @@ public class LoadOrderFileTests : IDisposable
         Assert.StartsWith("[", File.ReadAllText(_path).TrimStart());
         Assert.True(File.Exists(_path + ".bak"));
         Assert.Equal(new[] { "core", "B", "A" }, LoadOrderFile.Read(_path).Order);
+        Assert.False(File.Exists(_path + ".tmp"));   // the atomic-write scratch file must not linger
+    }
+
+    [Fact]
+    public void Read_ParsesAndSanitizesIgnorePatterns()
+    {
+        Write("""[{"strName":"Mod Loading Order","aLoadOrder":["core"],"aIgnorePatterns":["LA_","foo\\bar//baz"]}]""");
+        var lo = LoadOrderFile.Read(_path);
+        // sanitized like the game's PathSanitize: backslashes -> /, doubled / collapsed
+        Assert.Equal(new[] { "LA_", "foo/bar/baz" }, lo.IgnorePatterns);
+    }
+
+    [Fact]
+    public void Write_PreservesIgnorePatterns()
+    {
+        Write("""[{"strName":"Mod Loading Order","aLoadOrder":["core","A"],"aIgnorePatterns":["LA_"]}]""");
+        LoadOrderFile.Read(_path).Write(new[] { "core", "A", "B" });
+        Assert.Equal(new[] { "LA_" }, LoadOrderFile.Read(_path).IgnorePatterns);   // untouched by order writes
     }
 
     [Fact]

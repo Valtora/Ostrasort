@@ -14,10 +14,11 @@ public static class Engine
         {
             Registered = lo.Order.Select(raw => ModEntry.Parse(raw, env)).ToList(),
             Ffu = FfuContext.Detect(env),
+            IgnorePatterns = lo.IgnorePatterns,
         };
         DiscoverUnregistered(env, analysis);
 
-        var scanner = new Scanner(env);
+        var scanner = new Scanner(env, lo.IgnorePatterns);
         scanner.IndexCore();
         foreach (var m in analysis.AllMods) scanner.Scan(m);
 
@@ -26,17 +27,39 @@ public static class Engine
         FieldDiff.Annotate(env, analysis);
         CheckImages(analysis);
         CheckBepInEx(env, analysis);
+        CheckIgnorePatterns(scanner, analysis);
         WarnAutoloader(analysis);
         var patch = Patcher.Inspect(env, analysis);   // marks collisions the patch resolves
         analysis.BuildSuggestion(tidy);
         return new EngineState(lo, scanner, analysis, patch);
     }
 
+    /// <summary>
+    /// Surfaces what loading_order.json's aIgnorePatterns silently remove: the
+    /// game skips every data file (core or any mod's) whose path contains a
+    /// pattern, so objects in those files simply never load.
+    /// </summary>
+    private static void CheckIgnorePatterns(Scanner scanner, Analysis a)
+    {
+        if (a.IgnorePatterns.Count == 0) return;
+
+        static string Sample(IReadOnlyList<(string File, string Pattern)> hits) =>
+            string.Join(", ", hits.Take(3).Select(h => $"{h.File} ('{h.Pattern}')")) +
+            (hits.Count > 3 ? $", +{hits.Count - 3} more" : "");
+
+        if (scanner.IgnoredCoreFiles.Count > 0)
+            a.Warnings.Add($"aIgnorePatterns skips {scanner.IgnoredCoreFiles.Count} CORE data file(s) - " +
+                           $"their objects never load: {Sample(scanner.IgnoredCoreFiles)}");
+        foreach (var m in a.AllMods.Where(m => m.IgnoredFiles.Count > 0))
+            a.Warnings.Add($"aIgnorePatterns skips {m.IgnoredFiles.Count} file(s) of '{m.DisplayName ?? m.Name}' - " +
+                           $"their objects never load: {Sample(m.IgnoredFiles)}");
+    }
+
     /// <summary>Two mods shipping the same relative image path - last loaded wins the whole file.</summary>
     private static void CheckImages(Analysis a)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // a duplicated entry must not self-collide
-        var mods = a.AllMods.Where(m => m.Dir is not null && !m.IsPatch && m.ImagePaths.Count > 0)
+        var mods = a.AllMods.Where(m => m.Dir is not null && !m.IsPatch && !m.Disabled && m.ImagePaths.Count > 0)
             .Where(m => seen.Add(m.Kind == EntryKind.Local ? $"local:{m.Name}" : m.Raw.Length > 0 ? m.Raw : m.Dir!))
             .ToList();
         var byPath = new Dictionary<string, List<ModEntry>>(StringComparer.OrdinalIgnoreCase);

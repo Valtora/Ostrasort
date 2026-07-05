@@ -46,12 +46,28 @@ public static class FieldDiff
                 continue;
             }
 
-            var coreObj = LoadObject(Path.Combine(env.CoreDataDir, col.Type), col.ObjName);
+            // conditions defined via conditions_simple are parsed into the
+            // conditions dictionary AFTER every mod loads (ParseConditionsSimple),
+            // so they beat any conditions\ version of the same name regardless of
+            // load order - there is no JSON object to field-merge either
+            var simpleDefiners = col.Claimants
+                .Where(m => m.SimpleConditionNames.Contains(col.ObjName))
+                .Select(m => m.DisplayName ?? m.Name).ToList();
+            if (col.Type == "conditions" && simpleDefiners.Count > 0)
+            {
+                col.FieldNotes.Add($"{string.Join(", ", simpleDefiners)} define(s) it via conditions_simple - " +
+                                   "those are applied after every mod loads and override any conditions\\ version " +
+                                   "of this name regardless of load order (among several conditions_simple " +
+                                   "definitions, the last-loaded mod's wins)");
+                continue;
+            }
+
+            var coreObj = LoadObject(Path.Combine(env.CoreDataDir, col.Type), col.ObjName, a.IgnorePatterns);
             var versions = new List<(ModEntry Mod, JsonNode Obj)>();
             foreach (var m in col.Claimants)
             {
                 if (m.Dir is null) continue;
-                var obj = LoadObject(Path.Combine(m.Dir, "data", col.Type), col.ObjName);
+                var obj = LoadObject(Path.Combine(m.Dir, "data", col.Type), col.ObjName, a.IgnorePatterns);
                 if (obj is not null) versions.Add((m, obj));
             }
             if (versions.Count < 2) continue;
@@ -112,11 +128,13 @@ public static class FieldDiff
         }
     }
 
-    internal static JsonNode? LoadObject(string typeDir, string strName)
+    internal static JsonNode? LoadObject(string typeDir, string strName, IReadOnlyList<string>? ignorePatterns = null)
     {
         if (!Directory.Exists(typeDir)) return null;
+        JsonNode? found = null;   // keep scanning: a later same-strName duplicate replaces the earlier (like the game)
         foreach (var file in Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories))
         {
+            if (Scanner.IsIgnored(file, ignorePatterns, out _)) continue;   // the game skips these files
             // JsonNode materializes lazily: duplicate property names (which some
             // mods ship and the game's parser tolerates) throw ArgumentException
             // on first ACCESS, not at Parse - so the whole walk sits in the try
@@ -126,12 +144,12 @@ public static class FieldDiff
                 var objects = root is JsonArray arr ? arr.ToList() : new List<JsonNode?> { root };
                 foreach (var o in objects)
                     if (o?["strName"]?.GetValue<string>() == strName)
-                        return o;
+                        found = o;
             }
             catch (JsonException) { }
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
         }
-        return null;
+        return found;
     }
 }

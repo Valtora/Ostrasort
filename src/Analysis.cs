@@ -44,6 +44,9 @@ public sealed class Analysis
     /// </summary>
     public FfuContext? Ffu { get; set; }
 
+    /// <summary>loading_order.json's global aIgnorePatterns (sanitized) - see <see cref="LoadOrderFile.IgnorePatterns"/>.</summary>
+    public List<string> IgnorePatterns { get; init; } = new();
+
     public List<string> SuggestedOrder { get; private set; } = new();
     public List<Change> Changes { get; } = new();
 
@@ -58,13 +61,14 @@ public sealed class Analysis
     {
         // effective order: current registration order, then would-be additions.
         // The Ostrasort-generated patch never counts as a claimant - it IS the
-        // resolution of a collision, not a party to one. A duplicated aLoadOrder
-        // entry (the game can re-append a subscription) must not collide with
-        // itself - only the first occurrence claims.
+        // resolution of a collision, not a party to one. A disabled entry does
+        // not load, so it cannot collide. A duplicated aLoadOrder entry (the
+        // game can re-append a subscription) must not collide with itself -
+        // only the first occurrence claims.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var mods = Registered.Where(m => m.Kind != EntryKind.Core && m.Dir is not null)
             .Concat(UnregisteredLocal).Concat(UnregisteredWorkshop)
-            .Where(m => !m.IsPatch && seen.Add(IdentityOf(m))).ToList();
+            .Where(m => !m.IsPatch && !m.Disabled && seen.Add(IdentityOf(m))).ToList();
 
         var byKey = new Dictionary<(string, string), List<ModEntry>>();
         foreach (var m in mods)
@@ -77,8 +81,12 @@ public sealed class Analysis
         foreach (var ((type, name), claimants) in byKey.Where(kv => kv.Value.Count > 1).OrderBy(kv => kv.Key))
         {
             var col = new Collision { Type = type, ObjName = name, Claimants = claimants };
+            // ALL pairs, not just adjacent ones - with 3+ claimants a partial
+            // overlap between non-adjacent pools would otherwise slip through.
+            // Order keeps the last adjacent pair last (the display anchor).
             for (var i = 0; i < claimants.Count - 1; i++)
-                col.Pairs.Add(Relate(type, name, claimants[i], claimants[i + 1]));
+                for (var j = i + 1; j < claimants.Count; j++)
+                    col.Pairs.Add(Relate(type, name, claimants[i], claimants[j]));
             Collisions.Add(col);
         }
     }
@@ -338,9 +346,9 @@ public sealed class Analysis
             if (firstNonInfra >= 0 && order.IndexOf(infra) > firstNonInfra)
                 issues.Add($"{infra.DisplayName ?? infra.Name}: mod-loader infrastructure should sit right after core.");
 
-        // recompute loot pool relations for the NEW adjacency
+        // recompute loot pool relations for the NEW order (all pairs, like FindCollisions)
         var byKey = new Dictionary<(string, string), List<ModEntry>>();
-        foreach (var m in order.Where(m => !m.IsPatch))
+        foreach (var m in order.Where(m => !m.IsPatch && !m.Disabled))
             foreach (var claim in m.Claims.Keys)
             {
                 if (!byKey.TryGetValue(claim, out var list)) byKey[claim] = list = new();
@@ -348,20 +356,21 @@ public sealed class Analysis
             }
         foreach (var ((type, name), claimants) in byKey.Where(kv => kv.Value.Count > 1))
             for (var i = 0; i < claimants.Count - 1; i++)
-            {
-                var rel = Relate(type, name, claimants[i], claimants[i + 1]);
-                if (rel.Rel == Relation.SubsetViolation)
-                    issues.Add($"{type}/{name}: {claimants[i + 1].DisplayName ?? claimants[i + 1].Name} would drop " +
-                               $"{rel.LostFromEarlier.Length} item(s) that {claimants[i].DisplayName ?? claimants[i].Name} stocks " +
-                               "- the superset should load last.");
-            }
+                for (var j = i + 1; j < claimants.Count; j++)
+                {
+                    var rel = Relate(type, name, claimants[i], claimants[j]);
+                    if (rel.Rel == Relation.SubsetViolation)
+                        issues.Add($"{type}/{name}: {claimants[j].DisplayName ?? claimants[j].Name} would drop " +
+                                   $"{rel.LostFromEarlier.Length} item(s) that {claimants[i].DisplayName ?? claimants[i].Name} stocks " +
+                                   "- the superset should load last.");
+                }
 
         // FFU rules: the FFU block sits after every non-FFU mod, core tier first,
         // dependencies before dependents
         var firstFfu = order.FindIndex(m => m.IsFfu);
         if (firstFfu >= 0)
         {
-            foreach (var m in order.Skip(firstFfu + 1).Where(m => !m.IsFfu && m.Kind != EntryKind.Core && !m.IsPatch))
+            foreach (var m in order.Skip(firstFfu + 1).Where(m => !m.IsFfu && m.Kind != EntryKind.Core && !m.IsPatch && !m.Disabled))
                 issues.Add($"{m.DisplayName ?? m.Name}: non-FFU mods should load before the FFU block " +
                            "(FFU-dependent mods come after all non-FFU mods).");
             var firstAfter = order.FindIndex(m => m.IsFfu && m.FfuGroup != FfuLoadGroup.FFUCore);

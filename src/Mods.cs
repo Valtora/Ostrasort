@@ -29,6 +29,7 @@ public sealed class ModEntry
     public required string Name { get; init; }       // folder name (local) / workshop item id
     public string? Dir { get; init; }                // resolved mod folder; null = dead entry
     public bool EditMarker { get; init; }            // "<Name>|edit"
+    public bool Disabled { get; init; }              // "<entry>|disabled" - the game keeps the entry but skips it at load
     public string? DisplayName { get; set; }         // strName from mod_info.json
     public string? GameVersion { get; set; }         // strGameVersion from mod_info.json
     public string? PublishedId { get; set; }         // strWorkshopID from mod_info.json (published local mods)
@@ -51,6 +52,10 @@ public sealed class ModEntry
     public HashSet<string> ImagePaths { get; } = new(StringComparer.OrdinalIgnoreCase);   // relative under images\
     public HashSet<string> PluginDlls { get; } = new(StringComparer.OrdinalIgnoreCase);   // basenames under BepInEx\plugins
     public List<string> JsonErrors { get; } = new();
+    /// <summary>Condition names this mod defines via conditions_simple (they land in the conditions namespace).</summary>
+    public HashSet<string> SimpleConditionNames { get; } = new(StringComparer.Ordinal);
+    /// <summary>Data files of this mod skipped by loading_order.json's aIgnorePatterns (rel path, pattern).</summary>
+    public List<(string File, string Pattern)> IgnoredFiles { get; } = new();
 
     // FFU (filled by the scanner + FfuAnalysis.Classify)
     public AutoloadMeta? Meta { get; set; }                  // Autoload.Meta.toml, when the mod ships one
@@ -78,34 +83,58 @@ public sealed class ModEntry
         if (raw == "core")
             return new ModEntry { Raw = raw, Kind = EntryKind.Core, Name = "core", Dir = env.CoreDataDir };
 
-        if (raw.Length > 2 && raw[1] == ':')   // absolute path: Workshop subscription or a BepInEx\plugins data mod
+        // marker parsing mirrors the game's JsonModList.ParseLoadingOrderEntry:
+        // "<path>|edit" arms the Upload button, "<path>|disabled" keeps the entry
+        // but skips it at load (the in-game MODS screen toggle), and a 3+-part
+        // entry is treated as disabled
+        var parts = raw.Split('|');
+        var path = parts[0];
+        var edit = parts.Length == 2 && parts[1] == "edit";
+        var disabled = (parts.Length == 2 && parts[1] == "disabled") || parts.Length >= 3;
+
+        if (path.Length > 2 && path[1] == ':')   // absolute path: Workshop subscription or a BepInEx\plugins data mod
         {
-            var underBepInEx = raw.StartsWith(env.BepInExDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                            || raw.StartsWith(env.BepInExDir + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            var underBepInEx = path.StartsWith(env.BepInExDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                            || path.StartsWith(env.BepInExDir + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
             return new ModEntry
             {
                 Raw = raw,
                 Kind = underBepInEx ? EntryKind.PluginDir : EntryKind.Workshop,
-                Name = Path.GetFileName(raw.TrimEnd('\\', '/')),
-                Dir = Directory.Exists(raw) ? raw : null,
+                Name = Path.GetFileName(path.TrimEnd('\\', '/')),
+                Dir = Directory.Exists(path) ? path : null,
+                Disabled = disabled,
             };
         }
 
-        var edit = raw.EndsWith("|edit", StringComparison.Ordinal);
-        var name = edit ? raw[..^5] : raw;
-        var dir = Path.Combine(env.ModsDir, name);
+        var dir = Path.Combine(env.ModsDir, path);
         return new ModEntry
         {
             Raw = raw,
             Kind = EntryKind.Local,
-            Name = name,
+            Name = path,
             Dir = Directory.Exists(dir) ? dir : null,
             EditMarker = edit,
+            Disabled = disabled,
         };
+    }
+
+    /// <summary>
+    /// A note when the mod's declared strGameVersion does not match the
+    /// installed game, worded by direction; null when they match (or the mod
+    /// declares none).
+    /// </summary>
+    public string? GameVersionNote(string? installed)
+    {
+        if (GameVersion is not { Length: > 0 } gv || installed is not { Length: > 0 } iv || gv == iv) return null;
+        if (Version.TryParse(gv, out var vm) && Version.TryParse(iv, out var vi))
+            return vm < vi
+                ? $"gameVersion {gv} predates game {iv} (mod may be outdated)"
+                : $"gameVersion {gv} is newer than game {iv}";
+        return $"gameVersion {gv} differs from game {iv}";
     }
 }
 
-public sealed class Scanner(GameEnv env)
+public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns = null, bool useCoreCache = true)
 {
     private static readonly JsonDocumentOptions Lenient = new()
     {
@@ -113,19 +142,57 @@ public sealed class Scanner(GameEnv env)
         CommentHandling = JsonCommentHandling.Skip,
     };
 
+    private readonly IReadOnlyList<string> _ignore = ignorePatterns ?? [];
+
     public HashSet<(string Type, string Name)> CoreIndex { get; } = new();
     public int CoreTypes { get; private set; }
     public int CoreProblemFiles { get; private set; }
+    /// <summary>Core data files skipped by loading_order.json's aIgnorePatterns (rel path, pattern).</summary>
+    public List<(string File, string Pattern)> IgnoredCoreFiles { get; } = new();
+
+    /// <summary>
+    /// The game's aIgnorePatterns test (DataHandler.LoadModJsons): the file's
+    /// forward-slash path simply CONTAINS the (sanitized) pattern.
+    /// </summary>
+    public static bool IsIgnored(string fullPath, IReadOnlyList<string>? patterns, out string? pattern)
+    {
+        pattern = null;
+        if (patterns is not { Count: > 0 }) return false;
+        var sanitized = fullPath.Replace('\\', '/').Replace("//", "/");
+        pattern = patterns.FirstOrDefault(p => sanitized.Contains(p, StringComparison.Ordinal));
+        return pattern is not null;
+    }
 
     public void IndexCore()
     {
-        var types = new HashSet<string>();
-        // core ships a handful of files with non-standard JSON the game's own
-        // (lenient) parser accepts; count them so the index gap is visible
-        foreach (var d in EnumerateDataObjects(env.CoreDataDir, wantLoot: false, _ => CoreProblemFiles++))
+        // parsing every core JSON is the expensive part of a scan, and core only
+        // changes when the game updates - cache the raw (pattern-independent)
+        // index and re-apply aIgnorePatterns on every load
+        var snap = useCoreCache ? CoreIndexCache.TryLoad(env.CoreDataDir) : null;
+        if (snap is null)
         {
-            CoreIndex.Add((d.Type, d.Name));
-            types.Add(d.Type);
+            var entries = new List<CoreIndexCache.Entry>();
+            var problems = 0;
+            // core ships a handful of files with non-standard JSON the game's own
+            // (lenient) parser accepts; count them so the index gap is visible
+            foreach (var d in EnumerateDataObjects(env.CoreDataDir, wantLoot: false, _ => problems++))
+                entries.Add(new CoreIndexCache.Entry(d.Type, d.Name, d.RelPath));
+            snap = new CoreIndexCache.Snapshot(entries, problems);
+            if (useCoreCache) CoreIndexCache.Save(env.CoreDataDir, snap);
+        }
+        CoreProblemFiles = snap.ProblemFiles;
+
+        var types = new HashSet<string>();
+        var ignoredFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in snap.Entries)
+        {
+            if (IsIgnored(Path.Combine(env.CoreDataDir, e.RelPath), _ignore, out var pat))
+            {
+                if (ignoredFiles.Add(e.RelPath)) IgnoredCoreFiles.Add((e.RelPath, pat!));
+                continue;
+            }
+            CoreIndex.Add((e.Type, e.Name));
+            types.Add(e.Type);
         }
         CoreTypes = types.Count;
     }
@@ -153,10 +220,13 @@ public sealed class Scanner(GameEnv env)
         if (Directory.Exists(dataDir))
         {
             bool anyReference = false, anyCommands = false;
-            foreach (var d in EnumerateDataObjects(dataDir, wantLoot: true, mod.JsonErrors.Add))
+            var ignoredFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var d in EnumerateDataObjects(dataDir, wantLoot: true, mod.JsonErrors.Add,
+                         _ignore, (file, pat) => { if (ignoredFiles.Add(file)) mod.IgnoredFiles.Add((file, pat)); }))
             {
                 mod.Claims[(d.Type, d.Name)] = d.Loots;
                 mod.DataObjects++;
+                if (d.FromSimple) mod.SimpleConditionNames.Add(d.Name);
                 if (CoreIndex.Contains((d.Type, d.Name))) mod.CoreOverrides++;
                 anyReference |= d.HasReference;
                 if (d.ArrayCommands)
@@ -229,7 +299,8 @@ public sealed class Scanner(GameEnv env)
 
     /// <summary>One data object found in a mod: its claim plus the FFU elastic-API markers it carries.</summary>
     internal readonly record struct DataObject(
-        string Type, string Name, string[]? Loots, bool HasReference, bool ArrayCommands);
+        string Type, string Name, string[]? Loots, bool HasReference, bool ArrayCommands,
+        string RelPath, bool FromSimple = false);
 
     /// <summary>FFU precision array commands: "--ADD--", "--INS--4", "5|--MOD--|..." sub-array rows, etc.</summary>
     private static readonly System.Text.RegularExpressions.Regex FfuCommand =
@@ -240,11 +311,17 @@ public sealed class Scanner(GameEnv env)
     /// Loot objects also carry their aLoots array for subset/superset analysis;
     /// an aLoots that uses FFU array commands is an EDIT, not a replacement, so
     /// its Loots come back null (non-comparable) with ArrayCommands set.
-    /// Files that only parse leniently (trailing commas etc.) are reported via
+    /// A conditions_simple container additionally yields one entry per condition
+    /// it defines, under type "conditions" with FromSimple set - the game parses
+    /// them into the same dictionary as conditions\ (after every mod loads).
+    /// Files matching an aIgnorePattern are skipped exactly as the game skips
+    /// them, reported via <paramref name="onIgnored"/>. Files that only parse
+    /// leniently (trailing commas etc.) are reported via
     /// <paramref name="onError"/> - the game's own loader would ERROR on them.
     /// </summary>
-    private static IEnumerable<DataObject> EnumerateDataObjects(
-        string dataDir, bool wantLoot, Action<string> onError)
+    internal static IEnumerable<DataObject> EnumerateDataObjects(
+        string dataDir, bool wantLoot, Action<string> onError,
+        IReadOnlyList<string>? ignorePatterns = null, Action<string, string>? onIgnored = null)
     {
         if (!Directory.Exists(dataDir)) yield break;
         foreach (var typeDir in Directory.EnumerateDirectories(dataDir))
@@ -254,6 +331,13 @@ public sealed class Scanner(GameEnv env)
 
             foreach (var file in Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories))
             {
+                var relPath = Relative(dataDir, file);
+                if (IsIgnored(file, ignorePatterns, out var pattern))
+                {
+                    onIgnored?.Invoke(relPath, pattern!);
+                    continue;
+                }
+
                 JsonDocument doc;
                 var text = File.ReadAllText(file);
                 try
@@ -265,11 +349,11 @@ public sealed class Scanner(GameEnv env)
                     try
                     {
                         doc = JsonDocument.Parse(text, Lenient);
-                        onError($"{Relative(dataDir, file)}: parses only leniently (trailing comma/comment?) - the game load would ERROR");
+                        onError($"{relPath}: parses only leniently (trailing comma/comment?) - the game load would ERROR");
                     }
                     catch (JsonException e)
                     {
-                        onError($"{Relative(dataDir, file)}: invalid JSON - {e.Message}");
+                        onError($"{relPath}: invalid JSON - {e.Message}");
                         continue;
                     }
                 }
@@ -300,7 +384,20 @@ public sealed class Scanner(GameEnv env)
                             // command-driven aLoots merge at load (FFU) - not a whole-pool replacement
                             if (!entries.Any(e => FfuCommand.IsMatch(e))) loots = entries;
                         }
-                        yield return new DataObject(type, nameEl.GetString()!, loots, hasReference, commands);
+                        yield return new DataObject(type, nameEl.GetString()!, loots, hasReference, commands, relPath);
+
+                        // each 7-tuple in a conditions_simple container defines one
+                        // condition in the CONDITIONS namespace (ParseConditionsSimple)
+                        if (type.Equals("conditions_simple", StringComparison.OrdinalIgnoreCase) &&
+                            obj.TryGetProperty("aValues", out var valsEl) && valsEl.ValueKind == JsonValueKind.Array)
+                        {
+                            var vals = valsEl.EnumerateArray()
+                                .Where(x => x.ValueKind == JsonValueKind.String)
+                                .Select(x => x.GetString()!)
+                                .ToArray();
+                            for (var i = 0; i + 6 < vals.Length; i += 7)
+                                yield return new DataObject("conditions", vals[i], null, false, false, relPath, FromSimple: true);
+                        }
                     }
                 }
             }
