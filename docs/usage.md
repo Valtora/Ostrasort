@@ -93,6 +93,9 @@ keeps a `.bak`, and all writes are disabled while the game is running.
   next rescan suggests pruning the dead entry.
 - **Tidy grouping** toggles a cosmetic core → infrastructure → code → data
   grouping of the suggested order.
+- **Theme** (toolbar) switches between **Light**, **Dark**, and **System**
+  (follow the Windows theme, the default); the choice is remembered, and
+  System-mode tracks the OS live.
 - **Launch game** starts Ostranauts via Steam; the table **rescans itself**
   when you switch back to Ostrasort (e.g. after closing the game).
 - **Copy report / Save report** export the full analysis as plain text for

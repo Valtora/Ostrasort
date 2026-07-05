@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -22,11 +23,12 @@ public sealed record ProfileRow(string Name, string Detail, Profile Profile);
 
 public partial class MainWindow : Window
 {
-    private static readonly Brush Normal = Brushes.Black;
-    private static readonly Brush Dim = Brushes.Gray;
-    private static readonly Brush Good = Brushes.Green;
-    private static readonly Brush Warn = new SolidColorBrush(Color.FromRgb(0xB8, 0x6E, 0x00));
-    private static readonly Brush Bad = Brushes.Firebrick;
+    // severity brushes now come from the theme (light/dark) - see ThemeManager
+    private static Brush Normal => ThemeManager.Normal;
+    private static Brush Dim => ThemeManager.Dim;
+    private static Brush Good => ThemeManager.Good;
+    private static Brush Warn => ThemeManager.Warn;
+    private static Brush Bad => ThemeManager.Bad;
 
     private static readonly HttpClient Http = CreateHttp();
     private static HttpClient CreateHttp()
@@ -61,6 +63,9 @@ public partial class MainWindow : Window
         _settings = GuiSettings.Load();
         InitializeComponent();
         RestoreWindowState();
+        ThemeManager.Apply(this, _settings.Theme);
+        CmbTheme.SelectedIndex = _settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
@@ -132,8 +137,8 @@ public partial class MainWindow : Window
             return;
         }
         var rival = ctx.AutoloaderActive;
-        FfuBanner.Background = new SolidColorBrush(rival ? Color.FromRgb(0xFD, 0xEC, 0xEA) : Color.FromRgb(0xFF, 0xF8, 0xE7));
-        FfuBanner.BorderBrush = rival ? Bad : new SolidColorBrush(Color.FromRgb(0xD9, 0xA4, 0x00));
+        FfuBanner.Background = rival ? ThemeManager.BannerAlarmBg : ThemeManager.BannerInfoBg;
+        FfuBanner.BorderBrush = rival ? ThemeManager.BannerAlarmBorder : ThemeManager.BannerInfoBorder;
         TxtFfuBannerTitle.Text = rival
             ? "OstraAutoloader active — Ostrasort is read-only on this install"
             : $"{ctx.Summary} detected — FFU ordering rules are applied";
@@ -654,6 +659,37 @@ public partial class MainWindow : Window
     {
         _settings.Tidy = ChkTidy.IsChecked == true;
         if (_state is not null && !_manualDirty) Rescan();
+    }
+
+    // --------------------------------------------------------------- theming ---
+
+    private void Theme_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;   // ignore the programmatic set during construction
+        var mode = CmbTheme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "system" };
+        _settings.Theme = mode;
+        ThemeManager.Apply(this, mode);
+        ReapplyTheme();
+        OpLog.Add($"Theme set to {mode}.");
+    }
+
+    private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        // follow the OS live while the theme is set to "system"
+        if (e.Category == UserPreferenceCategory.General && _settings.Theme == "system")
+            Dispatcher.Invoke(() => { ThemeManager.Apply(this, "system"); ReapplyTheme(); });
+    }
+
+    /// <summary>Re-apply theme brushes to everything set in code, preserving the current rows and any manual arrangement.</summary>
+    private void ReapplyTheme()
+    {
+        if (_state is null) return;
+        for (var i = 0; i < _rows.Count; i++) _rows[i] = BuildRow(_rows[i].Pos, _rows[i].M);
+        RenderTabs(_state);
+        RenderFfuBanner(_state);
+        RenderLogs();
+        RenderProfiles();
+        UpdateActionBar(_state);
     }
 
     private void Apply_Click(object sender, RoutedEventArgs e)
@@ -1258,6 +1294,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object sender, CancelEventArgs e)
     {
+        SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _settings.Maximized = WindowState == WindowState.Maximized;
         if (WindowState == WindowState.Normal)
         {

@@ -10,6 +10,7 @@ public partial class PromptDialog : Window
     public PromptDialog(string prompt, string initial = "")
     {
         InitializeComponent();
+        ThemeManager.ApplyTo(this);
         TxtPrompt.Text = prompt;
         TxtInput.Text = initial;
         TxtInput.SelectAll();

@@ -4,7 +4,7 @@
         Title="Resolve contested items" Height="640" Width="860" MinHeight="420" MinWidth="640"
         Icon="/app.ico" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <DockPanel Margin="12">
-        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10" Foreground="Gray"
+        <TextBlock x:Name="TxtIntro" DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10" Foreground="Gray"
                    Text="Where two mods change the same shop item or object field to different values, pick which one the merged patch keeps (or the union / vanilla). Everything the mods agree on, or only one of them touched, merges automatically — expand those to review. All decisions are remembered for future refreshes. Merged game objects are best-effort: verify them in game."/>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <TextBlock x:Name="TxtRemaining" VerticalAlignment="Center" Margin="0,0,14,0" Foreground="Gray"/>

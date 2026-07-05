@@ -34,7 +34,7 @@
 
         <TextBlock Grid.Row="2" x:Name="TxtNotes" TextWrapping="Wrap" Margin="0,0,0,8" FontSize="12.5"/>
 
-        <Border Grid.Row="3" BorderBrush="#DDD" BorderThickness="1">
+        <Border Grid.Row="3" x:Name="DiffBorder" BorderBrush="#DDD" BorderThickness="1">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="ListDiff" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
             </ScrollViewer>

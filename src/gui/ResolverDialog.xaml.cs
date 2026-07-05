@@ -13,6 +13,9 @@ public partial class ResolverDialog : Window
     {
         _plan = plan;
         InitializeComponent();
+        ThemeManager.ApplyTo(this);
+        TxtIntro.Foreground = ThemeManager.Dim;
+        TxtRemaining.Foreground = ThemeManager.Dim;
         Build();
         UpdateButtons();
     }
@@ -66,7 +69,7 @@ public partial class ResolverDialog : Window
                     Text = "Take all from:",
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(0, 0, 8, 0),
-                    Foreground = Brushes.Gray,
+                    Foreground = ThemeManager.Dim,
                 });
                 foreach (var src in sources)
                 {
@@ -89,7 +92,7 @@ public partial class ResolverDialog : Window
                     Text = isLoot ? "(or per row: pick a mod's value, or Exclude to stock it from nobody)"
                                   : "(or per row: pick a mod's value / the union, or Exclude to keep vanilla)",
                     VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = Brushes.Gray,
+                    Foreground = ThemeManager.Dim,
                     Margin = new Thickness(8, 0, 0, 0),
                 });
                 body.Children.Add(shortcuts);
@@ -184,7 +187,7 @@ public partial class ResolverDialog : Window
         {
             GroupName = group,
             Content = isLoot ? "Exclude" : "Vanilla",
-            Foreground = Brushes.Firebrick,
+            Foreground = ThemeManager.Bad,
             Margin = new Thickness(0, 0, 16, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Tag = null,
@@ -206,7 +209,7 @@ public partial class ResolverDialog : Window
             radios.Children.Add(new TextBlock
             {
                 Text = "(auto-picked earlier — review)",
-                Foreground = Brushes.DarkOrange,
+                Foreground = ThemeManager.Warn,
                 VerticalAlignment = VerticalAlignment.Center,
             });
 

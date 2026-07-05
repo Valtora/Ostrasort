@@ -12,9 +12,9 @@ namespace Ostrasort.Gui;
 /// </summary>
 public partial class ProfileSwitchDialog : Window
 {
-    private static readonly Brush Normal = Brushes.Black;
-    private static readonly Brush Dim = Brushes.Gray;
-    private static readonly Brush Warn = new SolidColorBrush(Color.FromRgb(0xB8, 0x6E, 0x00));
+    private static Brush Normal => ThemeManager.Normal;
+    private static Brush Dim => ThemeManager.Dim;
+    private static Brush Warn => ThemeManager.Warn;
 
     private readonly GameEnv _env;
     private readonly Analysis _analysis;
@@ -31,6 +31,8 @@ public partial class ProfileSwitchDialog : Window
         _profile = profile;
         _current = analysis.Registered.Select(m => m.Raw).ToList();
         InitializeComponent();
+        ThemeManager.ApplyTo(this);
+        DiffBorder.BorderBrush = ThemeManager.PanelBorder;
         TxtHeader.Text = $"Switch to profile “{profile.Name}”";
         Render();
     }

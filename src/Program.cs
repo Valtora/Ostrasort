@@ -137,6 +137,7 @@ public static class Program
 
         if (smokeGui)
         {
+            _ = System.Windows.Application.Current ?? new System.Windows.Application();   // so Fluent theming applies for real
             var smokeEnv = GameEnv.Locate(gameRoot);
             var smokeState = Engine.Analyze(smokeEnv);
             _ = new Gui.MainWindow(smokeEnv);                                       // ctor runs a full rescan/render
@@ -151,7 +152,19 @@ public static class Program
                 Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");
                 return 1;
             }
-            Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()})");
+            // verify Fluent dark theming actually applies (not silently swallowed)
+            var probe = new System.Windows.Window();
+            Gui.ThemeManager.Apply(probe, "dark");
+#pragma warning disable WPF0001
+            var themedDark = probe.ThemeMode == System.Windows.ThemeMode.Dark;
+#pragma warning restore WPF0001
+            Gui.ThemeManager.Apply(probe, "light");   // leave the shared theme state on light
+            if (!themedDark)
+            {
+                Console.Error.WriteLine("gui-smoke FAIL: dark ThemeMode did not apply.");
+                return 1;
+            }
+            Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()}; theming ok)");
             return 0;
         }
 

@@ -13,6 +13,7 @@ public sealed class GuiSettings
     public bool Maximized { get; set; }
     public bool Tidy { get; set; }
     public int Tab { get; set; }
+    public string Theme { get; set; } = "system";   // "system" | "light" | "dark"
 
     private static string PathFor() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

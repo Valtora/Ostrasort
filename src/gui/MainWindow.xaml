@@ -6,6 +6,10 @@
         Activated="Window_Activated" Closing="Window_Closing"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
+        <!-- theme-tracked brushes (ThemeManager overrides these for dark) -->
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="Gray"/>
+        <SolidColorBrush x:Key="GridLineBrush" Color="#EEEEEE"/>
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#DDDDDD"/>
         <DataTemplate x:Key="LineTemplate">
             <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}"
                        FontFamily="Consolas" FontSize="12.5" TextWrapping="Wrap"
@@ -46,7 +50,7 @@
                 </Grid.RowDefinitions>
                 <Grid.Resources>
                     <Style x:Key="HdrLabel" TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="Gray"/>
+                        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
                         <Setter Property="Margin" Value="0,1,14,1"/>
                         <Setter Property="VerticalAlignment" Value="Center"/>
                     </Style>
@@ -61,7 +65,7 @@
                 <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HdrValue}">
                     <Run x:Name="RunGamePath"/>
                     <Hyperlink Click="OpenGame_Click">open</Hyperlink>
-                    <Run x:Name="RunFoundVia" Foreground="Gray"/>
+                    <Run x:Name="RunFoundVia" Foreground="{DynamicResource SecondaryTextBrush}"/>
                 </TextBlock>
 
                 <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Mods folder"/>
@@ -83,6 +87,14 @@
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button x:Name="BtnUndo" Content="Undo" Padding="12,2" Margin="0,0,6,0" Click="Undo_Click"/>
                 <Button x:Name="BtnRedo" Content="Redo" Padding="12,2" Margin="0,0,18,0" Click="Redo_Click"/>
+                <TextBlock Text="Theme:" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <ComboBox x:Name="CmbTheme" Width="82" VerticalAlignment="Center" Margin="0,0,18,0"
+                          SelectionChanged="Theme_Changed"
+                          ToolTip="Light, dark, or follow the Windows system theme.">
+                    <ComboBoxItem Content="System"/>
+                    <ComboBoxItem Content="Light"/>
+                    <ComboBoxItem Content="Dark"/>
+                </ComboBox>
                 <CheckBox x:Name="ChkTidy" Content="Tidy grouping" VerticalAlignment="Center"
                           Margin="0,0,18,0" Checked="Tidy_Changed" Unchecked="Tidy_Changed"
                           ToolTip="Group the suggestion: core, infrastructure, code, shells, additive data, overrides, patch. Cosmetic and opt-in."/>
@@ -94,11 +106,11 @@
                 </TextBlock>
             </StackPanel>
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Filter:" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="Filter:" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <TextBox x:Name="TxtFilter" Width="240" VerticalAlignment="Center"
                          TextChanged="Filter_Changed"
                          ToolTip="Filter by name, ID, class, source or notes. Drag-reordering is disabled while filtering."/>
-                <TextBlock x:Name="TxtDragHint" Foreground="Gray" VerticalAlignment="Center" Margin="14,0,0,0"
+                <TextBlock x:Name="TxtDragHint" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="14,0,0,0"
                            Text="drag rows to reorder manually"/>
             </StackPanel>
         </DockPanel>
@@ -138,7 +150,7 @@
         <DataGrid Grid.Row="3" x:Name="ModsGrid" AutoGenerateColumns="False" IsReadOnly="True"
                   CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False"
                   SelectionMode="Single" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                  HorizontalGridLinesBrush="#EEE" RowHeaderWidth="0" FontSize="12.5"
+                  HorizontalGridLinesBrush="{DynamicResource GridLineBrush}" RowHeaderWidth="0" FontSize="12.5"
                   MouseDoubleClick="ModsGrid_MouseDoubleClick"
                   PreviewMouseLeftButtonDown="ModsGrid_PreviewMouseLeftButtonDown"
                   PreviewMouseMove="ModsGrid_PreviewMouseMove"
@@ -198,7 +210,7 @@
                         <Button x:Name="BtnProfileRename" Content="Rename…" Padding="10,4" Margin="8,0,0,0" Click="ProfileRename_Click"/>
                         <Button x:Name="BtnProfileDelete" Content="Delete" Padding="10,4" Margin="8,0,0,0" Click="ProfileDelete_Click"
                                 ToolTip="Delete the saved profile. This removes only the profile, never any mods."/>
-                        <TextBlock x:Name="TxtProfileHint" Foreground="Gray" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                        <TextBlock x:Name="TxtProfileHint" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="14,0,0,0"/>
                     </StackPanel>
                     <ListBox x:Name="ListProfiles" Margin="8" SelectionChanged="Profiles_SelectionChanged"
                              MouseDoubleClick="Profiles_DoubleClick"
@@ -207,7 +219,7 @@
                             <DataTemplate>
                                 <StackPanel Margin="2,3">
                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"/>
-                                    <TextBlock Text="{Binding Detail}" Foreground="Gray" FontSize="11.5"/>
+                                    <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11.5"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -252,7 +264,7 @@
             <TabItem x:Name="TabLogs" Header="Logs">
                 <DockPanel>
                     <DockPanel DockPanel.Dock="Top" Margin="8,6,8,2">
-                        <TextBlock DockPanel.Dock="Left" Text="Show:" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock DockPanel.Dock="Left" Text="Show:" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox x:Name="CmbLogSource" Width="260" VerticalAlignment="Center"
                                   SelectionChanged="LogSource_Changed">
                             <ComboBoxItem Content="Ostrasort operations" IsSelected="True"/>
