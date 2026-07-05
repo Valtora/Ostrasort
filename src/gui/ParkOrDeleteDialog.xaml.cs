@@ -16,7 +16,6 @@ public partial class ParkOrDeleteDialog : Window
     public ParkOrDeleteDialog(string header, string body)
     {
         InitializeComponent();
-        ThemeManager.ApplyTo(this);
         TxtHeader.Text = header;
         TxtBody.Text = body;
         TxtBody.Foreground = ThemeManager.Dim;

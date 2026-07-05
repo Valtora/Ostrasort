@@ -63,7 +63,6 @@ public partial class MainWindow : Window
         _settings = GuiSettings.Load();
         InitializeComponent();
         RestoreWindowState();
-        ThemeManager.Apply(this, _settings.Theme);
         CmbTheme.SelectedIndex = _settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         Title = $"Ostrasort v{Program.Version}";
@@ -668,7 +667,7 @@ public partial class MainWindow : Window
         if (!IsLoaded) return;   // ignore the programmatic set during construction
         var mode = CmbTheme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "system" };
         _settings.Theme = mode;
-        ThemeManager.Apply(this, mode);
+        ThemeManager.Apply(mode);
         ReapplyTheme();
         OpLog.Add($"Theme set to {mode}.");
     }
@@ -677,7 +676,7 @@ public partial class MainWindow : Window
     {
         // follow the OS live while the theme is set to "system"
         if (e.Category == UserPreferenceCategory.General && _settings.Theme == "system")
-            Dispatcher.Invoke(() => { ThemeManager.Apply(this, "system"); ReapplyTheme(); });
+            Dispatcher.Invoke(() => { ThemeManager.Apply("system"); ReapplyTheme(); });
     }
 
     /// <summary>Re-apply theme brushes to everything set in code, preserving the current rows and any manual arrangement.</summary>

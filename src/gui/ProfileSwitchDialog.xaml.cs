@@ -31,7 +31,6 @@ public partial class ProfileSwitchDialog : Window
         _profile = profile;
         _current = analysis.Registered.Select(m => m.Raw).ToList();
         InitializeComponent();
-        ThemeManager.ApplyTo(this);
         DiffBorder.BorderBrush = ThemeManager.PanelBorder;
         TxtHeader.Text = $"Switch to profile “{profile.Name}”";
         Render();

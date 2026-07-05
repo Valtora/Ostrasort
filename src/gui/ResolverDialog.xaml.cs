@@ -13,7 +13,6 @@ public partial class ResolverDialog : Window
     {
         _plan = plan;
         InitializeComponent();
-        ThemeManager.ApplyTo(this);
         TxtIntro.Foreground = ThemeManager.Dim;
         TxtRemaining.Foreground = ThemeManager.Dim;
         Build();

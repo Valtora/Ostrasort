@@ -6,10 +6,32 @@
         Activated="Window_Activated" Closing="Window_Closing"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
-        <!-- theme-tracked brushes (ThemeManager overrides these for dark) -->
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="Gray"/>
-        <SolidColorBrush x:Key="GridLineBrush" Color="#EEEEEE"/>
-        <SolidColorBrush x:Key="PanelBorderBrush" Color="#DDDDDD"/>
+        <!-- Button-like tab headers so they keep contrast on both palettes; the
+             brushes come from ThemeManager (pushed into Application resources). -->
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" Margin="0,0,4,0" CornerRadius="4" BorderThickness="1"
+                                Background="{DynamicResource TabBgBrush}"
+                                BorderBrush="{DynamicResource PanelBorderBrush}">
+                            <ContentPresenter ContentSource="Header" Margin="12,5"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TabHoverBgBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TabSelectedBgBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource SevNormalBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <DataTemplate x:Key="LineTemplate">
             <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}"
                        FontFamily="Consolas" FontSize="12.5" TextWrapping="Wrap"
@@ -88,14 +110,14 @@
                 <Button x:Name="BtnUndo" Content="Undo" Padding="12,2" Margin="0,0,6,0" Click="Undo_Click"/>
                 <Button x:Name="BtnRedo" Content="Redo" Padding="12,2" Margin="0,0,18,0" Click="Redo_Click"/>
                 <TextBlock Text="Theme:" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                <ComboBox x:Name="CmbTheme" Width="82" VerticalAlignment="Center" Margin="0,0,18,0"
+                <ComboBox x:Name="CmbTheme" Width="100" VerticalAlignment="Center" Margin="0,0,18,0"
                           SelectionChanged="Theme_Changed"
                           ToolTip="Light, dark, or follow the Windows system theme.">
                     <ComboBoxItem Content="System"/>
                     <ComboBoxItem Content="Light"/>
                     <ComboBoxItem Content="Dark"/>
                 </ComboBox>
-                <CheckBox x:Name="ChkTidy" Content="Tidy grouping" VerticalAlignment="Center"
+                <CheckBox x:Name="ChkTidy" Content="Organise Mods by Class" VerticalAlignment="Center"
                           Margin="0,0,18,0" Checked="Tidy_Changed" Unchecked="Tidy_Changed"
                           ToolTip="Group the suggestion: core, infrastructure, code, shells, additive data, overrides, patch. Cosmetic and opt-in."/>
                 <TextBlock VerticalAlignment="Center" Margin="0,0,4,0">

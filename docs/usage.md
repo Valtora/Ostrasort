@@ -91,8 +91,8 @@ keeps a `.bak`, and all writes are disabled while the game is running.
   page in the Steam client — subscriptions belong to Steam, so unsubscribing
   is its one-click button there; Steam then removes the files and Ostrasort's
   next rescan suggests pruning the dead entry.
-- **Tidy grouping** toggles a cosmetic core → infrastructure → code → data
-  grouping of the suggested order.
+- **Organise Mods by Class** toggles a cosmetic core → infrastructure → code →
+  data grouping of the suggested order.
 - **Theme** (toolbar) switches between **Light**, **Dark**, and **System**
   (follow the Windows theme, the default); the choice is remembered, and
   System-mode tracks the OS live.

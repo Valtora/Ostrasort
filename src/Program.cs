@@ -138,6 +138,7 @@ public static class Program
         if (smokeGui)
         {
             _ = System.Windows.Application.Current ?? new System.Windows.Application();   // so Fluent theming applies for real
+            Gui.ThemeManager.Apply("light");                                             // populate the Application theme resources
             var smokeEnv = GameEnv.Locate(gameRoot);
             var smokeState = Engine.Analyze(smokeEnv);
             _ = new Gui.MainWindow(smokeEnv);                                       // ctor runs a full rescan/render
@@ -153,12 +154,11 @@ public static class Program
                 return 1;
             }
             // verify Fluent dark theming actually applies (not silently swallowed)
-            var probe = new System.Windows.Window();
-            Gui.ThemeManager.Apply(probe, "dark");
+            Gui.ThemeManager.Apply("dark");
 #pragma warning disable WPF0001
-            var themedDark = probe.ThemeMode == System.Windows.ThemeMode.Dark;
+            var themedDark = System.Windows.Application.Current!.ThemeMode == System.Windows.ThemeMode.Dark;
 #pragma warning restore WPF0001
-            Gui.ThemeManager.Apply(probe, "light");   // leave the shared theme state on light
+            Gui.ThemeManager.Apply("light");   // leave the shared theme state on light
             if (!themedDark)
             {
                 Console.Error.WriteLine("gui-smoke FAIL: dark ThemeMode did not apply.");

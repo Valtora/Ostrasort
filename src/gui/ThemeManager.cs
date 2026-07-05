@@ -8,10 +8,11 @@ namespace Ostrasort.Gui;
 /// Light/dark theming. WPF's Fluent <c>ThemeMode</c> supplies the chrome
 /// (buttons, tabs, the grid, scrollbars, dialogs); this class supplies the
 /// app's own severity/accent brushes for both palettes, detects the OS theme
-/// for "system" mode, and pushes the brushes into a window's resources so
-/// <c>DynamicResource</c> references track the theme. Code that sets a brush
-/// directly reads the static properties (which return the current palette);
-/// after a live theme switch the caller re-renders so those re-apply.
+/// for "system" mode, and pushes the brushes into <see cref="Application"/>
+/// resources so every window's <c>DynamicResource</c> references track the
+/// theme. Code that sets a brush directly reads the static properties (which
+/// return the current palette); after a live theme switch the caller
+/// re-renders so those re-apply.
 /// </summary>
 public static class ThemeManager
 {
@@ -54,32 +55,40 @@ public static class ThemeManager
     public static Brush GridLine    => Dark ? DGrid   : LGrid;
     public static Brush PanelBorder => Dark ? DBorder : LBorder;
 
-    /// <summary>Set the mode, resolve dark vs light (reading the OS for "system"), and apply to a window.</summary>
-    public static void Apply(Window w, string mode)
+    // tab headers - styled button-like so they keep contrast in dark mode
+    private static readonly Brush LTabBg = Frozen(0xED, 0xED, 0xED), LTabSel = Frozen(0xFD, 0xFD, 0xFD), LTabHover = Frozen(0xE3, 0xE3, 0xE3);
+    private static readonly Brush DTabBg = Frozen(0x2B, 0x2B, 0x2B), DTabSel = Frozen(0x3C, 0x3C, 0x3C), DTabHover = Frozen(0x35, 0x35, 0x35);
+    public static Brush TabBg       => Dark ? DTabBg    : LTabBg;
+    public static Brush TabSelected => Dark ? DTabSel   : LTabSel;
+    public static Brush TabHover    => Dark ? DTabHover : LTabHover;
+
+    /// <summary>
+    /// Set the mode, resolve dark vs light (reading the OS for "system"), and
+    /// apply it at the APPLICATION level - Fluent chrome plus the custom brushes
+    /// every window's DynamicResource references resolve against. Applying at the
+    /// app level (before the first window loads) is what makes the very first
+    /// render fully themed; per-window application in the ctor left the chrome a
+    /// step behind (dark text over a still-light background).
+    /// </summary>
+    public static void Apply(string mode)
     {
         Mode = mode is "light" or "dark" ? mode : "system";
         Dark = Mode switch { "dark" => true, "light" => false, _ => OsIsDark() };
-        ApplyTo(w);
-    }
 
-    /// <summary>Apply the current theme to a window: Fluent chrome + the custom resource brushes.</summary>
-    public static void ApplyTo(Window w)
-    {
-        // ThemeMode is the supported Fluent switch; guard so the headless
-        // --smoke-gui path (no Application) can still construct windows.
+        var app = Application.Current;
+        if (app is null) return;   // the headless --smoke-gui path may have no Application yet
 #pragma warning disable WPF0001
-        try { w.ThemeMode = Dark ? ThemeMode.Dark : ThemeMode.Light; } catch { }
+        try { app.ThemeMode = Dark ? ThemeMode.Dark : ThemeMode.Light; } catch { }
 #pragma warning restore WPF0001
 
-        var r = w.Resources;
+        var r = app.Resources;
         r["SevNormalBrush"] = Normal;
-        r["SevDimBrush"] = Dim;
-        r["SevGoodBrush"] = Good;
-        r["SevWarnBrush"] = Warn;
-        r["SevBadBrush"] = Bad;
         r["SecondaryTextBrush"] = Dim;
         r["GridLineBrush"] = GridLine;
         r["PanelBorderBrush"] = PanelBorder;
+        r["TabBgBrush"] = TabBg;
+        r["TabSelectedBgBrush"] = TabSelected;
+        r["TabHoverBgBrush"] = TabHover;
     }
 
     /// <summary>The Windows "apps" theme: AppsUseLightTheme = 0 means dark. Defaults to light if unreadable.</summary>

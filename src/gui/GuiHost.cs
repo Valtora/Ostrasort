@@ -39,6 +39,7 @@ public static class GuiHost
             e.SetObserved();
         };
 
+        ThemeManager.Apply(GuiSettings.Load().Theme);   // app-level, before the first window loads
         app.Run(new MainWindow(env));
         return 0;
     }
