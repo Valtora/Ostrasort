@@ -61,6 +61,9 @@
                         Background="#FFF4CE" BorderBrush="#D9A400" Foreground="#8A6D00"
                         Click="Update_Click"
                         ToolTip="A newer Ostrasort release is available on GitHub — click to open the Releases page and download it."/>
+                <TextBlock HorizontalAlignment="Right" Margin="0,5,0,0" FontSize="11">
+                    <Hyperlink Click="CheckUpdate_Click" ToolTip="Check GitHub for a newer release now and report the result.">Check for updates</Hyperlink>
+                </TextBlock>
             </StackPanel>
             <Grid>
                 <Grid.ColumnDefinitions>

@@ -1325,12 +1325,18 @@ public partial class MainWindow : Window
     private const string ReleasesUrl = "https://github.com/Valtora/Ostrasort/releases";
     private string _updateUrl = ReleasesUrl;
 
+    private void CheckUpdate_Click(object sender, RoutedEventArgs e) => _ = CheckForUpdateAsync(manual: true);
+
     /// <summary>
-    /// Compares this build against the latest GitHub release; when a newer one
-    /// exists, surfaces the Update button (which opens the Releases page to
-    /// download it). Silent on offline / rate-limited / no-releases.
+    /// Compares this build against the latest GitHub release. Runs on EVERY
+    /// launch (queried live each time, so a release published after this build
+    /// is picked up on the next start - there is no cached "latest" to go
+    /// stale) and on demand from the "Check for updates" link. A newer release
+    /// surfaces the Update button; the automatic run is otherwise quiet apart
+    /// from a Logs-tab line, while the manual run always reports the result and
+    /// offers to open the download page.
     /// </summary>
-    private async Task CheckForUpdateAsync()
+    private async Task CheckForUpdateAsync(bool manual = false)
     {
         try
         {
@@ -1344,9 +1350,27 @@ public partial class MainWindow : Window
                 BtnUpdate.Content = $"⬆  Update available: {tag}";
                 BtnUpdate.Visibility = Visibility.Visible;
                 OpLog.Add($"A newer release is available: {tag} (you are on v{Program.Version}).");
+                if (manual &&
+                    MessageBox.Show(this, $"{tag} is available — you're on v{Program.Version}.\n\nOpen the download page?",
+                        "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                    Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
+            }
+            else
+            {
+                OpLog.Add($"Update check: up to date (v{Program.Version}; latest release is {tag}).");
+                if (manual)
+                    MessageBox.Show(this, $"You're on the latest version (v{Program.Version}).",
+                        "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
-        catch { /* offline, rate-limited, or no releases yet - stay quiet */ }
+        catch (Exception ex)
+        {
+            OpLog.Add($"Update check failed: {ex.Message}");
+            if (manual)
+                MessageBox.Show(this, "Couldn't check for updates.\n\n" + ex.Message +
+                    "\n\nYou may be offline, or GitHub may be rate-limiting — its anonymous API allows about 60 checks an hour per network.",
+                    "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private static Version ParseVersion(string s) =>
