@@ -199,6 +199,33 @@ the vanilla version of a merged object, the patch is flagged stale even though
 no mod changed, because the merge would keep overriding it with values built
 on the old vanilla base. See [usage.md](usage.md) for the resolver workflow.
 
+## Profiles
+
+A profile is a saved copy of the `aLoadOrder` — each entry with its
+`|edit`/`|disabled` marker — under a name, stored per install in
+`%LOCALAPPDATA%\Ostrasort\profiles`. It captures **only the mod order**: not the
+generated `OstrasortPatch` (Ostrasort's own overlay, re-derived per setup), not
+`aIgnorePatterns`, and not the ignore list — all of which stay global to the
+install, so switching a profile only ever rewrites the order.
+
+Switching resolves each saved entry against what's installed now and drops any
+mod that no longer exists (reported, never a hard failure), then writes the
+result one of two ways, your choice:
+
+- **Replace** — the profile's order becomes the whole `aLoadOrder`; currently
+  registered mods the profile omits are removed from the order (their files are
+  untouched, and any unregistered local mod is flagged as usual). The clean
+  switch between distinct setups.
+- **Merge-append** — the profile's order, then every currently registered mod it
+  doesn't mention, appended in place. Layers a profile over the current order.
+
+Either way, entries are de-duplicated by identity (a mod is never listed twice
+with conflicting markers), core stays first, and the write goes through the same
+guarded ritual as an apply (`.bak`, rolling backup, atomic, undoable). Because a
+different set of mods can mean a different set of conflicts, a switch re-runs the
+patch staleness inspection, so the Patch tab flags a now-stale or newly-needed
+patch straight away.
+
 ## Safety model
 
 - **Analysis never writes anything** and is safe to run while the game is

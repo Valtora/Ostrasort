@@ -4,26 +4,6 @@ Planned features, roughly in order of intent. Correctness fixes don't live
 here — they ship as soon as they're found. Shipped items move to the release
 notes and get deleted from this file.
 
-## Flagship: Mod profiles
-
-Named load-order sets you can save and switch between — the signature feature
-of every mature mod manager (MO2/Vortex), and the natural next step now that
-apply/undo/backups exist:
-
-- **Save** the current `aLoadOrder` (including `|edit`/`|disabled` markers and
-  the ignore list) as a named profile: *"vanilla-plus"*, *"FFU run"*,
-  *"testing ShipsWater"*.
-- **Switch** profiles with one guarded write (same ritual: game-closed check,
-  `.bak`, rolling backup, atomic write, undoable).
-- **Diff** a profile against the current order before applying, reusing the
-  Order-changes side-by-side view.
-- Store profiles in `%LOCALAPPDATA%\Ostrasort\profiles\`, keyed per install
-  like the backups. A profile referencing mods that no longer exist applies
-  what it can and reports the rest — never a hard failure.
-- Mind the interaction with the OstrasortPatch: switching profiles can change
-  which conflicts exist, so a switch should re-run the staleness inspection
-  and surface the patch tab if the patch no longer matches.
-
 ## Especially desired: Dark mode
 
 .NET's WPF Fluent theming (`ThemeMode`) can supply the chrome, but the app

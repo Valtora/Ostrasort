@@ -1,0 +1,48 @@
+<Window x:Class="Ostrasort.Gui.ProfileSwitchDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ostrasort" Height="560" Width="740" MinHeight="380" MinWidth="560"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" WindowStyle="ToolWindow">
+    <Window.Resources>
+        <DataTemplate x:Key="LineTemplate">
+            <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}"
+                       FontFamily="Consolas" FontSize="12.5" TextWrapping="NoWrap"
+                       FontWeight="{Binding Weight}" Margin="{Binding Margin}"/>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" x:Name="TxtHeader" FontWeight="SemiBold" FontSize="13.5" Margin="0,0,0,8"/>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Mode:" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <RadioButton x:Name="RadReplace" GroupName="mode" Content="Replace" IsChecked="True"
+                         VerticalAlignment="Center" Margin="0,0,16,0" Checked="Mode_Changed"
+                         ToolTip="The profile's saved order becomes the entire load order. Mods not in the profile are removed from the order — their files stay on disk."/>
+            <RadioButton x:Name="RadMerge" GroupName="mode" Content="Merge-append"
+                         VerticalAlignment="Center" Checked="Mode_Changed"
+                         ToolTip="Apply the profile's order, then keep any currently-registered mods it doesn't list, appended at the end."/>
+        </StackPanel>
+
+        <TextBlock Grid.Row="2" x:Name="TxtNotes" TextWrapping="Wrap" Margin="0,0,0,8" FontSize="12.5"/>
+
+        <Border Grid.Row="3" BorderBrush="#DDD" BorderThickness="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="ListDiff" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
+            </ScrollViewer>
+        </Border>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Switch" Padding="16,4" Margin="0,0,8,0" IsDefault="True" Click="Switch_Click"/>
+            <Button Content="Cancel" Padding="16,4" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

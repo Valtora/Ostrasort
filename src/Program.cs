@@ -36,8 +36,8 @@ public static class Program
 
     private static int Run(string[] args)
     {
-        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false;
-        string? gameRoot = null;
+        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false;
+        string? gameRoot = null, profileSave = null, profileLoad = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -53,6 +53,10 @@ public static class Program
                 case "--apply": apply = true; break;
                 case "--patch": patch = true; break;
                 case "--fresh": fresh = true; break;
+                case "--profile-list": profileList = true; break;
+                case "--profile-save" when i + 1 < args.Length: profileSave = args[++i]; break;
+                case "--profile-load" when i + 1 < args.Length: profileLoad = args[++i]; break;
+                case "--merge": merge = true; break;
                 case "--unpatch": unpatch = true; break;
                 case "--allow-rival-stack": allowRival = true; break;   // override the autoloader write-block (at your own risk)
                 case "--disable-autoloader": break;                     // park/delete the OstraAutoloader DLL(s) (handled below)
@@ -85,6 +89,13 @@ public static class Program
                           --fresh     with --patch: discard all previously stored decisions
                                       (source picks AND exclusions) and rebuild from scratch
                           --unpatch   remove the generated patch mod and its load-order entry
+                          --profile-list          list saved load-order profiles for this install
+                          --profile-save <name>   save the current load order as a named profile
+                          --profile-load <name>   switch to a saved profile (Replace by default);
+                                      mods it doesn't list drop from the order, missing mods are
+                                      skipped and reported. Mutually exclusive with --apply
+                          --merge     with --profile-load: keep current mods the profile omits,
+                                      appended at the end, instead of replacing the whole order
                           --allow-rival-stack
                                       write even while Robyn's OstraAutoloader is installed;
                                       by default writes are refused there because the autoloader
@@ -114,6 +125,7 @@ public static class Program
             }
         }
         if (patch && unpatch) { Console.Error.WriteLine("pick one of --patch / --unpatch"); return 1; }
+        if (profileLoad is not null && apply) { Console.Error.WriteLine("pick one of --profile-load / --apply (both set the load order)"); return 1; }
 
         // --headless / --json: console only, never a window; bare = the report
         if (headless || json)
@@ -131,6 +143,9 @@ public static class Program
             var smokePlan = Patcher.PlanMerge(smokeEnv, smokeState.Analysis);
             var resolver = new Gui.ResolverDialog(smokePlan);
             _ = new Gui.ParkOrDeleteDialog("self-test", "self-test");
+            _ = new Gui.PromptDialog("self-test");
+            _ = new Gui.ProfileSwitchDialog(smokeEnv, smokeState.Analysis,
+                    Profile.Capture(smokeState.Analysis, "self-test", smokeEnv.InstalledVersion, null));
             if (smokePlan.ContestedItems.Any() && resolver.SelectorsInTree() == 0)
             {
                 Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");
@@ -215,6 +230,32 @@ public static class Program
             return 0;
         }
 
+        if (profileList)
+        {
+            var penv = GameEnv.Locate(gameRoot);
+            var profiles = ProfileStore.List(penv.LoadingOrderPath);
+            if (json)
+                Console.WriteLine(JsonReport.ProfilesJson(profiles));
+            else if (profiles.Count == 0)
+                Console.WriteLine("No saved profiles for this install.");
+            else
+                foreach (var p in profiles)
+                    Console.WriteLine($"{p.Name}  ({p.ModCount} mods" +
+                        (p.SavedGameVersion is { Length: > 0 } v ? $", game {v}" : "") +
+                        (p.SavedAt is { Length: > 0 } s ? $", saved {s}" : "") + ")");
+            return 0;
+        }
+
+        if (profileSave is not null)
+        {
+            var senv = GameEnv.Locate(gameRoot);
+            var profile = Profile.Capture(Engine.Analyze(senv).Analysis, profileSave, senv.InstalledVersion, DateTime.Now.ToString("o"));
+            ProfileStore.Save(senv.LoadingOrderPath, profile);
+            OpLog.Add($"[cli] Saved profile '{profileSave}' ({profile.ModCount} mods).");
+            Console.WriteLine($"Saved profile '{profileSave}' ({profile.ModCount} mods) for {senv.GameRoot}.");
+            return 0;
+        }
+
         if (smokeUndo)
         {
             var env0 = GameEnv.Locate(gameRoot);
@@ -243,15 +284,29 @@ public static class Program
         }
 
         // bare launch (or explicit --gui) = the app's face
-        if (gui || (!report && !apply && !patch && !unpatch))
+        if (gui || (!report && !apply && !patch && !unpatch && profileLoad is null))
             return RunGui(gameRoot);
 
         var env = GameEnv.Locate(gameRoot);
         var state = Engine.Analyze(env, tidy);
         var performed = new List<string>();
 
-        if (apply || patch || unpatch)
+        if (apply || patch || unpatch || profileLoad is not null)
             GateNoRival(state.Analysis.Ffu, allowRival, "modify");
+
+        if (profileLoad is not null)
+        {
+            var profile = ProfileStore.Load(env.LoadingOrderPath, profileLoad)
+                ?? throw new InvalidOperationException($"no saved profile named '{profileLoad}' (see --profile-list).");
+            GateGameClosed("--profile-load");
+            var switchPlan = ProfileSwitch.Plan(env, state.Analysis, profile, merge ? SwitchMode.Merge : SwitchMode.Replace);
+            state.Lo.Write(switchPlan.NewOrder);
+            performed.Add($"Switched to profile '{profile.Name}' ({(merge ? "merge-append" : "replace")}, {switchPlan.NewOrder.Count} entries).");
+            if (switchPlan.Missing.Count > 0)
+                performed.Add($"{switchPlan.Missing.Count} profile mod(s) not installed, skipped: " +
+                              string.Join(", ", switchPlan.Missing.Select(m => m.DisplayName)) + ".");
+            state = Engine.Analyze(env, tidy);
+        }
 
         if (unpatch)
         {

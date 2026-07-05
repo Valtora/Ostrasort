@@ -250,6 +250,32 @@
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
+            <TabItem x:Name="TabProfiles" Header="Profiles">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8,2,8,8">
+                        <Button x:Name="BtnProfileSave" Content="Save current…" Padding="10,4" Click="ProfileSave_Click"
+                                ToolTip="Save the current load order as a named profile you can switch back to later."/>
+                        <Button x:Name="BtnProfileSwitch" Content="Switch…" Padding="10,4" Margin="8,0,0,0" Click="ProfileSwitch_Click"
+                                ToolTip="Load the selected profile — shows a diff and a Replace / Merge-append choice before writing anything."/>
+                        <Button x:Name="BtnProfileRename" Content="Rename…" Padding="10,4" Margin="8,0,0,0" Click="ProfileRename_Click"/>
+                        <Button x:Name="BtnProfileDelete" Content="Delete" Padding="10,4" Margin="8,0,0,0" Click="ProfileDelete_Click"
+                                ToolTip="Delete the saved profile. This removes only the profile, never any mods."/>
+                        <TextBlock x:Name="TxtProfileHint" Foreground="Gray" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                    </StackPanel>
+                    <ListBox x:Name="ListProfiles" Margin="8" SelectionChanged="Profiles_SelectionChanged"
+                             MouseDoubleClick="Profiles_DoubleClick"
+                             ToolTip="Saved load-order sets for this install. Select one, then Switch… to load it.">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="2,3">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"/>
+                                    <TextBlock Text="{Binding Detail}" Foreground="Gray" FontSize="11.5"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
         </TabControl>
 
         <!-- action bar -->

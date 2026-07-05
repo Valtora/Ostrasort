@@ -32,14 +32,25 @@ public static class OrderChangeView
         lines.Add(new ViewLine("", LineSev.Normal, 0));
 
         // before vs after, side by side
-        var cur = a.Registered.Select(m => m.Raw).ToList();
-        var sug = a.SuggestedOrder;
-        lines.Add(new ViewLine(Row("#", "current order", "#", "suggested order"), LineSev.Normal, 0, true));
-        var n = Math.Max(cur.Count, sug.Count);
+        lines.AddRange(SideBySide(a, a.Registered.Select(m => m.Raw).ToList(), a.SuggestedOrder,
+            "current order", "suggested order"));
+        return lines;
+    }
+
+    /// <summary>
+    /// Two ordered lists rendered side by side with friendly names, changed rows
+    /// highlighted - the bare comparison used by both the suggested-order diff
+    /// and the profile-switch preview.
+    /// </summary>
+    public static List<ViewLine> SideBySide(Analysis a, IReadOnlyList<string> left, IReadOnlyList<string> right,
+                                            string leftHeader, string rightHeader)
+    {
+        var lines = new List<ViewLine> { new(Row("#", leftHeader, "#", rightHeader), LineSev.Normal, 0, true) };
+        var n = Math.Max(left.Count, right.Count);
         for (var i = 0; i < n; i++)
         {
-            var lRaw = i < cur.Count ? cur[i] : null;
-            var rRaw = i < sug.Count ? sug[i] : null;
+            var lRaw = i < left.Count ? left[i] : null;
+            var rRaw = i < right.Count ? right[i] : null;
             var line = Row(
                 lRaw is null ? "" : (i + 1).ToString(), lRaw is null ? "" : Friendly(a, lRaw),
                 rRaw is null ? "" : (i + 1).ToString(), rRaw is null ? "" : Friendly(a, rRaw));

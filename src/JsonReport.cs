@@ -73,6 +73,7 @@ public static class JsonReport
                 ["evidence"] = new JsonArray(ffu.Evidence.Select(e => (JsonNode)e).ToArray()),
             },
             ["ignorePatterns"] = new JsonArray(a.IgnorePatterns.Select(p => (JsonNode)p).ToArray()),
+            ["profiles"] = new JsonArray(ProfileStore.List(env.LoadingOrderPath).Select(p => (JsonNode)ProfileNode(p)).ToArray()),
             ["mods"] = mods,
             ["collisions"] = collisions,
             ["patch"] = new JsonObject
@@ -100,6 +101,20 @@ public static class JsonReport
         };
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
+
+    /// <summary>A saved profile's metadata (also used by --profile-list --json).</summary>
+    public static JsonObject ProfileNode(Profile p) => new()
+    {
+        ["name"] = p.Name,
+        ["savedAt"] = p.SavedAt,
+        ["savedGameVersion"] = p.SavedGameVersion,
+        ["mods"] = p.ModCount,
+        ["entries"] = new JsonArray(p.Raws.Select(r => (JsonNode)r).ToArray()),
+    };
+
+    public static string ProfilesJson(IEnumerable<Profile> profiles) =>
+        new JsonArray(profiles.Select(p => (JsonNode)ProfileNode(p)).ToArray())
+            .ToJsonString(new JsonSerializerOptions { WriteIndented = true });
 
     private static JsonObject ModNode(ModEntry m, int? position, GameEnv env)
     {

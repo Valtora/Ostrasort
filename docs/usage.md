@@ -42,7 +42,7 @@ generated patch mod entirely.
 
 The table lists every mod in load order with its name, source
 (game/Workshop/local/generated), class, data-object counts, Workshop ID, and
-any problems. Below it, four tabs:
+any problems. Below it, a row of tabs:
 
 - **Collisions** — who claims the same objects and whether the order handles
   it, including field-level analysis of non-shop overrides. Only **active**
@@ -60,6 +60,8 @@ any problems. Below it, four tabs:
   restores, undo/redo), and a viewer for the game's own logs (Player.log and
   the BepInEx log) so you can see what happened after a launch. Copy or open
   any of them.
+- **Profiles** — save named load orders and switch between them (see
+  [Profiles](#profiles) below).
 
 Nothing is written until you press a button, every `loading_order.json` write
 keeps a `.bak`, and all writes are disabled while the game is running.
@@ -103,6 +105,38 @@ Ctrl+Z / Ctrl+Y (or the toolbar buttons) cover every key operation for the
 session: applied load orders, patch generation and refreshes — **including
 your conflict-resolution decisions, which live inside the patch** — patch
 removal, `.bak` restores, and individual drag moves before you apply them.
+
+## Profiles
+
+A **profile** is a named load order you can save and switch back to — one for a
+vanilla-plus run, one for an FFU stack, one for testing a single mod. The
+**Profiles** tab lists the profiles saved for this install:
+
+- **Save current…** snapshots the current load order — each mod, its position,
+  and its enabled/`|disabled` state — under a name you choose. It captures your
+  mods only, not the generated Ostrasort Patch (that's rebuilt per setup) or the
+  global ignore / `aIgnorePatterns` lists (those stay put across profiles).
+- **Switch…** shows the current order and the profile side by side, with a
+  choice of how to apply it:
+  - **Replace** (default) — the profile becomes your whole load order; mods it
+    doesn't list drop out of the order (their files stay on disk, and any
+    unregistered local mod is flagged as usual). Use this to move cleanly
+    between different setups.
+  - **Merge-append** — apply the profile, then keep any currently registered
+    mods it doesn't mention, added at the end. Use this to layer a profile on
+    top of what you already have.
+
+  Mods in the profile that are no longer installed are skipped and reported —
+  switching never fails on a missing mod.
+- **Rename** / **Delete** manage saved profiles; deleting one never touches any
+  mod.
+
+Switching writes through the same guarded ritual as everything else — a `.bak`
+and a rolling backup are kept, it's undoable with **Ctrl+Z**, and it's disabled
+while the game is running or the OstraAutoloader manages the install. After a
+switch, Ostrasort re-checks whether the new setup needs a conflict patch and
+lights up the **Patch** tab if so. Profiles are stored per install under
+`%LOCALAPPDATA%\Ostrasort\profiles`.
 
 ## The conflict resolver
 
@@ -210,6 +244,12 @@ Ostrasort.exe --patch     generate/refresh the patch; contested items open the
                           resolver window unless headless
 Ostrasort.exe --fresh     with --patch: discard all stored decisions and rebuild
 Ostrasort.exe --unpatch   remove the generated patch mod
+Ostrasort.exe --profile-list          list saved load-order profiles for this install
+Ostrasort.exe --profile-save <name>   save the current load order as a named profile
+Ostrasort.exe --profile-load <name>   switch to a saved profile: Replace by default (mods it
+                          doesn't list drop from the order; missing mods are skipped and
+                          reported), or add --merge to keep current mods it omits, appended
+                          at the end. Mutually exclusive with --apply
 Ostrasort.exe --tidy      opt-in cosmetic grouping in the suggested order
 Ostrasort.exe --no-gui    like --headless but only for the resolver: contested items
                           fall back to the later-loaded mod's entry, marked for review

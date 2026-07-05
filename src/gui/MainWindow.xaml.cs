@@ -18,6 +18,7 @@ public sealed record LineVm(string Text, Brush Brush, Thickness Margin, bool Bol
 {
     public FontWeight Weight => Bold ? FontWeights.Bold : FontWeights.Normal;
 }
+public sealed record ProfileRow(string Name, string Detail, Profile Profile);
 
 public partial class MainWindow : Window
 {
@@ -112,6 +113,7 @@ public partial class MainWindow : Window
 
         RenderFfuBanner(s);
         RenderTabs(s);
+        RenderProfiles();
         UpdateActionBar(s);
         RenderLogs();
     }
@@ -442,6 +444,8 @@ public partial class MainWindow : Window
         }
         LinkReset.Inlines.Clear();
         LinkReset.Inlines.Add(_manualDirty ? "reset arrangement" : "");
+
+        UpdateProfileButtons();
     }
 
     private static LineVm L(string text, Brush brush, int indent = 0, bool bold = false) =>
@@ -1063,6 +1067,147 @@ public partial class MainWindow : Window
     private void MenuCopyId_Click(object sender, RoutedEventArgs e)
     {
         if (ModsGrid.SelectedItem is ModRow { M.WorkshopId: { } id }) Clipboard.SetText(id);
+    }
+
+    // --------------------------------------------------------------- profiles ---
+
+    private void RenderProfiles()
+    {
+        if (ListProfiles is null) return;
+        var selectedName = (ListProfiles.SelectedItem as ProfileRow)?.Name;
+        var rows = ProfileStore.List(_env.LoadingOrderPath)
+            .Select(p => new ProfileRow(p.Name, DetailFor(p), p)).ToList();
+        ListProfiles.ItemsSource = rows;
+        if (selectedName is not null)
+            ListProfiles.SelectedItem = rows.FirstOrDefault(r => string.Equals(r.Name, selectedName, StringComparison.OrdinalIgnoreCase));
+        UpdateProfileButtons();
+    }
+
+    private static string DetailFor(Profile p)
+    {
+        var bits = new List<string> { $"{p.ModCount} mod(s)" };
+        if (DateTime.TryParse(p.SavedAt, out var d)) bits.Add($"saved {d:yyyy-MM-dd HH:mm}");
+        if (p.SavedGameVersion is { Length: > 0 } v) bits.Add($"game {v}");
+        return string.Join("   ·   ", bits);
+    }
+
+    /// <summary>Save is always available (read-only); switching writes, so it follows the game/rival gates.</summary>
+    private void UpdateProfileButtons()
+    {
+        if (BtnProfileSave is null) return;   // called from UpdateActionBar during XAML init
+        var running = GameEnv.IsGameRunning();
+        var rivalLock = _state?.Analysis.Ffu is { AutoloaderActive: true };
+        var hasSel = ListProfiles?.SelectedItem is ProfileRow;
+        BtnProfileSave.IsEnabled = _state is not null && !_manualDirty;
+        BtnProfileSwitch.IsEnabled = hasSel && !running && !rivalLock;
+        BtnProfileRename.IsEnabled = hasSel;
+        BtnProfileDelete.IsEnabled = hasSel;
+        TxtProfileHint.Text =
+            _manualDirty ? "apply or reset your manual arrangement before saving a profile"
+            : running ? "close the game to switch profiles"
+            : rivalLock ? "OstraAutoloader manages this install — switching is disabled"
+            : (ListProfiles?.Items.Count ?? 0) == 0 ? "no profiles yet — “Save current…” makes one from the live order"
+            : "";
+    }
+
+    private void Profiles_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateProfileButtons();
+
+    private void Profiles_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ListProfiles.SelectedItem is ProfileRow) ProfileSwitch_Click(sender, e);
+    }
+
+    private void ProfileSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null) return;
+        if (_manualDirty)
+        {
+            MessageBox.Show(this, "You have an unapplied manual arrangement. Apply or reset it first, then save the " +
+                "profile from the on-disk order.", "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        var name = PromptDialog.Ask(this, "Name this profile (saves the current load order):");
+        if (name is null) return;
+        if (ProfileStore.Exists(_env.LoadingOrderPath, name) &&
+            MessageBox.Show(this, $"A profile named “{name}” already exists. Overwrite it?",
+                "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+        try
+        {
+            var profile = Profile.Capture(_state.Analysis, name, _env.InstalledVersion, DateTime.Now.ToString("o"));
+            ProfileStore.Save(_env.LoadingOrderPath, profile);
+            OpLog.Add($"Saved profile '{name}' ({profile.ModCount} mods).");
+            RenderProfiles();
+            SelectProfile(name);
+            RunStatus.Text = $"Profile '{name}' saved.  ";
+            RunStatus.Foreground = Good;
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
+    private void ProfileSwitch_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null || ListProfiles.SelectedItem is not ProfileRow row || !GateRunning()) return;
+        var dlg = new ProfileSwitchDialog(_env, _state.Analysis, row.Profile) { Owner = this };
+        if (dlg.ShowDialog() != true || dlg.Result is not { } plan) return;
+        _busy = true;
+        try
+        {
+            CaptureOp($"switch to profile '{row.Name}'");
+            LoadOrderFile.Read(_env.LoadingOrderPath).Write(plan.NewOrder);
+            OpLog.Add($"Switched to profile '{row.Name}' ({plan.Mode.ToString().ToLowerInvariant()}, {plan.NewOrder.Count} entries).");
+            foreach (var m in plan.Missing) OpLog.Add($"  profile mod not installed, skipped: {m.DisplayName} ({m.Raw}).");
+            Rescan();
+            var msg = $"Switched to '{row.Name}'.";
+            if (plan.Missing.Count > 0)
+                msg += $"\n\n{plan.Missing.Count} mod(s) from the profile are no longer installed and were skipped:\n• " +
+                       string.Join("\n• ", plan.Missing.Select(m => m.DisplayName));
+            MessageBox.Show(this, msg, "Ostrasort", MessageBoxButton.OK,
+                plan.Missing.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error); }
+        finally { _busy = false; }
+    }
+
+    private void ProfileRename_Click(object sender, RoutedEventArgs e)
+    {
+        if (ListProfiles.SelectedItem is not ProfileRow row) return;
+        var name = PromptDialog.Ask(this, "New name for this profile:", row.Name);
+        if (name is null || string.Equals(name, row.Name, StringComparison.Ordinal)) return;
+        if (ProfileStore.Exists(_env.LoadingOrderPath, name))
+        {
+            MessageBox.Show(this, $"A profile named “{name}” already exists.", "Ostrasort",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        try
+        {
+            ProfileStore.Rename(_env.LoadingOrderPath, row.Name, name);
+            OpLog.Add($"Renamed profile '{row.Name}' to '{name}'.");
+            RenderProfiles();
+            SelectProfile(name);
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
+    private void ProfileDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (ListProfiles.SelectedItem is not ProfileRow row) return;
+        if (MessageBox.Show(this, $"Delete profile “{row.Name}”? This removes only the saved profile, not any mods.",
+                "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        try
+        {
+            ProfileStore.Delete(_env.LoadingOrderPath, row.Name);
+            OpLog.Add($"Deleted profile '{row.Name}'.");
+            RenderProfiles();
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
+    private void SelectProfile(string name)
+    {
+        if (ListProfiles.ItemsSource is IEnumerable<ProfileRow> rows)
+            ListProfiles.SelectedItem = rows.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     // ----------------------------------------------------- window behaviour ---
