@@ -4,21 +4,6 @@ Planned features, roughly in order of intent. Correctness fixes don't live
 here — they ship as soon as they're found. Shipped items move to the release
 notes and get deleted from this file.
 
-## Especially desired: Dark mode
-
-.NET's WPF Fluent theming (`ThemeMode`) can supply the chrome, but the app
-draws its own severity colours (hardcoded `Brushes.Black`/`Gray`/`Green`/
-`Firebrick` etc. in `MainWindow.xaml.cs`, plus the banner backgrounds), so
-the real work is a brush audit:
-
-- Move all severity brushes into theme-aware resources (light + dark
-  palettes), including the FFU banner backgrounds and the row dim/warn/bad
-  colours.
-- Respect the system theme by default; a manual toggle persisted in
-  `GuiSettings` for people who want to pin it.
-- Check every hand-built control (resolver rows, take-all buttons, restore
-  menu) against both palettes.
-
 ## Two-way merge for mod-added objects
 
 Two mods adding the *same new* object (no core ancestor) is currently

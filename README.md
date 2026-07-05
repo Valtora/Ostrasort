@@ -3,14 +3,14 @@
 # Ostrasort
 
 A load-order and conflict manager for **Ostranauts** (Blue Bottle Games).
-Run it before you launch the game — it reads your whole mod setup and helps
-you get it into a working state.
+Run it before you launch the game — it reads your whole mod setup, gets it into
+a working state, and keeps it that way.
 
-Ostrasort is built to do two things:
+Two jobs are the heart of it:
 
-1. **Figure out the best mod load order.** It scans core plus every local and
-   Workshop-subscribed mod, classifies each one, and suggests a
-   `loading_order.json` that satisfies the rules (BepInEx after core, shop
+1. **Figure out the best mod load order.** It scans core plus every local,
+   Steam-Workshop, and `BepInEx\plugins` mod, classifies each one, and suggests
+   a `loading_order.json` that satisfies the rules (BepInEx after core, shop
    pools ordered correctly, dead entries pruned, unregistered mods surfaced)
    — with minimal churn to what you already have.
 2. **Resolve mod conflicts.** When two mods change the same thing, the game
@@ -19,6 +19,31 @@ Ostrasort is built to do two things:
    (per-item union) and **game objects** (field-by-field, with the base game
    as the common ancestor) — while **you** decide anything the mods genuinely
    disagree on.
+
+Around those two jobs it works as a complete mod manager:
+
+- **Profiles** — save the current load order as a named profile (a
+  vanilla-plus run, an FFU stack, a single-mod test) and switch between setups
+  with a diff preview, either **replacing** the whole order or **merging** the
+  profile over what you already have. Mods a profile references that are no
+  longer installed are skipped and reported, never a hard failure.
+- **In-place mod management** — from the mod table, **enable / disable** a mod
+  (the game's own `|disabled` marker), **ignore** an unregistered folder you
+  keep parked, **remove** a mod (park it as `.disabled` or delete it), or
+  **unsubscribe** a Workshop item.
+- **Manual control** — drag rows to reorder by hand with live rule-violation
+  checks, or apply the suggested order in one click. **Organise Mods by Class**
+  optionally groups the list for readability.
+- **Backups & undo** — every `loading_order.json` write keeps a `.bak` **and** a
+  rolling backup history; **Make backup** snapshots on demand, **Restore
+  backup** picks any restore point, and **Ctrl+Z / Ctrl+Y** undo/redo covers
+  every operation. All writes are atomic and refused while the game is running.
+- **Light / dark / system theming**, a **Logs** tab (Ostrasort's own log plus
+  the game's `Player.log` and the BepInEx log), and an update checker that runs
+  on launch and on demand (**Check for updates**).
+- **Scriptable** — a console mode drives every capability: `--report`, `--json`
+  (machine-readable), `--apply`, `--patch` / `--unpatch`, and
+  `--profile-list` / `--profile-save` / `--profile-load`.
 
 ## Scope — what it can and can't do
 
@@ -84,11 +109,15 @@ installs so it can diagnose them and offer the way out: a one-click, reversible
    console), finds your install automatically, and lists every mod in load
    order.
 4. Read the highlighted tabs, **Apply the suggested order** and **Resolve
-   conflicts** as needed, then launch the game. Ctrl+Z undoes anything.
+   conflicts** as needed, then launch the game. Save a **profile** if you want
+   to come back to this setup, pick a **theme** to taste, and **Ctrl+Z** undoes
+   anything.
 
-Ostrasort checks GitHub for a newer release on startup and shows an **Update
-available** button at the top-right when one exists (silent when you're up to
-date or offline).
+Ostrasort checks GitHub for a newer release on startup — showing an **Update
+available** button at the top-right when one exists — and you can run the check
+yourself any time with the **Check for updates** link (both silent-friendly:
+quiet when you're up to date or offline, with the outcome noted in the Logs
+tab).
 
 > Windows SmartScreen may warn on first run because the exe isn't
 > code-signed — choose *More info → Run anyway*, or unblock it in the file's
@@ -99,14 +128,15 @@ Full walkthrough: **[docs/usage.md](docs/usage.md)**.
 ## Documentation
 
 - **[Using Ostrasort](docs/usage.md)** — the full player guide: the window
-  tour, the conflict resolver, managing the patch, and the command-line
-  reference.
+  tour, profiles, the conflict resolver, managing the patch, and the
+  command-line reference.
 - **[How it works](docs/how-it-works.md)** — load order in Ostranauts, how
-  mods are classified, what collisions Ostrasort detects, and the safety
-  model.
+  mods are classified, what collisions Ostrasort detects, profiles, and the
+  safety model.
 - **[Building & developing](docs/development.md)** — build/publish and the
   code layout.
-- **[Roadmap](ROADMAP.md)** — what's planned next (mod profiles, dark mode,
+- **[Roadmap](ROADMAP.md)** — what's planned next (two-way merge for
+  mod-added objects, a collision drill-down view, friendlier loot-pool names,
   …) and what deliberately isn't.
 
 ## Licence / disclaimer
