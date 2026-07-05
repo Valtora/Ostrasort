@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- WinExe (GUI subsystem): no console window flashes up on double-click.
+         The console paths still print - Program.Main attaches to the parent
+         terminal's console when launched from one (see AttachConsole). -->
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <AssemblyName>Ostrasort</AssemblyName>
     <RootNamespace>Ostrasort</RootNamespace>
-    <Version>0.10.0</Version>
+    <Version>0.11.0</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>app.ico</ApplicationIcon>

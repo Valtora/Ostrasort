@@ -10,6 +10,12 @@ it manually with `--game <path>`.)
 On first run Windows SmartScreen may warn because the exe isn't code-signed —
 choose *More info → Run anyway*, or unblock it in the file's Properties.
 
+Ostrasort opens straight to its window — no console window appears. It also
+checks GitHub for a newer release each time it starts; if one exists, an
+**Update available: vX.Y.Z** button appears at the top-right — click it to open
+the Releases page and download the new build. (This check is silent when you're
+already up to date, offline, or rate-limited.)
+
 > Close Ostranauts first — Ostrasort disables all writes while the game is
 > running.
 

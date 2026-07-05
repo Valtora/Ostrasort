@@ -926,6 +926,14 @@ public partial class MainWindow : Window
 
     // ---------------------------------------------------------- update check ---
 
+    private const string ReleasesUrl = "https://github.com/Valtora/Ostrasort/releases";
+    private string _updateUrl = ReleasesUrl;
+
+    /// <summary>
+    /// Compares this build against the latest GitHub release; when a newer one
+    /// exists, surfaces the Update button (which opens the Releases page to
+    /// download it). Silent on offline / rate-limited / no-releases.
+    /// </summary>
     private async Task CheckForUpdateAsync()
     {
         try
@@ -936,10 +944,10 @@ public partial class MainWindow : Window
             var url = doc.RootElement.TryGetProperty("html_url", out var u) ? u.GetString() : null;
             if (ParseVersion(tag) > ParseVersion(Program.Version))
             {
-                LinkUpdate.Inlines.Clear();
-                LinkUpdate.Inlines.Add($"{tag} available");
-                LinkUpdate.NavigateUri = new Uri(url ?? "https://github.com/Valtora/Ostrasort/releases");
-                TxtUpdate.Visibility = Visibility.Visible;
+                _updateUrl = url ?? ReleasesUrl;
+                BtnUpdate.Content = $"⬆  Update available: {tag}";
+                BtnUpdate.Visibility = Visibility.Visible;
+                OpLog.Add($"A newer release is available: {tag} (you are on v{Program.Version}).");
             }
         }
         catch { /* offline, rate-limited, or no releases yet - stay quiet */ }
@@ -948,9 +956,6 @@ public partial class MainWindow : Window
     private static Version ParseVersion(string s) =>
         Version.TryParse(s.TrimStart('v', 'V').Split('+', '-')[0], out var v) ? v : new Version(0, 0);
 
-    private void Update_Click(object sender, RoutedEventArgs e)
-    {
-        if (LinkUpdate.NavigateUri is { } uri)
-            Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
-    }
+    private void Update_Click(object sender, RoutedEventArgs e) =>
+        Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
 }

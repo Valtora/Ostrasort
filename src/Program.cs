@@ -25,7 +25,7 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        var noPause = args.Contains("--no-pause") || args.Contains("--headless");
+        AttachConsoleIfLaunchedFromTerminal(args);   // before any Console access
         int code;
         var ranGui = false;
         try { code = Run(args, ref ranGui); }
@@ -34,7 +34,6 @@ public static class Program
             Console.Error.WriteLine($"ostrasort: {e.Message}");
             code = 1;
         }
-        if (!ranGui) PauseIfDoubleClicked(noPause);
         return code;
     }
 
@@ -318,11 +317,7 @@ public static class Program
         return Engine.Actionable(state) ? 2 : 0;
     }
 
-    private static int RunGui(string? gameRoot)
-    {
-        HideOwnConsole();
-        return Gui.GuiHost.RunMainWindow(gameRoot);
-    }
+    private static int RunGui(string? gameRoot) => Gui.GuiHost.RunMainWindow(gameRoot);
 
     private static void GateGameClosed(string action)
     {
@@ -351,42 +346,27 @@ public static class Program
 
     // ------------------------------------------------------- console plumbing ---
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern uint GetConsoleProcessList(uint[] processList, uint processCount);
-
     [DllImport("kernel32.dll")]
-    private static extern IntPtr GetConsoleWindow();
-
-    [DllImport("user32.dll")]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    private static bool OwnsConsoleAlone()
-    {
-        try { return GetConsoleProcessList(new uint[2], 2) == 1; }
-        catch { return false; }
-    }
-
-    /// <summary>Double-clicked into GUI mode: hide the console window we spawned - it is just noise.</summary>
-    private static void HideOwnConsole()
-    {
-        if (OwnsConsoleAlone()) ShowWindow(GetConsoleWindow(), 0 /* SW_HIDE */);
-    }
+    private static extern bool AttachConsole(int dwProcessId);
+    private const int ATTACH_PARENT_PROCESS = -1;
 
     /// <summary>
-    /// When a console path was launched from Explorer we are the console's only
-    /// process and the window vanishes the instant we exit - hold it open so
-    /// the report is readable. From a terminal (or with --no-pause) it's a no-op.
+    /// Ostrasort ships as a WinExe (GUI subsystem), so double-clicking it opens
+    /// the window with no console flashing up behind it. The console paths still
+    /// need to print, so when we were launched from a terminal - and stdout is
+    /// not already redirected to a pipe/file (automation, shell redirection) -
+    /// attach to that terminal's console and point Console.Out/Error at it.
+    /// A pure double-click has no parent console, so AttachConsole simply fails
+    /// and we stay silent. Must run before any Console access so the reopened
+    /// writers take effect.
     /// </summary>
-    private static void PauseIfDoubleClicked(bool noPause)
+    private static void AttachConsoleIfLaunchedFromTerminal(string[] args)
     {
-        if (noPause) return;
-        try
-        {
-            if (!OwnsConsoleAlone()) return;
-            Console.WriteLine();
-            Console.Write("Press any key to close...");
-            Console.ReadKey(intercept: true);
-        }
-        catch { /* no console at all (redirected) - nothing to hold open */ }
+        if (args.Length == 0) return;                      // bare launch = GUI only, never needs a console
+        if (Console.IsOutputRedirected) return;            // piped/file handles are already valid - don't steal them
+        if (!AttachConsole(ATTACH_PARENT_PROCESS)) return; // no parent console (double-clicked a flagged shortcut)
+
+        Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+        Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
     }
 }

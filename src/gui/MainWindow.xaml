@@ -30,10 +30,11 @@
                 <Image Source="/Ostrasort-logo.png" Height="78" HorizontalAlignment="Right"
                        RenderOptions.BitmapScalingMode="HighQuality"
                        ToolTip="Ostrasort"/>
-                <TextBlock x:Name="TxtUpdate" Margin="0,6,0,0" HorizontalAlignment="Right"
-                           Visibility="Collapsed">
-                    <Hyperlink x:Name="LinkUpdate" Click="Update_Click"/>
-                </TextBlock>
+                <Button x:Name="BtnUpdate" Margin="0,6,0,0" HorizontalAlignment="Right"
+                        Visibility="Collapsed" Padding="10,3" Cursor="Hand" FontWeight="SemiBold"
+                        Background="#FFF4CE" BorderBrush="#D9A400" Foreground="#8A6D00"
+                        Click="Update_Click"
+                        ToolTip="A newer Ostrasort release is available on GitHub — click to open the Releases page and download it."/>
             </StackPanel>
             <Grid>
                 <Grid.ColumnDefinitions>

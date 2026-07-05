@@ -61,6 +61,16 @@ Operational gotchas:
 used for headless verification. `--smoke-undo` exercises the snapshot
 undo/redo against a fixture install.
 
+**Console model.** The project is a **WinExe** (GUI subsystem), so a
+double-click opens the window with no console flashing up behind it. The
+console paths (`--report`, `--headless`, `--version`, `--help`, error text)
+still print: `Program.Main` calls `AttachConsole(ATTACH_PARENT_PROCESS)` when
+launched from a terminal and reopens `Console.Out/Error` onto it. It skips the
+attach when stdout is already redirected to a pipe/file (automation, shell
+redirection, the smoke tests), so captured output is never stolen. A pure
+double-click has no parent console, so the attach simply fails and the app
+stays silent — exactly what a GUI wants.
+
 ## Tests
 
 Unit tests live in `tests\Ostrasort.Tests.csproj` (xUnit) and cover the pure

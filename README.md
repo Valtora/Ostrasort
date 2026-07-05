@@ -80,10 +80,15 @@ installs so it can diagnose them and offer the way out: a one-click, reversible
 1. **Download `Ostrasort.exe`** from the
    [latest release](https://github.com/Valtora/Ostrasort/releases/latest).
 2. **Close Ostranauts** (Ostrasort won't write while the game is running).
-3. **Double-click `Ostrasort.exe`.** It finds your install automatically and
-   lists every mod in load order.
+3. **Double-click `Ostrasort.exe`.** It opens straight to its window (no
+   console), finds your install automatically, and lists every mod in load
+   order.
 4. Read the highlighted tabs, **Apply the suggested order** and **Resolve
    conflicts** as needed, then launch the game. Ctrl+Z undoes anything.
+
+Ostrasort checks GitHub for a newer release on startup and shows an **Update
+available** button at the top-right when one exists (silent when you're up to
+date or offline).
 
 > Windows SmartScreen may warn on first run because the exe isn't
 > code-signed — choose *More info → Run anyway*, or unblock it in the file's
