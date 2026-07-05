@@ -80,6 +80,14 @@ keeps a `.bak`, and all writes are disabled while the game is running.
   stops the permanent warning and the "add it" suggestion for a folder you
   deliberately keep parked. *Stop ignoring* brings both back. The preference
   is remembered per install.
+- **Remove mod (park or delete)…** (right-click a local mod) parks its folder
+  as `*.disabled` (reversible — rename it back) or deletes it permanently,
+  and drops its load-order entry either way. Deleted files are **not**
+  restored by Ctrl+Z; parking is the safe default.
+- **Unsubscribe on Steam…** (right-click a Workshop mod) opens the item's
+  page in the Steam client — subscriptions belong to Steam, so unsubscribing
+  is its one-click button there; Steam then removes the files and Ostrasort's
+  next rescan suggests pruning the dead entry.
 - **Tidy grouping** toggles a cosmetic core → infrastructure → code → data
   grouping of the suggested order.
 - **Launch game** starts Ostranauts via Steam; the table **rescans itself**

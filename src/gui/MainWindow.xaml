@@ -163,6 +163,10 @@
                               ToolTip="Stop warning about this unregistered folder and stop suggesting to register it. It stays on disk, invisible to the game, until you register it or stop ignoring it."/>
                     <MenuItem x:Name="MenuUnignore" Header="Stop ignoring" Click="MenuUnignore_Click"
                               ToolTip="Warn about this unregistered folder again and offer to register it."/>
+                    <MenuItem x:Name="MenuDeleteMod" Header="Remove mod (park or delete)…" Click="MenuDeleteMod_Click"
+                              ToolTip="Park the mod folder as *.disabled (reversible) or delete it permanently, and drop its load-order entry either way. Deleted files are NOT restored by Ostrasort's undo."/>
+                    <MenuItem x:Name="MenuUnsubscribe" Header="Unsubscribe on Steam…" Click="MenuUnsubscribe_Click"
+                              ToolTip="Workshop subscriptions belong to Steam, so this opens the item's page in the Steam client - use its Unsubscribe button there, then rescan. Steam removes the files itself."/>
                     <Separator x:Name="MenuStateSeparator"/>
                     <MenuItem x:Name="MenuCopyName" Header="Copy mod name" Click="MenuCopyName_Click"/>
                     <MenuItem x:Name="MenuCopyId" Header="Copy Workshop ID" Click="MenuCopyId_Click"/>

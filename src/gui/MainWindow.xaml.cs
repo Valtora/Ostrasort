@@ -924,9 +924,17 @@ public partial class MainWindow : Window
         var canIgnore = row?.M is { Registered: false, Kind: EntryKind.Local or EntryKind.PluginDir };
         Show(MenuIgnore, canIgnore && row!.M is { Ignored: false });
         Show(MenuUnignore, canIgnore && row!.M is { Ignored: true });
+
+        // removal: local/plugins-dir folders only (Workshop belongs to Steam,
+        // the patch has its own Remove action); unsubscribe: subscriptions only
+        Show(MenuDeleteMod, !rivalLock && row?.M is { Kind: EntryKind.Local or EntryKind.PluginDir, Dir: not null }
+                             && !row.M.IsPatch);
+        Show(MenuUnsubscribe, row?.M is { Kind: EntryKind.Workshop, WorkshopId: not null });
+
         MenuStateSeparator.Visibility =
             MenuDisable.Visibility == Visibility.Visible || MenuEnable.Visibility == Visibility.Visible ||
-            MenuIgnore.Visibility == Visibility.Visible || MenuUnignore.Visibility == Visibility.Visible
+            MenuIgnore.Visibility == Visibility.Visible || MenuUnignore.Visibility == Visibility.Visible ||
+            MenuDeleteMod.Visibility == Visibility.Visible || MenuUnsubscribe.Visibility == Visibility.Visible
                 ? Visibility.Visible : Visibility.Collapsed;
 
         static void Show(MenuItem item, bool visible) =>
@@ -967,6 +975,61 @@ public partial class MainWindow : Window
 
     private void MenuIgnore_Click(object sender, RoutedEventArgs e) => SetIgnored(true);
     private void MenuUnignore_Click(object sender, RoutedEventArgs e) => SetIgnored(false);
+
+    /// <summary>Park a local/plugins-dir mod as *.disabled or delete it, and drop its load-order entry.</summary>
+    private void MenuDeleteMod_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning()) return;
+        var m = row.M;
+        var name = m.DisplayName ?? m.Name;
+        var choice = ParkOrDeleteDialog.Show(this,
+            $"Remove local mod '{name}'?",
+            "Park renames its folder to *.disabled (rename back to restore); Delete removes the files " +
+            "permanently — Ostrasort's undo does NOT bring deleted files back. Its load-order entry is " +
+            "dropped either way (a .bak and a rolling backup are kept).");
+        if (choice == ParkOrDelete.Cancel) return;
+        _busy = true;
+        try
+        {
+            CaptureOp($"remove mod {name}");
+            var result = ModRemoval.RemoveLocal(_env, m, choice == ParkOrDelete.Delete);
+            _ignore.Remove(IgnoreList.KeyFor(_env, m));   // drop any now-stale ignore preference
+            var verb = result.Deleted ? "deleted" : "parked";
+            foreach (var f in result.Affected) OpLog.Add($"Removed mod '{name}' ({verb}): {f}");
+            foreach (var r in result.Unregistered) OpLog.Add($"Removed load-order entry: {r}");
+            Rescan();
+            RunStatus.Text = result.Deleted
+                ? $"'{name}' deleted and unregistered.  "
+                : $"'{name}' parked as .disabled and unregistered — rename the folder back to restore it.  ";
+            RunStatus.Foreground = Good;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    /// <summary>
+    /// True unsubscribing needs an authenticated Steamworks session under the
+    /// game's app id, so Steam keeps ownership: open the item's page in the
+    /// Steam client, where Unsubscribe is one click.
+    /// </summary>
+    private void MenuUnsubscribe_Click(object sender, RoutedEventArgs e)
+    {
+        if (ModsGrid.SelectedItem is not ModRow { M: { Kind: EntryKind.Workshop, WorkshopId: { } id } m }) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo($"steam://url/CommunityFilePage/{id}") { UseShellExecute = true });
+            OpLog.Add($"Opened Steam page for {m.DisplayName ?? id} [{id}] to unsubscribe.");
+            RunStatus.Text = "Steam opened — press Unsubscribe on the item's page, then rescan here.  ";
+            RunStatus.Foreground = Dim;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     /// <summary>Persists "leave this folder unregistered" (no game files touched).</summary>
     private void SetIgnored(bool ignored)
