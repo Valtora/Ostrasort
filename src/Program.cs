@@ -83,8 +83,10 @@ public static class Program
                                       (source picks AND exclusions) and rebuild from scratch
                           --unpatch   remove the generated patch mod and its load-order entry
                           --allow-rival-stack
-                                      proceed on an FFU/Thunderstore (OstraAutoloader) install;
-                                      by default every write is refused there
+                                      write even while Robyn's OstraAutoloader is installed;
+                                      by default writes are refused there because the autoloader
+                                      regenerates loading_order.json at every game launch
+                                      (FFU itself is supported and never blocks)
 
                           --tidy      opt-in cosmetic grouping in the suggestion: core,
                                       infrastructure, code, shells, additive data, overrides, patch
@@ -117,7 +119,6 @@ public static class Program
             _ = new Gui.MainWindow(smokeEnv);                                       // ctor runs a full rescan/render
             var smokePlan = Patcher.PlanMerge(smokeEnv, smokeState.Analysis);
             var resolver = new Gui.ResolverDialog(smokePlan);
-            _ = new Gui.RivalStackDialog(new RivalStack(true, true, true, new[] { "self-test evidence" }));
             if (smokePlan.ContestedItems.Any() && resolver.SelectorsInTree() == 0)
             {
                 Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");
@@ -131,7 +132,7 @@ public static class Program
         {
             var nenv = GameEnv.Locate(gameRoot);
             if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
-            GateNoRival(RivalStack.Detect(nenv), allowRival, "normalize the load order");
+            GateNoRival(FfuContext.Detect(nenv), allowRival, "normalize the load order");
             var nlo = LoadOrderFile.Read(nenv.LoadingOrderPath);
             var before = nlo.Order.ToList();
             nlo.Write(nlo.Order);                        // Write canonicalises case + drops duplicates
@@ -154,10 +155,11 @@ public static class Program
         {
             var env0 = GameEnv.Locate(gameRoot);
             var before = UndoOps.Capture(env0, "baseline");
-            var plan0 = Patcher.PlanMerge(env0, Engine.Analyze(env0).Analysis);
+            var state0 = Engine.Analyze(env0);
+            var plan0 = Patcher.PlanMerge(env0, state0.Analysis);
             if (plan0.IsEmpty) { Console.Error.WriteLine("smoke-undo needs a fixture with conflicts"); return 1; }
             Patcher.ResolveFallback(plan0);
-            Patcher.Generate(env0, plan0, env0.InstalledVersion, Version);
+            Patcher.Generate(env0, plan0, state0.Analysis, env0.InstalledVersion, Version);
             var after = UndoOps.Capture(env0, "patched");
 
             UndoOps.Restore(env0, before);                       // undo the generate
@@ -188,7 +190,7 @@ public static class Program
         var performed = new List<string>();
 
         if (apply || patch || unpatch)
-            GateNoRival(state.Analysis.Rival, allowRival, "modify");
+            GateNoRival(state.Analysis.Ffu, allowRival, "modify");
 
         if (unpatch)
         {
@@ -230,8 +232,8 @@ public static class Program
                         return 2;
                     }
                 }
-                var result = Patcher.Generate(env, plan, env.InstalledVersion, Version);
-                performed.Add($"Generated the Ostrasort Patch (registered last): {string.Join("; ", result.Merged)}");
+                var result = Patcher.Generate(env, plan, state.Analysis, env.InstalledVersion, Version);
+                performed.Add($"Generated the Ostrasort Patch (registered after everything it merges): {string.Join("; ", result.Merged)}");
                 foreach (var w in result.SchemaWarnings)
                     performed.Add($"  schema warning (best-effort merge, verify in game): {w}");
                 state = Engine.Analyze(env, tidy);
@@ -264,18 +266,22 @@ public static class Program
     }
 
     /// <summary>
-    /// Refuse to write on an install that runs a rival, non-Workshop load-order
-    /// manager (FFU / Robyn's OstraAutoloader) - they generate loading_order.json
-    /// themselves, so writing here would fight them. Overridable with
+    /// Refuse to write while Robyn's OstraAutoloader is installed: it rewrites
+    /// loading_order.json from scratch at EVERY game launch (keeping only
+    /// Autoload.Meta.toml-tagged mods), so anything written here would be
+    /// undone and unmanaged local mods silently dropped. FFU itself is fine -
+    /// Ostrasort applies its ordering rules. Overridable with
     /// --allow-rival-stack for anyone who knows what they're doing.
     /// </summary>
-    private static void GateNoRival(RivalStack? rival, bool allow, string action)
+    private static void GateNoRival(FfuContext? ffu, bool allow, string action)
     {
-        if (rival is { } r && !allow)
+        if (ffu is { AutoloaderActive: true } && !allow)
             throw new InvalidOperationException(
-                $"FFU / Thunderstore stack detected ({r.Summary}). Ostrasort is Steam-Workshop-only and won't {action} " +
-                "on this install - Robyn's OstraAutoloader manages loading_order.json itself, so the two fight and will " +
-                "likely break your FFU setup. Use one or the other, not both. Override at your own risk with --allow-rival-stack.");
+                $"OstraAutoloader detected. It regenerates loading_order.json at every game launch, so Ostrasort won't {action} " +
+                "on this install - the write would be undone at the next launch, and local mods without an Autoload.Meta.toml " +
+                "(plus |edit/|disabled markers) get dropped by the autoloader anyway. Disable/uninstall OstraAutoloader " +
+                "(r2modman: disable it; manual: remove its DLL from BepInEx\\plugins) and let Ostrasort manage the order - " +
+                "it understands FFU load groups, dependencies and plugins-dir mods. Override at your own risk with --allow-rival-stack.");
     }
 
     // ------------------------------------------------------- console plumbing ---

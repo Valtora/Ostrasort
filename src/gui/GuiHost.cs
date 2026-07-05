@@ -14,9 +14,9 @@ public static class GuiHost
             MessageBox.Show(e.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
             return 1;
         }
+        // FFU installs open normally: the main window shows a banner and, while
+        // the OstraAutoloader is active, disables every write (analysis-only).
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
-        if (RivalStack.Detect(env) is { } rival && !RivalStackDialog.Confirm(rival))
-            return 0;   // FFU/Thunderstore stack present and the user chose to quit
         app.Run(new MainWindow(env));
         return 0;
     }

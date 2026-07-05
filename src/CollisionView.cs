@@ -81,7 +81,9 @@ public static class CollisionView
             var anyMergeableObj = cols.Any(c => !c.ResolvedByPatch && c.ObjectMergeable);
             var anyWrongOrder = cols.Any(c => !c.ResolvedByPatch && c.Pairs.Any(p => p.Rel == Relation.SubsetViolation));
             var anyResolved = cols.Any(c => c.ResolvedByPatch);
-            var anyDeadReplace = cols.Any(c => !c.ResolvedByPatch && !c.ObjectMergeable && c.Pairs.Any(p => p.Rel == Relation.NonLoot));
+            var anyFfuMerged = cols.Any(c => !c.ResolvedByPatch && c.FfuMergedAtLoad);
+            var anyDeadReplace = cols.Any(c => !c.ResolvedByPatch && !c.ObjectMergeable && !c.FfuMergedAtLoad &&
+                                               c.Pairs.Any(p => p.Rel == Relation.NonLoot));
             var fixableByPatch = anyLootConflict || anyMergeableObj;
 
             Add(string.Join("   +   ", mods), LineSev.Normal, 0, bold: true);
@@ -108,6 +110,11 @@ public static class CollisionView
             {
                 Add($"Both edit {what} — merged by the Ostrasort Patch, nothing lost.", LineSev.Good, 1);
             }
+            else if (anyFfuMerged)
+            {
+                Add($"Both edit {what} — FFU merges them field-by-field at load, nothing lost", LineSev.Good, 1);
+                Add("(a field changed by several mods goes to the last-loaded one; see the detail below).", LineSev.Good, 1);
+            }
             else if (anyDeadReplace)
             {
                 Add($"Both edit {what}. The game keeps only the last-loaded version and there is", LineSev.Warn, 1);
@@ -123,6 +130,7 @@ public static class CollisionView
                 var p = c.Pairs.LastOrDefault();
                 string outcome =
                     c.ResolvedByPatch ? "merged into the patch"
+                    : c.FfuMergedAtLoad ? "merged by FFU at load"
                     : p is null ? "claimed by multiple mods"
                     : p.Rel == Relation.NonLoot
                         ? (c.ObjectMergeable ? "mergeable — see the field notes below" : $"only {Short(p.Later)}'s version applies")

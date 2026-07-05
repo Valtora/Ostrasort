@@ -13,6 +13,7 @@ public static class Engine
         var analysis = new Analysis
         {
             Registered = lo.Order.Select(raw => ModEntry.Parse(raw, env)).ToList(),
+            Ffu = FfuContext.Detect(env),
         };
         DiscoverUnregistered(env, analysis);
 
@@ -20,11 +21,12 @@ public static class Engine
         scanner.IndexCore();
         foreach (var m in analysis.AllMods) scanner.Scan(m);
 
+        FfuAnalysis.Classify(env, analysis);          // FFU block membership, patch targets, FFU hygiene
         analysis.FindCollisions();
         FieldDiff.Annotate(env, analysis);
         CheckImages(analysis);
         CheckBepInEx(env, analysis);
-        DetectRivalStack(env, analysis);
+        WarnAutoloader(analysis);
         var patch = Patcher.Inspect(env, analysis);   // marks collisions the patch resolves
         analysis.BuildSuggestion(tidy);
         return new EngineState(lo, scanner, analysis, patch);
@@ -94,17 +96,17 @@ public static class Engine
     }
 
     /// <summary>
-    /// Flag a rival, non-Workshop mod framework (Robyn's OstraAutoloader / the
-    /// FFU MonoMod stack from Thunderstore). Both manage loading_order.json
-    /// themselves, so Ostrasort - Steam-Workshop-only - must not fight them.
+    /// FFU itself is supported; the one true rival is Robyn's OstraAutoloader
+    /// plugin, which rewrites loading_order.json from scratch at every game
+    /// launch - anything Ostrasort writes would be undone, so writes are gated
+    /// while it is active.
     /// </summary>
-    private static void DetectRivalStack(GameEnv env, Analysis a)
+    private static void WarnAutoloader(Analysis a)
     {
-        a.Rival = RivalStack.Detect(env);
-        if (a.Rival is { } r)
-            a.Warnings.Add($"FFU / Thunderstore stack detected ({r.Summary}) - Ostrasort is Steam-Workshop-only " +
-                           "and will not modify this install. Robyn's OstraAutoloader generates loading_order.json " +
-                           "itself; use one or the other, not both.");
+        if (a.Ffu is { AutoloaderActive: true })
+            a.Warnings.Add("OstraAutoloader is active - it regenerates loading_order.json at every game launch, " +
+                           "so Ostrasort is read-only on this install. Disable/uninstall the autoloader to let " +
+                           "Ostrasort manage the order (it understands FFU load groups and plugins-dir mods).");
     }
 
     public static bool Actionable(EngineState s) =>
@@ -153,6 +155,32 @@ public static class Engine
                     Raw = "", Kind = EntryKind.Workshop, Name = id, Dir = dir, Registered = false,
                 });
                 a.Warnings.Add($"subscribed Workshop item {id} is not in aLoadOrder yet");
+            }
+        }
+
+        // FFU/Thunderstore data mods living under BepInEx\plugins (mod_info.json
+        // + data\) load like any other mod but must be registered by absolute
+        // path - the OstraAutoloader normally does that; without it, Ostrasort does.
+        var pluginsRoot = Path.Combine(env.BepInExDir, "plugins");
+        if (Directory.Exists(pluginsRoot))
+        {
+            var registeredDirs = a.Registered.Where(m => m.Kind == EntryKind.PluginDir && m.Dir is not null)
+                .Select(m => Path.TrimEndingDirectorySeparator(m.Dir!))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var info in Directory.EnumerateFiles(pluginsRoot, "mod_info.json", SearchOption.AllDirectories))
+            {
+                var dir = Path.GetDirectoryName(info)!;
+                var rel = Path.GetRelativePath(pluginsRoot, dir);
+                if (rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0]
+                       .Equals("Workshop", StringComparison.OrdinalIgnoreCase)) continue;   // bridge-managed copies
+                if (!Directory.Exists(Path.Combine(dir, "data"))) continue;                 // no data payload to load
+                if (registeredDirs.Contains(Path.TrimEndingDirectorySeparator(dir))) continue;
+                a.UnregisteredLocal.Add(new ModEntry
+                {
+                    Raw = "", Kind = EntryKind.PluginDir, Name = Path.GetFileName(dir), Dir = dir, Registered = false,
+                });
+                a.Warnings.Add($"data mod '{Path.GetFileName(dir)}' under BepInEx\\plugins is not in aLoadOrder - " +
+                               "the game loads only what aLoadOrder lists");
             }
         }
     }

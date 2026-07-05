@@ -22,11 +22,29 @@ public static class FieldDiff
     /// <summary>Annotates every non-loot collision with merge feasibility + field notes.</summary>
     public static void Annotate(GameEnv env, Analysis a)
     {
+        // with the FFU framework installed the GAME merges same-name objects
+        // field-by-field at load - disjoint edits all apply, no patch needed
+        var ffuMerge = a.Ffu is { FrameworkPresent: true };
+
         foreach (var col in a.Collisions)
         {
             // loot pools get item-level analysis + the patcher; skip them here
             if (col.Claimants.All(m => m.Claims.TryGetValue((col.Type, col.ObjName), out var l) && l is not null))
                 continue;
+
+            // a claimant editing via FFU --ADD--/--DEL--/... commands merges at
+            // load; there is no whole-object comparison to make
+            var editors = col.Claimants
+                .Where(m => m.FfuArrayEditClaims.Contains((col.Type, col.ObjName)))
+                .Select(m => m.DisplayName ?? m.Name).ToList();
+            if (editors.Count > 0)
+            {
+                col.FfuMergedAtLoad = true;
+                col.FieldNotes.Add($"{string.Join(", ", editors)} edits this object with FFU precision array " +
+                                   "commands - the edit merges at load instead of replacing; it must load after " +
+                                   "the versions it edits (Ostrasort keeps FFU mods after non-FFU mods)");
+                continue;
+            }
 
             var coreObj = LoadObject(Path.Combine(env.CoreDataDir, col.Type), col.ObjName);
             var versions = new List<(ModEntry Mod, JsonNode Obj)>();
@@ -40,14 +58,41 @@ public static class FieldDiff
 
             if (coreObj is null)
             {
-                col.FieldNotes.Add("no vanilla version to merge against — only the last-loaded mod's version applies");
+                col.FfuMergedAtLoad = ffuMerge;
+                col.FieldNotes.Add(ffuMerge
+                    ? "no vanilla version to merge against — FFU merges the versions field-by-field at load (last loaded wins contested fields)"
+                    : "no vanilla version to merge against — only the last-loaded mod's version applies");
                 continue;
             }
 
-            var plan = ObjectMerge.Build(col, coreObj, versions);
+            var plan = ObjectMerge.Build(col, coreObj, versions, ffuMerge);
             if (plan is null)
             {
                 col.FieldNotes.Add("the mods' versions are identical — nothing is lost");
+                continue;
+            }
+
+            var auto = plan.Fields.Where(f => !f.Contested).ToList();
+            var conflicts = plan.Fields.Where(f => f.Contested).ToList();
+            var modBySource = versions.ToDictionary(v => v.Mod.Dir ?? v.Mod.Raw, v => v.Mod, StringComparer.OrdinalIgnoreCase);
+            bool NonFfuOption(MergeOption o) =>
+                o.SourceId != "__union__" && modBySource.TryGetValue(o.SourceId, out var m) && !m.IsFfu;
+
+            if (ffuMerge)
+            {
+                // the game itself keeps disjoint-field edits; a patch only adds
+                // value for fields contested among NON-FFU mods (it loads after
+                // the whole non-FFU block, and FFU mods win their fields anyway)
+                col.ObjectMergeable = conflicts.Any(f => f.Options.All(NonFfuOption));
+                col.FfuMergedAtLoad = !col.ObjectMergeable;
+
+                if (auto.Count > 0)
+                    col.FieldNotes.Add("merged by FFU at load — nothing lost: " + string.Join(", ",
+                        auto.Select(f => $"{f.Token} (from {f.Options[0].SourceLabel})")));
+                foreach (var f in conflicts)
+                    col.FieldNotes.Add(f.Options.All(NonFfuOption)
+                        ? $"conflict — you choose: {f.Token} (both non-FFU; the patch can enforce your pick)"
+                        : $"conflict on {f.Token}: the last-loaded (FFU) mod's value wins that field at load");
                 continue;
             }
 
@@ -57,8 +102,6 @@ public static class FieldDiff
             col.ObjectMergeable = plan.Fields.Any(f =>
                 f.Contested || !f.Options.Any(o => o.SourceId == lastId));
 
-            var auto = plan.Fields.Where(f => !f.Contested).ToList();
-            var conflicts = plan.Fields.Where(f => f.Contested).ToList();
             if (auto.Count > 0)
                 col.FieldNotes.Add("auto-merge: " + string.Join(", ",
                     auto.Select(f => $"{f.Token} (from {f.Options[0].SourceLabel})")));

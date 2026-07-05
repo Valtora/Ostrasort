@@ -39,12 +39,18 @@ It does **not** yet merge objects that have no base-game version (two mods
 adding the *same new* object with no common ancestor) — those it reports and
 leaves to load order.
 
-**Steam Workshop only.** Ostrasort manages `loading_order.json` for core, local,
-and Steam-Workshop mods. It does **not** support the Thunderstore/**FFU** (Fight
-for Universe) stack: those mods load through Robyn's **OstraAutoloader**, which
-generates `loading_order.json` itself, so the two tools would fight over that
-file. When Ostrasort detects the autoloader / FFU / MonoMod on your install it
-**blocks with a warning and refuses to write** — use one or the other, not both.
+**Steam Workshop, local, and FFU mods.** Ostrasort manages `loading_order.json`
+for core, local, Steam-Workshop, **and FFU** (Fight for Universe: Beyond Reach)
+mods. On an FFU install it reads each mod's `Autoload.Meta.toml` (LoadGroup +
+dependencies), keeps every FFU-dependent mod **after** all non-FFU mods with the
+mandatory **Minor Fixes Plus** leading the FFU block, pins FFU "Patch" mods
+right after their targets (and reminds you they apply once), registers FFU data
+mods living under `BepInEx\plugins\`, and accounts for FFU's field-by-field
+merge semantics in its conflict analysis. The one thing it will not co-manage
+is Robyn's **OstraAutoloader** plugin — it regenerates `loading_order.json`
+from scratch at every game launch, so while it is installed Ostrasort runs
+**analysis-only** (writes refused, override: `--allow-rival-stack`) and shows
+how to hand the load order over.
 
 > ## ⚠️ Early development — use at your own risk
 >

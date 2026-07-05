@@ -50,12 +50,12 @@ Operational gotchas:
 | `src\SchemaValidator.cs` | compact draft-07-subset validator for the game's schema files |
 | `src\Patcher.cs` | merge plans (loot + objects) + generating/maintaining `OstrasortPatch` |
 | `src\CollisionView.cs` | the grouped, humanized collision rendering (GUI + console share it) |
-| `src\Engine.cs` | the shared analyze pass + hygiene checks (image, BepInEx, rival-stack) |
-| `src\RivalStack.cs` | detects a rival load-order manager (FFU / OstraAutoloader / MonoMod) |
+| `src\Engine.cs` | the shared analyze pass + hygiene checks (image, BepInEx, autoloader) |
+| `src\Ffu.cs` | FFU support: `Autoload.Meta.toml` parser, install detection (`FfuContext`), FFU classification + hygiene (`FfuAnalysis`) |
 | `src\LoadOrderFile.cs` | guarded `loading_order.json` read/write ritual |
 | `src\Report.cs` / `src\TextReport.cs` | console report / plain-text export |
 | `src\Program.cs` | CLI parsing + GUI/console routing |
-| `src\gui\` | WPF main window, conflict resolver, FFU/rival-stack startup notice, persisted settings |
+| `src\gui\` | WPF main window (incl. the FFU/autoloader banner), conflict resolver, persisted settings |
 
 `--smoke-gui` (hidden flag) constructs the WPF windows without showing them —
 used for headless verification. `--smoke-undo` exercises the snapshot
@@ -64,8 +64,10 @@ undo/redo against a fixture install.
 ## Tests
 
 Unit tests live in `tests\Ostrasort.Tests.csproj` (xUnit) and cover the pure
-logic — the field-merge engine, the schema validator, the guarded
-`loading_order.json` read/write, the sort rules, and rival-stack detection:
+logic — the field-merge engine (including FFU fragment semantics), the schema
+validator, the guarded `loading_order.json` read/write, the sort rules
+(including the FFU block), `Autoload.Meta.toml` parsing, FFU classification,
+and autoloader detection:
 
 ```powershell
 dotnet test tests\Ostrasort.Tests.csproj

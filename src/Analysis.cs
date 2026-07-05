@@ -23,6 +23,7 @@ public sealed class Collision
     public List<string> FieldNotes { get; } = new();          // non-loot: which fields each claimant changes vs core
     public bool ObjectMergeable { get; set; }                 // non-loot: a 3-way field merge would preserve more than last-wins
     public bool ResolvedByPatch { get; set; }                 // a fresh OstrasortPatch covers this pool
+    public bool FfuMergedAtLoad { get; set; }                 // the FFU loader merges this at load - no action needed
     public string Key => $"{Type}/{ObjName}";
 }
 
@@ -36,8 +37,12 @@ public sealed class Analysis
     public List<Collision> Collisions { get; } = new();
     public List<string> Warnings { get; } = new();
 
-    /// <summary>A rival, non-Workshop mod stack (FFU / OstraAutoloader) on this install, or null. See <see cref="RivalStack"/>.</summary>
-    public RivalStack? Rival { get; set; }
+    /// <summary>
+    /// Install-level FFU state, or null on a plain Workshop install. FFU is a
+    /// supported framework (ordering rules + merge semantics applied); only
+    /// <see cref="FfuContext.AutoloaderActive"/> gates writes. See <see cref="FfuContext"/>.
+    /// </summary>
+    public FfuContext? Ffu { get; set; }
 
     public List<string> SuggestedOrder { get; private set; } = new();
     public List<Change> Changes { get; } = new();
@@ -207,7 +212,9 @@ public sealed class Analysis
             Changes.Add(new Change("add", SuggestedRaw(m),
                 m.IsPatch
                     ? "the generated Ostrasort Patch exists on disk but is unregistered"
-                    : "local mod folder present but unregistered - invisible to the MODS screen"));
+                    : m.Kind == EntryKind.PluginDir
+                        ? "data mod under BepInEx\\plugins present but unregistered - the game loads only what aLoadOrder lists"
+                        : "local mod folder present but unregistered - invisible to the MODS screen"));
         }
         foreach (var m in UnregisteredWorkshop)
         {
@@ -216,27 +223,100 @@ public sealed class Analysis
                 "subscribed Workshop item not in aLoadOrder (the game will add it on next launch anyway)"));
         }
 
-        // rule 5: the generated patch merges other mods' pools - it must load
-        // after everything it merges, i.e. last
-        var patchIdx = work.FindIndex(m => m.IsPatch);
-        if (patchIdx >= 0 && patchIdx != work.Count - 1)
+        // rule 5 (FFU): FFU-dependent mods form a block AFTER every non-FFU mod:
+        // the FFU core tier (Minor Fixes Plus) first, then FFU mods dependency-
+        // sorted per their Autoload.Meta.toml, patch-style mods pinned to their
+        // targets. Non-FFU mods keep their relative order in front.
+        if (work.Any(m => m.IsFfu))
         {
-            var patch = work[patchIdx];
-            work.RemoveAt(patchIdx);
-            work.Add(patch);
-            Changes.Add(new Change("move", SuggestedRaw(patch), "the generated Ostrasort Patch must load last"));
+            var lastNonFfu = work.FindLastIndex(m => !m.IsFfu);
+            foreach (var m in work.Where(m => m.IsFfu && work.IndexOf(m) < lastNonFfu))
+                Changes.Add(new Change("move", SuggestedRaw(m),
+                    $"FFU-dependent mods load after all non-FFU mods ({m.FfuSignals.FirstOrDefault() ?? "FFU mod"})"));
+
+            var ffuBlock = OrderFfuBlock(work.Where(m => m.IsFfu).ToList());
+            work = work.Where(m => !m.IsFfu).Concat(ffuBlock).ToList();
+        }
+
+        // rule 6: the generated patch merges other mods' pools - it must load
+        // after everything it merges: last, or (with FFU mods present) closing
+        // the non-FFU block, since FFU mods field-merge on top of it at load
+        var patch = work.FirstOrDefault(m => m.IsPatch);
+        if (patch is not null)
+        {
+            var oldIdx = work.IndexOf(patch);
+            work.RemoveAt(oldIdx);
+            var firstFfu = work.FindIndex(m => m.IsFfu);
+            if (firstFfu < 0) work.Add(patch);
+            else work.Insert(firstFfu, patch);
+            if (work.IndexOf(patch) != oldIdx)
+                Changes.Add(new Change("move", SuggestedRaw(patch),
+                    firstFfu < 0
+                        ? "the generated Ostrasort Patch must load last"
+                        : "the generated Ostrasort Patch closes the non-FFU block (FFU mods merge on top of it)"));
         }
 
         SuggestedOrder = work.Select(SuggestedRaw).ToList();
         OrderChanged = !SuggestedOrder.SequenceEqual(Registered.Select(m => m.Raw));
     }
 
+    /// <summary>
+    /// Orders the FFU block: FFUCore tier first, then AfterFFU (stable within
+    /// each tier), dependents bubbled after their Autoload.Meta.toml
+    /// dependencies, and FFU "Patch" mods pinned immediately after their
+    /// targets. Emits change notes only when something actually moves.
+    /// </summary>
+    private List<ModEntry> OrderFfuBlock(List<ModEntry> ffu)
+    {
+        var ordered = ffu.OrderBy(m => m.FfuGroup == FfuLoadGroup.FFUCore ? 0 : 1).ToList();   // stable
+
+        ModEntry? Resolve(string strName) =>
+            ordered.FirstOrDefault(m => string.Equals(m.DisplayName, strName, StringComparison.OrdinalIgnoreCase))
+            ?? ordered.FirstOrDefault(m => string.Equals(m.Name, strName, StringComparison.OrdinalIgnoreCase));
+
+        // bubble dependents after their dependencies (bounded - a cycle can't loop forever)
+        for (var pass = 0; pass <= ffu.Count; pass++)
+        {
+            var moved = false;
+            foreach (var m in ordered.Where(m => m.Meta is { Dependencies.Count: > 0 }).ToList())
+            {
+                var deps = m.Meta!.Dependencies.Keys.Select(Resolve).OfType<ModEntry>().Where(d => d != m).ToList();
+                if (deps.Count == 0) continue;
+                var maxDep = deps.Max(d => ordered.IndexOf(d));
+                var idx = ordered.IndexOf(m);
+                if (idx >= maxDep) continue;
+                ordered.RemoveAt(idx);
+                ordered.Insert(maxDep, m);   // maxDep shifted down by the removal - lands right after the dep
+                moved = true;
+            }
+            if (!moved) break;
+        }
+
+        // FFU patch mods: immediately after the mod they patch (when it is in this block)
+        foreach (var p in ordered.Where(m => m is { IsFfuPatch: true, FfuPatchTarget: not null }).ToList())
+        {
+            var ti = ordered.IndexOf(p.FfuPatchTarget!);
+            if (ti < 0 || ordered.IndexOf(p) == ti + 1) continue;
+            ordered.Remove(p);
+            ordered.Insert(ordered.IndexOf(p.FfuPatchTarget!) + 1, p);
+            Changes.Add(new Change("move", SuggestedRaw(p),
+                $"FFU patch mods load immediately after their target ({p.FfuPatchTarget!.DisplayName ?? p.FfuPatchTarget.Name}) - and should be removed after one game launch"));
+        }
+
+        if (!ordered.SequenceEqual(ffu))
+            Changes.Add(new Change("move", "(FFU block)",
+                "FFU block ordered: Minor Fixes Plus tier first, then dependency order per Autoload.Meta.toml"));
+        return ordered;
+    }
+
     private static string IdentityOf(ModEntry m) =>
-        m.Kind == EntryKind.Local ? $"local:{m.Name}" : m.Raw;
+        m.Kind == EntryKind.Local ? $"local:{m.Name}"
+        : m.Raw.Length > 0 ? m.Raw
+        : m.Dir ?? m.Name;   // unregistered entries all share Raw "" - identify by folder
 
     private static string SuggestedRaw(ModEntry m) =>
         m.Registered ? m.Raw
-        : m.Kind == EntryKind.Workshop ? m.Dir!
+        : m.Kind is EntryKind.Workshop or EntryKind.PluginDir ? m.Dir!   // absolute-path registrations
         : m.IsPatch ? m.Name                 // the patch registers plain, nothing to upload
         : $"{m.Name}|edit";
 
@@ -276,9 +356,33 @@ public sealed class Analysis
                                "- the superset should load last.");
             }
 
+        // FFU rules: the FFU block sits after every non-FFU mod, core tier first,
+        // dependencies before dependents
+        var firstFfu = order.FindIndex(m => m.IsFfu);
+        if (firstFfu >= 0)
+        {
+            foreach (var m in order.Skip(firstFfu + 1).Where(m => !m.IsFfu && m.Kind != EntryKind.Core && !m.IsPatch))
+                issues.Add($"{m.DisplayName ?? m.Name}: non-FFU mods should load before the FFU block " +
+                           "(FFU-dependent mods come after all non-FFU mods).");
+            var firstAfter = order.FindIndex(m => m.IsFfu && m.FfuGroup != FfuLoadGroup.FFUCore);
+            foreach (var m in order.Where(m => m.IsFfu && m.FfuGroup == FfuLoadGroup.FFUCore))
+                if (firstAfter >= 0 && order.IndexOf(m) > firstAfter)
+                    issues.Add($"{m.DisplayName ?? m.Name}: the FFU core tier (Minor Fixes Plus) must be the first FFU mod loaded.");
+        }
+        foreach (var m in order.Where(m => m.Meta is { Dependencies.Count: > 0 }))
+            foreach (var dep in m.Meta!.Dependencies.Keys)
+            {
+                var t = order.FirstOrDefault(o => string.Equals(o.DisplayName, dep, StringComparison.OrdinalIgnoreCase)
+                                               || string.Equals(o.Name, dep, StringComparison.OrdinalIgnoreCase));
+                if (t is not null && t != m && order.IndexOf(t) > order.IndexOf(m))
+                    issues.Add($"{m.DisplayName ?? m.Name}: loads before its declared dependency '{dep}' (Autoload.Meta.toml).");
+            }
+
         var patchIdx = order.FindIndex(m => m.IsPatch);
-        if (patchIdx >= 0 && patchIdx != order.Count - 1)
-            issues.Add("the generated Ostrasort Patch must load last or the pools it merges get overridden again.");
+        if (patchIdx >= 0 && order.Skip(patchIdx + 1).Any(m => !m.IsFfu))
+            issues.Add(firstFfu >= 0
+                ? "the generated Ostrasort Patch must close the non-FFU block (only FFU mods after it) or the pools it merges get overridden again."
+                : "the generated Ostrasort Patch must load last or the pools it merges get overridden again.");
 
         return issues;
     }

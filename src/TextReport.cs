@@ -15,6 +15,16 @@ public static class TextReport
         sb.AppendLine($"core: {s.Scanner.CoreIndex.Count:N0} data objects across {s.Scanner.CoreTypes} types");
         sb.AppendLine();
 
+        if (a.Ffu is { } ffu)
+        {
+            sb.AppendLine(ffu.AutoloaderActive
+                ? "FFU / OSTRAAUTOLOADER: the autoloader is ACTIVE - Ostrasort is read-only on this install"
+                : $"FFU: {ffu.Summary} detected (supported - FFU ordering rules applied)");
+            foreach (var e in ffu.Evidence) sb.AppendLine($"  - {e}");
+            foreach (var n in FfuAnalysis.Notices(a)) sb.AppendLine($"  {n}");
+            sb.AppendLine();
+        }
+
         sb.AppendLine($"MODS ({a.Registered.Count} registered)");
         var rows = a.Registered.Select((m, i) => (Pos: (i + 1).ToString(), Mod: m))
             .Concat(a.UnregisteredLocal.Concat(a.UnregisteredWorkshop).Select(m => (Pos: "-", Mod: m)));
@@ -24,6 +34,8 @@ public static class TextReport
             var notes = new List<string>();
             if (!m.Registered) notes.Add("NOT REGISTERED");
             if (m.Dir is null && m.Kind != EntryKind.Core) notes.Add("DEAD ENTRY");
+            if (m.IsFfuPatch) notes.Add("FFU patch - remove after one use");
+            else if (m.IsFfu) notes.Add(m.FfuGroup == FfuLoadGroup.FFUCore ? "FFU core tier" : "FFU mod");
             if (m.GameVersion is { Length: > 0 } gv && env.InstalledVersion is { } iv && gv != iv)
                 notes.Add($"gameVersion {gv} lags {iv}");
             if (m.JsonErrors.Count > 0) notes.Add($"{m.JsonErrors.Count} JSON problem(s)");

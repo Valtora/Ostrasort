@@ -17,6 +17,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="2*"/>
             <RowDefinition Height="8"/>
             <RowDefinition Height="1.4*"/>
@@ -101,8 +102,29 @@
             </StackPanel>
         </DockPanel>
 
+        <!-- FFU / OstraAutoloader banner (collapsed on plain Workshop installs) -->
+        <Border Grid.Row="2" x:Name="FfuBanner" Visibility="Collapsed" CornerRadius="4"
+                BorderThickness="1" Padding="10,7" Margin="0,0,0,8"
+                Background="#FFF8E7" BorderBrush="#D9A400">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Top" Margin="12,0,0,0">
+                    <Hyperlink Click="FfuBannerDismiss_Click">dismiss</Hyperlink>
+                </TextBlock>
+                <StackPanel>
+                    <TextBlock x:Name="TxtFfuBannerTitle" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                    <ItemsControl x:Name="ListFfuBanner">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,1,0,1" FontSize="12.5"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
         <!-- mod table -->
-        <DataGrid Grid.Row="2" x:Name="ModsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+        <DataGrid Grid.Row="3" x:Name="ModsGrid" AutoGenerateColumns="False" IsReadOnly="True"
                   CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False"
                   SelectionMode="Single" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                   HorizontalGridLinesBrush="#EEE" RowHeaderWidth="0" FontSize="12.5"
@@ -137,11 +159,11 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+        <GridSplitter Grid.Row="4" HorizontalAlignment="Stretch" VerticalAlignment="Center"
                       Height="6" Background="Transparent"/>
 
         <!-- detail tabs -->
-        <TabControl Grid.Row="4" x:Name="Tabs" FontSize="12.5">
+        <TabControl Grid.Row="5" x:Name="Tabs" FontSize="12.5">
             <TabItem x:Name="TabCollisions" Header="Collisions">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl x:Name="ListCollisions" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
@@ -207,7 +229,7 @@
         </TabControl>
 
         <!-- action bar -->
-        <DockPanel Grid.Row="5" Margin="0,10,0,0">
+        <DockPanel Grid.Row="6" Margin="0,10,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button x:Name="BtnRescan" Content="Rescan" Padding="14,6" Margin="8,0,0,0" Click="Rescan_Click"/>
                 <Button x:Name="BtnRestoreBak" Content="Restore .bak" Padding="14,6" Margin="8,0,0,0" Click="RestoreBak_Click"/>

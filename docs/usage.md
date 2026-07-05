@@ -119,14 +119,32 @@ them in game.
 
 ## FFU / Thunderstore mod stacks
 
-Ostrasort manages **Steam Workshop** (and local) mods. If it finds the
-Thunderstore / **FFU** stack on your install — Robyn's OstraAutoloader, any
-`Autoload.Meta.toml` mod, or MonoMod patches in `BepInEx\monomod\` — it shows a
-**blocking notice at startup** and **refuses to write anything**. That stack's
-autoloader generates `loading_order.json` itself, so letting Ostrasort touch the
-same file would break it. Use one or the other on a given install, not both;
-Ostrasort doesn't support Thunderstore/FFU. (In the console this is a refusal on
-every write flag, overridable with `--allow-rival-stack` at your own risk.)
+**FFU (Fight for Universe: Beyond Reach) is supported.** When Ostrasort detects
+FFU on your install (its MonoMod patches in `BepInEx\monomod\`, or FFU-style
+mods) it shows a dismissable **banner** and applies FFU's own ordering rules to
+the suggestion:
+
+- all **non-FFU mods load first** (the Ostrasort Patch closes that block);
+- **Minor Fixes Plus** — mandatory for FFU — leads the FFU block;
+- FFU mods are **dependency-sorted** per their `Autoload.Meta.toml`;
+- FFU **"Patch" mods** are placed immediately after the mod they patch, with a
+  reminder that they apply once and should then be removed from the list;
+- FFU data mods living under `BepInEx\plugins\` are registered by absolute
+  path, exactly how the game expects them;
+- conflict analysis knows that with FFU installed the game **merges same-name
+  objects field-by-field at load**, so disjoint edits are reported as "nothing
+  lost" instead of false conflicts, and `--ADD--`/`--DEL--` array edits are
+  never folded into a patch.
+
+The one exception is Robyn's **OstraAutoloader** plugin: it regenerates
+`loading_order.json` from scratch at **every game launch**, dropping local mods
+(and `|edit`/`|disabled` markers) it doesn't manage — anything Ostrasort wrote
+would be undone. While the autoloader DLL is installed Ostrasort runs
+**analysis-only**: the banner explains, every write is disabled/refused, and
+you can hand the order over by disabling the autoloader (r2modman) or deleting
+its DLL from `BepInEx\plugins\` — Ostrasort then manages the full order, FFU
+included. (Console override for the write refusal: `--allow-rival-stack`, at
+your own risk.)
 
 ## Command-line reference
 
@@ -149,8 +167,10 @@ Ostrasort.exe --no-gui    like --headless but only for the resolver: contested i
 Ostrasort.exe --game <p>  point at a non-standard install manually
 Ostrasort.exe --no-pause  never wait for a key press
 Ostrasort.exe --allow-rival-stack
-                          proceed on an FFU/Thunderstore (OstraAutoloader) install anyway;
-                          by default every write is refused there
+                          write even while Robyn's OstraAutoloader is installed; by
+                          default writes are refused there because the autoloader
+                          regenerates loading_order.json at every game launch
+                          (FFU itself is supported and never blocks)
 Ostrasort.exe --version   print the version and exit
 ```
 

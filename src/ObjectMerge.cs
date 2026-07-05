@@ -21,8 +21,16 @@ public static class ObjectMerge
     /// (three-way) - collisions on mod-added objects with no vanilla ancestor
     /// are left for the report, not auto-merged. Returns null if there is
     /// nothing to merge (identical overrides).
+    ///
+    /// FFU semantics: an FFU-style mod ships partial objects (fragments) that
+    /// the FFU loader merges field-by-field - a field ABSENT from its object is
+    /// untouched, not removed. With <paramref name="ffuFieldMerge"/> (the FFU
+    /// framework is installed) that reading applies to every version, matching
+    /// what the game itself will do at load; otherwise it applies only to
+    /// versions from FFU-classified mods.
     /// </summary>
-    public static ObjectPlan? Build(Collision c, JsonNode coreBase, List<(ModEntry Mod, JsonNode Obj)> versions)
+    public static ObjectPlan? Build(Collision c, JsonNode coreBase, List<(ModEntry Mod, JsonNode Obj)> versions,
+                                    bool ffuFieldMerge = false)
     {
         if (versions.Count < 2) return null;
 
@@ -43,9 +51,12 @@ public static class ObjectMerge
         foreach (var key in keys)
         {
             var baseVal = (coreBase as JsonObject)?[key];
-            // each mod's value for this key, and whether it differs from core
+            // each mod's value for this key, and whether it differs from core;
+            // for fragment-style versions an absent key means "untouched"
             var changers = versions
-                .Select(v => (v.Mod, Val: (v.Obj as JsonObject)?[key]))
+                .Select(v => (v.Mod, Has: (v.Obj as JsonObject)?.ContainsKey(key) == true, Val: (v.Obj as JsonObject)?[key]))
+                .Where(x => x.Has || !(ffuFieldMerge || x.Mod.IsFfu))
+                .Select(x => (x.Mod, x.Val))
                 .Where(x => !NodeEquals(x.Val, baseVal))
                 .ToList();
             if (changers.Count == 0) continue;   // untouched vs core -> stays as base

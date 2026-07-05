@@ -84,30 +84,50 @@ Surfaced in the same pass:
   installed, and the same plugin DLL shipped by two different sources
   (double-patching)
 
-## Rival load-order managers (FFU / Thunderstore)
+## FFU support & the OstraAutoloader
 
-Ostrasort is a **Steam-Workshop-first** tool and manages `loading_order.json`
-for core, local, and Workshop mods. It deliberately does **not** support the
-Thunderstore / **FFU** (Fight for Universe: Beyond Reach) stack, because that
-stack ships its *own* load-order manager: Robyn's **OstraAutoloader** discovers
-mods (by an `Autoload.Meta.toml` file, under `BepInEx\plugins\` or `Mods\`),
-topologically sorts them by their declared `LoadGroup` and dependencies, and
-**regenerates `loading_order.json` itself at every launch**. FFU also patches the
-game with **MonoMod** (`*.mm.dll` in `BepInEx\monomod\`) rather than Harmony.
+**FFU (Fight for Universe: Beyond Reach)** patches the game with **MonoMod**
+(`*.mm.dll` in `BepInEx\monomod\`) and extends the modding API: partial-object
+entries merge **field-by-field** into existing objects at load,
+`strReference` clones an existing entry, `removeIds`/`changesMap` in
+`mod_info.json` delete/migrate entries, and `--ADD--`/`--INS--`/`--DEL--`/
+`--MOD--` commands edit arrays in place. FFU mods declare their place in the
+world in an `Autoload.Meta.toml`: a `LoadGroup` (`WithVanilla`, `FFUCore`,
+`AfterFFU`) plus dependencies keyed by `strName`.
 
-Two managers writing the same file fight each other, so Ostrasort detects the
-stack — the autoloader plugin, any `Autoload.Meta.toml`, or MonoMod patches — and
-steps aside rather than corrupting an FFU setup:
+Ostrasort treats all of that as a **supported ordering contract**:
 
-- the **GUI shows a blocking notice at startup**: quit (the default), or continue
-  at your own risk;
-- the **console report prints a banner**, and every **write path refuses**
-  (`--apply` / `--patch` / `--unpatch` / `--normalize` exit with an error).
-  `--allow-rival-stack` overrides the refusal for anyone who knows what they're
-  doing.
+- a mod is classified **FFU** when its meta declares `FFUCore`/`AfterFFU`, it
+  depends on an FFU mod, or its data uses the FFU-only API features above;
+- the sort keeps every FFU mod **after all non-FFU mods** (the game loads
+  non-FFU content first — this is FFU's own rule), with the **Minor Fixes
+  Plus** tier leading the FFU block and dependencies before dependents;
+- FFU **"Patch" mods** are pinned immediately after their target and flagged
+  "applies once — remove after one game launch";
+- FFU data mods under `BepInEx\plugins\` are indexed and registered by
+  absolute path;
+- collision analysis models FFU's load-time field merge: a fragment touching
+  only `nContainerWidth` no longer reads as "replaces the whole sink", and
+  command-driven array edits are reported as merging, never folded into the
+  Ostrasort Patch (which, on FFU installs, closes the **non-FFU** block
+  instead of loading absolute-last);
+- hygiene checks cover mixed FFU DLL versions (updates require removing all
+  old FFU files), a missing MonoMod loader, a missing/unregistered Minor Fixes
+  Plus, and FFU-style mods installed without the framework.
 
-Use one or the other on a given install, not both. Ostrasort has no plans to
-support Thunderstore or FFU.
+The one genuine **rival** is Robyn's **OstraAutoloader** plugin: it discovers
+`Autoload.Meta.toml` mods and **regenerates `loading_order.json` from scratch
+at every game launch** — local mods without a meta file, and every
+`|edit`/`|disabled` marker, are silently dropped, and the game then re-appends
+subscribed Workshop mods at the *end* of the list (after the FFU block).
+Anything Ostrasort wrote would be undone at the next launch, so while the
+autoloader DLL is present Ostrasort is **analysis-only**: the GUI opens
+normally with a red banner and disabled write buttons, the console report
+prints the same, and every write flag refuses (`--allow-rival-stack`
+overrides). Disable or uninstall the autoloader to hand the load order to
+Ostrasort — it understands everything the autoloader does, plus Workshop and
+local mods. A meta file **by itself is inert** and never triggers the
+read-only mode.
 
 ## The conflict patch
 
@@ -167,8 +187,9 @@ later refresh only re-asks about things that genuinely changed. See
   would not recognise its own subscription and would re-add it every launch,
   duplicating the mod — so every absolute path is canonicalised to its real
   filesystem case before writing.
-- **A rival load-order manager blocks writes.** If the FFU / OstraAutoloader
-  stack is present (see above), Ostrasort refuses to modify `loading_order.json`
-  at all — that stack owns the file — unless you explicitly override.
+- **The OstraAutoloader blocks writes.** If the autoloader plugin is present
+  (see above), Ostrasort refuses to modify `loading_order.json` at all — the
+  autoloader would overwrite it at the next launch — unless you explicitly
+  override. FFU itself never blocks anything.
 - **Everything Ostrasort writes is logged** to the Logs tab (and to
   `%LOCALAPPDATA%\Ostrasort\ostrasort.log`), so you can always see what it did.
