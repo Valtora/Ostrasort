@@ -400,47 +400,61 @@ public static class FfuAnalysis
     // ------------------------------------------------------------- disable ---
 
     /// <summary>
-    /// The "hand the load order to Ostrasort" call to action: renames every
-    /// detected autoloader DLL to <c>*.dll.disabled</c> so BepInEx no longer
-    /// loads it. Fully reversible (rename it back). Returns the new paths.
-    /// Callers gate on the game not running; a locked file throws IOException.
+    /// The "hand the load order to Ostrasort" call to action: parks every
+    /// detected autoloader DLL as <c>*.dll.disabled</c> (reversible - rename
+    /// it back), or deletes it outright with <paramref name="delete"/>.
+    /// Returns the affected paths. Callers gate on the game not running; a
+    /// locked file throws IOException.
     /// </summary>
-    public static List<string> DisableAutoloader(FfuContext ctx)
+    public static List<string> DisableAutoloader(FfuContext ctx, bool delete = false)
     {
-        var renamed = new List<string>();
+        var affected = new List<string>();
         foreach (var dll in ctx.AutoloaderDlls.Where(File.Exists))
         {
+            if (delete)
+            {
+                File.Delete(dll);
+                affected.Add(dll);
+                continue;
+            }
             var target = dll + ".disabled";
             if (File.Exists(target)) File.Delete(target);   // leftover from an earlier disable
             File.Move(dll, target);
-            renamed.Add(target);
+            affected.Add(target);
         }
-        return renamed;
+        return affected;
     }
 
-    /// <summary>What <see cref="RemoveFfuCore"/> did: renamed paths + aLoadOrder entries removed.</summary>
-    public sealed record FfuRemoval(List<string> Renamed, List<string> Unregistered)
+    /// <summary>What <see cref="RemoveFfuCore"/> did: affected paths + aLoadOrder entries removed.</summary>
+    public sealed record FfuRemoval(List<string> Affected, List<string> Unregistered, bool Deleted)
     {
-        public bool IsEmpty => Renamed.Count == 0 && Unregistered.Count == 0;
+        public bool IsEmpty => Affected.Count == 0 && Unregistered.Count == 0;
     }
 
     /// <summary>
-    /// The "use Steam Workshop mods only" call to action: reversibly removes
-    /// FFU Core from the install - every FFU MonoMod DLL and the Minor Fixes
-    /// Plus data mod get a <c>.disabled</c> rename (rename back to restore),
-    /// and Minor Fixes Plus's aLoadOrder entry is dropped (guarded write,
+    /// The "use Steam Workshop mods only" call to action: removes FFU Core
+    /// from the install - every FFU MonoMod DLL and the Minor Fixes Plus data
+    /// mod are parked as <c>.disabled</c> (reversible - rename back to
+    /// restore) or, with <paramref name="delete"/>, deleted outright. Minor
+    /// Fixes Plus's aLoadOrder entry is dropped either way (guarded write,
     /// .bak kept). Other FFU-dependent mods are left alone - the hygiene
     /// warnings flag them. Callers gate on the game not running.
     /// </summary>
-    public static FfuRemoval RemoveFfuCore(GameEnv env, FfuContext ctx, Analysis a)
+    public static FfuRemoval RemoveFfuCore(GameEnv env, FfuContext ctx, Analysis a, bool delete = false)
     {
-        var renamed = new List<string>();
+        var affected = new List<string>();
         foreach (var dll in ctx.FrameworkDllPaths.Where(File.Exists))
         {
+            if (delete)
+            {
+                File.Delete(dll);
+                affected.Add(dll);
+                continue;
+            }
             var target = dll + ".disabled";
             if (File.Exists(target)) File.Delete(target);
             File.Move(dll, target);
-            renamed.Add(target);
+            affected.Add(target);
         }
 
         // Minor Fixes Plus - wherever it lives (BepInEx\plugins or Mods\)
@@ -451,10 +465,18 @@ public static class FfuAnalysis
             var dir = Path.TrimEndingDirectorySeparator(m.Dir!);
             if (Directory.Exists(dir) && !dir.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase))
             {
-                var target = dir + ".disabled";
-                if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-                Directory.Move(dir, target);
-                renamed.Add(target);
+                if (delete)
+                {
+                    Directory.Delete(dir, recursive: true);
+                    affected.Add(dir);
+                }
+                else
+                {
+                    var target = dir + ".disabled";
+                    if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+                    Directory.Move(dir, target);
+                    affected.Add(target);
+                }
             }
             if (m.Registered && m.Raw.Length > 0) deadRaws.Add(m.Raw);
         }
@@ -470,7 +492,7 @@ public static class FfuAnalysis
                 unregistered.AddRange(deadRaws);
             }
         }
-        return new FfuRemoval(renamed, unregistered);
+        return new FfuRemoval(affected, unregistered, delete);
     }
 
     // ------------------------------------------------------------- notices ---
@@ -494,8 +516,8 @@ public static class FfuAnalysis
                       "plugins-dir mods) plus Workshop and local mods.");
             lines.Add("Recommended: disable the autoloader and let Ostrasort manage the order - use the " +
                       "\"Disable OstraAutoloader\" button (or --disable-autoloader from a terminal; r2modman users " +
-                      "should disable it in their profile instead). Disabling renames its DLL to .disabled, so it " +
-                      "is fully reversible.");
+                      "should disable it in their profile instead). You can park its DLL as .disabled (reversible) " +
+                      "or delete it outright.");
             return lines;
         }
 
@@ -509,6 +531,12 @@ public static class FfuAnalysis
         if (a.AllMods.Any(m => m.IsFfuPatch))
             lines.Add("FFU 'Patch' mods are placed immediately after the mod they patch and should be removed " +
                       "from the load order after one game launch.");
+        lines.Add("Why Ostrasort recommends removing FFU: its DLLs are compiled against ONE exact game build, so " +
+                  "FFU pins your game version - after any Ostranauts update the game breaks (broken main menu, " +
+                  "endless errors) until a matching FFU build ships, and FFU lives outside the Steam Workshop so " +
+                  "nothing updates automatically. Recommendation: Steam Workshop mods only. The Remove FFU button " +
+                  "can park the FFU files as .disabled (reversible) or delete them outright; other FFU-dependent " +
+                  "mods are left alone and flagged under Warnings.");
         return lines;
     }
 }

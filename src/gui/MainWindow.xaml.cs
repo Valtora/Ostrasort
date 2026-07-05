@@ -153,30 +153,26 @@ public partial class MainWindow : Window
     {
         if (_state is null || !GateRunning()) return;
         var ctx = _state.Analysis.Ffu ?? new FfuContext();
-        var items = ctx.FrameworkDllPaths.Select(d => "• " + d)
-            .Concat(_state.Analysis.AllMods
-                .Where(m => m.Dir is not null &&
-                            string.Equals(m.DisplayName, FfuAnalysis.MinorFixesPlus, StringComparison.OrdinalIgnoreCase))
-                .Select(m => "• " + m.Dir))
-            .ToList();
-        if (items.Count == 0) return;
-        if (MessageBox.Show(this,
-                "Remove FFU and switch to Steam Workshop mods only?\n\n" +
-                "FFU pins your game to the version FFU was built for — you can't safely take game updates " +
-                "until FFU updates too. Ostrasort recommends Workshop-only setups.\n\n" +
-                "These will be renamed to *.disabled and unregistered (fully reversible — rename them back " +
-                "to restore; the load order keeps a .bak):\n\n" + string.Join("\n", items) +
-                "\n\nOther FFU-dependent mods are left alone and flagged in Warnings.",
-                "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
-            return;
+        var mfpCount = _state.Analysis.AllMods.Count(m => m.Dir is not null &&
+            string.Equals(m.DisplayName, FfuAnalysis.MinorFixesPlus, StringComparison.OrdinalIgnoreCase));
+        var what = new List<string>();
+        if (ctx.FrameworkDllPaths.Count > 0) what.Add($"{ctx.FrameworkDllPaths.Count} FFU DLL(s)");
+        if (mfpCount > 0) what.Add("Minor Fixes Plus");
+        if (what.Count == 0) return;
+
+        var choice = ParkOrDeleteDialog.Show(this,
+            $"Remove FFU Core ({string.Join(" + ", what)})?",
+            "Unregisters it from the load order either way (a .bak is kept). Why this is recommended is explained in the banner.");
+        if (choice == ParkOrDelete.Cancel) return;
         try
         {
             CaptureOp("remove FFU Core");
-            var removal = FfuAnalysis.RemoveFfuCore(_env, ctx, _state.Analysis);
-            foreach (var f in removal.Renamed) OpLog.Add($"Removed FFU Core (parked): {f}");
+            var removal = FfuAnalysis.RemoveFfuCore(_env, ctx, _state.Analysis, choice == ParkOrDelete.Delete);
+            var verb = removal.Deleted ? "deleted" : "parked";
+            foreach (var f in removal.Affected) OpLog.Add($"Removed FFU Core ({verb}): {f}");
             foreach (var r in removal.Unregistered) OpLog.Add($"Removed FFU Core load-order entry: {r}");
             Rescan();
-            RunStatus.Text = "FFU removed (reversibly) — Steam Workshop mods only.  ";
+            RunStatus.Text = $"FFU removed ({verb}) — Steam Workshop mods only.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex)
@@ -188,19 +184,17 @@ public partial class MainWindow : Window
     private void DisableAutoloader_Click(object sender, RoutedEventArgs e)
     {
         if (_state?.Analysis.Ffu is not { AutoloaderActive: true } ctx || !GateRunning()) return;
-        var dlls = string.Join("\n", ctx.AutoloaderDlls.Select(d => "• " + d));
-        if (MessageBox.Show(this,
-                "Disable OstraAutoloader and let Ostrasort manage the load order?\n\n" +
-                "These files will be renamed to *.disabled (fully reversible — rename them back to re-enable):\n\n" +
-                dlls + "\n\nIf you installed it through r2modman, disable it in your profile instead.",
-                "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
-            return;
+        var choice = ParkOrDeleteDialog.Show(this,
+            $"Disable OstraAutoloader ({ctx.AutoloaderDlls.Count} DLL(s))?",
+            "Ostrasort takes over the load order. r2modman users should disable it in their profile instead. The banner explains why.");
+        if (choice == ParkOrDelete.Cancel) return;
         try
         {
-            var renamed = FfuAnalysis.DisableAutoloader(ctx);
-            foreach (var f in renamed) OpLog.Add($"Disabled OstraAutoloader: {f}");
+            var affected = FfuAnalysis.DisableAutoloader(ctx, choice == ParkOrDelete.Delete);
+            var verb = choice == ParkOrDelete.Delete ? "deleted" : "disabled";
+            foreach (var f in affected) OpLog.Add($"OstraAutoloader {verb}: {f}");
             Rescan();
-            RunStatus.Text = "OstraAutoloader disabled — Ostrasort now manages the load order.  ";
+            RunStatus.Text = $"OstraAutoloader {verb} — Ostrasort now manages the load order.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex)

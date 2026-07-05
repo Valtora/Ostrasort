@@ -461,8 +461,9 @@ public class FfuRemovalTests
 
             var removal = FfuAnalysis.RemoveFfuCore(env, state.Analysis.Ffu!, state.Analysis);
 
-            Assert.Contains(removal.Renamed, p => p.EndsWith(".mm.dll.disabled"));
-            Assert.Contains(removal.Renamed, p => p.EndsWith("Minor_Fixes_Plus.disabled"));
+            Assert.False(removal.Deleted);
+            Assert.Contains(removal.Affected, p => p.EndsWith(".mm.dll.disabled"));
+            Assert.Contains(removal.Affected, p => p.EndsWith("Minor_Fixes_Plus.disabled"));
             Assert.Single(removal.Unregistered);
             Assert.False(File.Exists(dll));
             Assert.False(Directory.Exists(mfpDir));
@@ -473,6 +474,67 @@ public class FfuRemovalTests
             Assert.Single(after.Analysis.Registered);          // just core
             Assert.Empty(after.Analysis.UnregisteredLocal);
             Assert.Null(after.Analysis.Ffu);
+        }
+        finally { try { Directory.Delete(root, true); } catch { } }
+    }
+
+    [Fact]
+    public void RemoveFfuCore_DeleteVariant_LeavesNoLeftovers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ostrasort-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var dll = Path.Combine(root, "BepInEx", "monomod", "Assembly-CSharp.FFU_BR.mm.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(dll)!);
+            File.WriteAllText(dll, "");
+            var mfpDir = Path.Combine(root, "BepInEx", "plugins", "Minor_Fixes_Plus");
+            Directory.CreateDirectory(Path.Combine(mfpDir, "data", "loot"));
+            File.WriteAllText(Path.Combine(mfpDir, "mod_info.json"),
+                """[{"strName":"Minor Fixes Plus","strAuthor":"t","strGameVersion":"0.15.1.0"}]""");
+            var modsDir = Path.Combine(root, "Ostranauts_Data", "Mods");
+            Directory.CreateDirectory(modsDir);
+            File.WriteAllText(Path.Combine(modsDir, "loading_order.json"),
+                $$"""[{"strName":"Mod Loading Order","aLoadOrder":["core","{{mfpDir.Replace("\\", "\\\\")}}"],"aIgnorePatterns":[]}]""");
+            var env = new GameEnv
+            {
+                GameRoot = root, DiscoveredVia = "test",
+                CoreDataDir = Path.Combine(root, "Ostranauts_Data", "StreamingAssets", "data"),
+                ModsDir = modsDir,
+            };
+            var state = Engine.Analyze(env);
+
+            var removal = FfuAnalysis.RemoveFfuCore(env, state.Analysis.Ffu!, state.Analysis, delete: true);
+
+            Assert.True(removal.Deleted);
+            Assert.False(File.Exists(dll));
+            Assert.False(File.Exists(dll + ".disabled"));      // no leftovers, deleted outright
+            Assert.False(Directory.Exists(mfpDir));
+            Assert.False(Directory.Exists(mfpDir + ".disabled"));
+        }
+        finally { try { Directory.Delete(root, true); } catch { } }
+    }
+
+    [Fact]
+    public void DisableAutoloader_DeleteVariant_RemovesTheDll()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ostrasort-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var dll = Path.Combine(root, "BepInEx", "plugins", "OstraAutoloader", "Ostranauts.Autoloader.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(dll)!);
+            File.WriteAllText(dll, "");
+            var env = new GameEnv
+            {
+                GameRoot = root, DiscoveredVia = "test",
+                CoreDataDir = Path.Combine(root, "data"), ModsDir = Path.Combine(root, "Mods"),
+            };
+            var ctx = FfuContext.Detect(env)!;
+
+            var affected = FfuAnalysis.DisableAutoloader(ctx, delete: true);
+
+            Assert.Equal(dll, Assert.Single(affected));
+            Assert.False(File.Exists(dll));
+            Assert.False(File.Exists(dll + ".disabled"));
         }
         finally { try { Directory.Delete(root, true); } catch { } }
     }

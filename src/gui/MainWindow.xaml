@@ -120,14 +120,14 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <StackPanel Orientation="Horizontal" Margin="0,7,0,1">
-                        <Button x:Name="BtnDisableAutoloader" Content="Disable OstraAutoloader (reversible)"
+                        <Button x:Name="BtnDisableAutoloader" Content="Disable OstraAutoloader…"
                                 Visibility="Collapsed" Padding="12,4" Margin="0,0,8,0"
                                 Click="DisableAutoloader_Click"
-                                ToolTip="Renames the autoloader DLL(s) to .disabled so BepInEx stops loading them. Rename them back to re-enable. r2modman users should disable the mod in their profile instead."/>
-                        <Button x:Name="BtnRemoveFfu" Content="Remove FFU (reversible)"
+                                ToolTip="Park the autoloader DLL(s) as .disabled (reversible) or delete them, so Ostrasort can manage the load order. r2modman users should disable the mod in their profile instead."/>
+                        <Button x:Name="BtnRemoveFfu" Content="Remove FFU…"
                                 Visibility="Collapsed" Padding="12,4"
                                 Click="RemoveFfu_Click"
-                                ToolTip="Renames the FFU MonoMod DLLs and the Minor Fixes Plus mod to .disabled and unregisters them. Rename them back to restore. Ostrasort recommends using Steam Workshop mods only."/>
+                                ToolTip="Park the FFU MonoMod DLLs and Minor Fixes Plus as .disabled (reversible) or delete them, and unregister them from the load order."/>
                     </StackPanel>
                 </StackPanel>
             </DockPanel>

@@ -58,8 +58,9 @@ public static class Program
                 case "--fresh": fresh = true; break;
                 case "--unpatch": unpatch = true; break;
                 case "--allow-rival-stack": allowRival = true; break;   // override the autoloader write-block (at your own risk)
-                case "--disable-autoloader": break;                     // rename the OstraAutoloader DLL(s) to .disabled (handled below)
-                case "--remove-ffu": break;                             // reversibly remove FFU Core (handled below)
+                case "--disable-autoloader": break;                     // park/delete the OstraAutoloader DLL(s) (handled below)
+                case "--remove-ffu": break;                             // remove FFU Core (handled below)
+                case "--delete": break;                                 // modifier: delete instead of parking as .disabled
                 case "--gui": gui = true; break;
                 case "--no-gui": noGui = true; break;
                 case "--no-pause": break;
@@ -90,12 +91,14 @@ public static class Program
                                       regenerates loading_order.json at every game launch
                                       (FFU itself is supported and never blocks)
                           --disable-autoloader
-                                      rename the OstraAutoloader DLL(s) to .disabled so Ostrasort
+                                      park the OstraAutoloader DLL(s) as .disabled so Ostrasort
                                       can manage the load order (reversible: rename them back)
                           --remove-ffu
-                                      reversibly remove FFU Core: FFU MonoMod DLLs and the Minor
-                                      Fixes Plus mod are renamed to .disabled and unregistered
-                                      (Ostrasort recommends Steam Workshop mods only)
+                                      remove FFU Core: FFU MonoMod DLLs and the Minor Fixes Plus
+                                      mod are parked as .disabled and unregistered (Ostrasort
+                                      recommends Steam Workshop mods only)
+                          --delete    with --disable-autoloader / --remove-ffu: delete the files
+                                      outright instead of parking them as .disabled
 
                           --tidy      opt-in cosmetic grouping in the suggestion: core,
                                       infrastructure, code, shells, additive data, overrides, patch
@@ -128,6 +131,7 @@ public static class Program
             _ = new Gui.MainWindow(smokeEnv);                                       // ctor runs a full rescan/render
             var smokePlan = Patcher.PlanMerge(smokeEnv, smokeState.Analysis);
             var resolver = new Gui.ResolverDialog(smokePlan);
+            _ = new Gui.ParkOrDeleteDialog("self-test", "self-test");
             if (smokePlan.ContestedItems.Any() && resolver.SelectorsInTree() == 0)
             {
                 Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");
@@ -136,6 +140,8 @@ public static class Program
             Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()})");
             return 0;
         }
+
+        var hardDelete = args.Contains("--delete");
 
         if (args.Contains("--disable-autoloader"))
         {
@@ -146,13 +152,15 @@ public static class Program
                 Console.WriteLine("No OstraAutoloader plugin found - nothing to disable.");
                 return 0;
             }
-            var renamed = FfuAnalysis.DisableAutoloader(dctx);
-            foreach (var f in renamed)
+            var dverb = hardDelete ? "Deleted" : "Disabled";
+            foreach (var f in FfuAnalysis.DisableAutoloader(dctx, hardDelete))
             {
-                Console.WriteLine($"Disabled: {f}");
-                OpLog.Add($"[cli] Disabled OstraAutoloader: {f}");
+                Console.WriteLine($"{dverb}: {f}");
+                OpLog.Add($"[cli] {dverb} OstraAutoloader: {f}");
             }
-            Console.WriteLine("OstraAutoloader disabled (rename it back to re-enable). Ostrasort now manages the load order - run --report / --apply next.");
+            Console.WriteLine(hardDelete
+                ? "OstraAutoloader deleted. Ostrasort now manages the load order - run --report / --apply next."
+                : "OstraAutoloader disabled (rename it back to re-enable). Ostrasort now manages the load order - run --report / --apply next.");
             return 0;
         }
 
@@ -162,23 +170,26 @@ public static class Program
             if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
             var rstate = Engine.Analyze(renv);
             var rctx = rstate.Analysis.Ffu ?? new FfuContext();
-            var removal = FfuAnalysis.RemoveFfuCore(renv, rctx, rstate.Analysis);
+            var removal = FfuAnalysis.RemoveFfuCore(renv, rctx, rstate.Analysis, hardDelete);
             if (removal.IsEmpty)
             {
                 Console.WriteLine("No FFU Core files found (FFU MonoMod DLLs / Minor Fixes Plus) - nothing to remove.");
                 return 0;
             }
-            foreach (var f in removal.Renamed)
+            var rverb = removal.Deleted ? "Deleted" : "Parked";
+            foreach (var f in removal.Affected)
             {
-                Console.WriteLine($"Parked: {f}");
-                OpLog.Add($"[cli] Removed FFU Core (parked): {f}");
+                Console.WriteLine($"{rverb}: {f}");
+                OpLog.Add($"[cli] Removed FFU Core ({rverb.ToLowerInvariant()}): {f}");
             }
             foreach (var e in removal.Unregistered)
             {
                 Console.WriteLine($"Unregistered: {e}");
                 OpLog.Add($"[cli] Removed FFU Core load-order entry: {e}");
             }
-            Console.WriteLine("FFU Core removed (everything renamed to .disabled - rename back to restore; .bak kept for the load order).");
+            Console.WriteLine(removal.Deleted
+                ? "FFU Core removed (files deleted; .bak kept for the load order)."
+                : "FFU Core removed (everything renamed to .disabled - rename back to restore; .bak kept for the load order).");
             return 0;
         }
 

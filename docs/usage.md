@@ -160,11 +160,14 @@ means FFU **pins your game version**: you can't safely take game updates until
 FFU updates too.
 
 Because of that, **Ostrasort's recommendation is to use Steam Workshop mods
-only**. The banner offers a **"Remove FFU"** button (console: `--remove-ffu`)
-that reversibly removes FFU Core: every FFU MonoMod DLL and the Minor Fixes
-Plus mod are renamed to `.disabled` and unregistered (the load order keeps a
-`.bak`; rename the files back to restore). Other FFU-dependent mods are left
-in place and flagged in Warnings so you can review them yourself.
+only** — the banner carries the full reasoning, and offers a **"Remove FFU"**
+button (console: `--remove-ffu`) covering every FFU MonoMod DLL and the Minor
+Fixes Plus mod. A small dialog asks how: **Park (reversible)** renames them to
+`.disabled` (rename back to restore), **Delete files** removes them outright
+for a clutter-free install. Either way they are unregistered from the load
+order (a `.bak` is kept), and other FFU-dependent mods are left in place and
+flagged in Warnings so you can review them yourself. The same park-or-delete
+choice applies to the **Disable OstraAutoloader** button.
 
 ## Command-line reference
 
@@ -192,12 +195,14 @@ Ostrasort.exe --allow-rival-stack
                           regenerates loading_order.json at every game launch
                           (FFU itself is supported and never blocks)
 Ostrasort.exe --disable-autoloader
-                          rename the OstraAutoloader DLL(s) to .disabled so Ostrasort
+                          park the OstraAutoloader DLL(s) as .disabled so Ostrasort
                           can manage the load order (reversible: rename them back)
 Ostrasort.exe --remove-ffu
-                          reversibly remove FFU Core (FFU MonoMod DLLs + Minor Fixes
-                          Plus renamed to .disabled and unregistered) — Ostrasort
-                          recommends Steam Workshop mods only
+                          remove FFU Core (FFU MonoMod DLLs + Minor Fixes Plus parked
+                          as .disabled and unregistered) — Ostrasort recommends
+                          Steam Workshop mods only
+Ostrasort.exe --delete    with --disable-autoloader / --remove-ffu: delete the
+                          files outright instead of parking them as .disabled
 Ostrasort.exe --version   print the version and exit
 ```
 
