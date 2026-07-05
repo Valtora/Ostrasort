@@ -419,6 +419,66 @@ public class FfuOrderTests
 }
 
 // ---------------------------------------------------------------------------
+// Remove FFU Core: reversible parking + unregistration
+// ---------------------------------------------------------------------------
+
+public class FfuRemovalTests
+{
+    [Fact]
+    public void RemoveFfuCore_ParksFilesUnregistersAndClearsDetection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ostrasort-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var dll = Path.Combine(root, "BepInEx", "monomod", "Assembly-CSharp.FFU_BR.mm.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(dll)!);
+            File.WriteAllText(dll, "");
+
+            var mfpDir = Path.Combine(root, "BepInEx", "plugins", "Minor_Fixes_Plus");
+            Directory.CreateDirectory(Path.Combine(mfpDir, "data", "loot"));
+            File.WriteAllText(Path.Combine(mfpDir, "mod_info.json"),
+                """[{"strName":"Minor Fixes Plus","strAuthor":"t","strGameVersion":"0.15.1.0"}]""");
+            File.WriteAllText(Path.Combine(mfpDir, "data", "loot", "x.json"),
+                """[{"strName":"SomePool","aLoots":["--ADD--","Itm=1.0x1"]}]""");
+
+            var modsDir = Path.Combine(root, "Ostranauts_Data", "Mods");
+            Directory.CreateDirectory(modsDir);
+            File.WriteAllText(Path.Combine(modsDir, "loading_order.json"),
+                $$"""[{"strName":"Mod Loading Order","aLoadOrder":["core","{{mfpDir.Replace("\\", "\\\\")}}"],"aIgnorePatterns":[]}]""");
+
+            var env = new GameEnv
+            {
+                GameRoot = root,
+                DiscoveredVia = "test",
+                CoreDataDir = Path.Combine(root, "Ostranauts_Data", "StreamingAssets", "data"),
+                ModsDir = modsDir,
+                InstalledVersion = "0.15.1.6",
+            };
+
+            var state = Engine.Analyze(env);
+            Assert.NotNull(state.Analysis.Ffu);
+            Assert.Contains(state.Analysis.Warnings, w => w.Contains("FFU VERSION MISMATCH"));
+
+            var removal = FfuAnalysis.RemoveFfuCore(env, state.Analysis.Ffu!, state.Analysis);
+
+            Assert.Contains(removal.Renamed, p => p.EndsWith(".mm.dll.disabled"));
+            Assert.Contains(removal.Renamed, p => p.EndsWith("Minor_Fixes_Plus.disabled"));
+            Assert.Single(removal.Unregistered);
+            Assert.False(File.Exists(dll));
+            Assert.False(Directory.Exists(mfpDir));
+
+            // a fresh pass sees a clean, FFU-free install: entry gone, parked
+            // folder not re-discovered, no FFU context at all
+            var after = Engine.Analyze(env);
+            Assert.Single(after.Analysis.Registered);          // just core
+            Assert.Empty(after.Analysis.UnregisteredLocal);
+            Assert.Null(after.Analysis.Ffu);
+        }
+        finally { try { Directory.Delete(root, true); } catch { } }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Merge semantics: FFU fragments touch only the fields they carry
 // ---------------------------------------------------------------------------
 

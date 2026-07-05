@@ -137,6 +137,9 @@ public partial class MainWindow : Window
         TxtFfuBannerTitle.Foreground = rival ? Bad : Warn;
         ListFfuBanner.ItemsSource = FfuAnalysis.Notices(s.Analysis);
         BtnDisableAutoloader.Visibility = rival ? Visibility.Visible : Visibility.Collapsed;
+        var ffuRemovable = ctx.FrameworkPresent || s.Analysis.AllMods.Any(m =>
+            string.Equals(m.DisplayName, FfuAnalysis.MinorFixesPlus, StringComparison.OrdinalIgnoreCase));
+        BtnRemoveFfu.Visibility = ffuRemovable ? Visibility.Visible : Visibility.Collapsed;
         FfuBanner.Visibility = Visibility.Visible;
     }
 
@@ -144,6 +147,42 @@ public partial class MainWindow : Window
     {
         _ffuBannerDismissed = true;
         FfuBanner.Visibility = Visibility.Collapsed;
+    }
+
+    private void RemoveFfu_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null || !GateRunning()) return;
+        var ctx = _state.Analysis.Ffu ?? new FfuContext();
+        var items = ctx.FrameworkDllPaths.Select(d => "• " + d)
+            .Concat(_state.Analysis.AllMods
+                .Where(m => m.Dir is not null &&
+                            string.Equals(m.DisplayName, FfuAnalysis.MinorFixesPlus, StringComparison.OrdinalIgnoreCase))
+                .Select(m => "• " + m.Dir))
+            .ToList();
+        if (items.Count == 0) return;
+        if (MessageBox.Show(this,
+                "Remove FFU and switch to Steam Workshop mods only?\n\n" +
+                "FFU pins your game to the version FFU was built for — you can't safely take game updates " +
+                "until FFU updates too. Ostrasort recommends Workshop-only setups.\n\n" +
+                "These will be renamed to *.disabled and unregistered (fully reversible — rename them back " +
+                "to restore; the load order keeps a .bak):\n\n" + string.Join("\n", items) +
+                "\n\nOther FFU-dependent mods are left alone and flagged in Warnings.",
+                "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+        try
+        {
+            CaptureOp("remove FFU Core");
+            var removal = FfuAnalysis.RemoveFfuCore(_env, ctx, _state.Analysis);
+            foreach (var f in removal.Renamed) OpLog.Add($"Removed FFU Core (parked): {f}");
+            foreach (var r in removal.Unregistered) OpLog.Add($"Removed FFU Core load-order entry: {r}");
+            Rescan();
+            RunStatus.Text = "FFU removed (reversibly) — Steam Workshop mods only.  ";
+            RunStatus.Foreground = Good;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void DisableAutoloader_Click(object sender, RoutedEventArgs e)

@@ -130,6 +130,7 @@ public static class Engine
             foreach (var dir in Directory.EnumerateDirectories(env.ModsDir))
             {
                 var name = Path.GetFileName(dir);
+                if (name.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)) continue;   // parked by Remove FFU
                 if (localNames.Contains(name)) continue;
                 if (!File.Exists(Path.Combine(dir, "mod_info.json"))) continue;   // not a mod folder
                 a.UnregisteredLocal.Add(new ModEntry
@@ -170,6 +171,7 @@ public static class Engine
             foreach (var info in Directory.EnumerateFiles(pluginsRoot, "mod_info.json", SearchOption.AllDirectories))
             {
                 var dir = Path.GetDirectoryName(info)!;
+                if (dir.Contains(".disabled", StringComparison.OrdinalIgnoreCase)) continue;   // parked by Remove FFU
                 var rel = Path.GetRelativePath(pluginsRoot, dir);
                 if (rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0]
                        .Equals("Workshop", StringComparison.OrdinalIgnoreCase)) continue;   // bridge-managed copies

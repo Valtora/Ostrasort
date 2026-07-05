@@ -49,8 +49,16 @@ mods living under `BepInEx\plugins\`, and accounts for FFU's field-by-field
 merge semantics in its conflict analysis. The one thing it will not co-manage
 is Robyn's **OstraAutoloader** plugin — it regenerates `loading_order.json`
 from scratch at every game launch, so while it is installed Ostrasort runs
-**analysis-only** (writes refused, override: `--allow-rival-stack`) and shows
-how to hand the load order over.
+**analysis-only** (writes refused, override: `--allow-rival-stack`) and offers
+a one-click, reversible **Disable OstraAutoloader** hand-over.
+
+That said, **Ostrasort's recommendation is Steam Workshop mods only.** FFU's
+MonoMod DLLs are compiled against one specific game build, so FFU **pins your
+game version** — after any Ostranauts update the game breaks until FFU ships a
+matching build (Ostrasort detects this and raises an **FFU VERSION MISMATCH**
+warning), and FFU is distributed outside the Workshop. Ostrasort supports FFU
+installs so it can diagnose them and offer the way out: a one-click, reversible
+**Remove FFU** action (`--remove-ffu`).
 
 > ## ⚠️ Early development — use at your own risk
 >

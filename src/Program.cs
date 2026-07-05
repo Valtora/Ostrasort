@@ -59,6 +59,7 @@ public static class Program
                 case "--unpatch": unpatch = true; break;
                 case "--allow-rival-stack": allowRival = true; break;   // override the autoloader write-block (at your own risk)
                 case "--disable-autoloader": break;                     // rename the OstraAutoloader DLL(s) to .disabled (handled below)
+                case "--remove-ffu": break;                             // reversibly remove FFU Core (handled below)
                 case "--gui": gui = true; break;
                 case "--no-gui": noGui = true; break;
                 case "--no-pause": break;
@@ -91,6 +92,10 @@ public static class Program
                           --disable-autoloader
                                       rename the OstraAutoloader DLL(s) to .disabled so Ostrasort
                                       can manage the load order (reversible: rename them back)
+                          --remove-ffu
+                                      reversibly remove FFU Core: FFU MonoMod DLLs and the Minor
+                                      Fixes Plus mod are renamed to .disabled and unregistered
+                                      (Ostrasort recommends Steam Workshop mods only)
 
                           --tidy      opt-in cosmetic grouping in the suggestion: core,
                                       infrastructure, code, shells, additive data, overrides, patch
@@ -148,6 +153,32 @@ public static class Program
                 OpLog.Add($"[cli] Disabled OstraAutoloader: {f}");
             }
             Console.WriteLine("OstraAutoloader disabled (rename it back to re-enable). Ostrasort now manages the load order - run --report / --apply next.");
+            return 0;
+        }
+
+        if (args.Contains("--remove-ffu"))
+        {
+            var renv = GameEnv.Locate(gameRoot);
+            if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
+            var rstate = Engine.Analyze(renv);
+            var rctx = rstate.Analysis.Ffu ?? new FfuContext();
+            var removal = FfuAnalysis.RemoveFfuCore(renv, rctx, rstate.Analysis);
+            if (removal.IsEmpty)
+            {
+                Console.WriteLine("No FFU Core files found (FFU MonoMod DLLs / Minor Fixes Plus) - nothing to remove.");
+                return 0;
+            }
+            foreach (var f in removal.Renamed)
+            {
+                Console.WriteLine($"Parked: {f}");
+                OpLog.Add($"[cli] Removed FFU Core (parked): {f}");
+            }
+            foreach (var e in removal.Unregistered)
+            {
+                Console.WriteLine($"Unregistered: {e}");
+                OpLog.Add($"[cli] Removed FFU Core load-order entry: {e}");
+            }
+            Console.WriteLine("FFU Core removed (everything renamed to .disabled - rename back to restore; .bak kept for the load order).");
             return 0;
         }
 

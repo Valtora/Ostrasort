@@ -108,6 +108,7 @@ public sealed class FfuContext
     /// <summary>The MonoMod patch loader is installed (BepInEx\core\MonoMod.dll / a MonoMod patcher).</summary>
     public bool MonoModLoaderPresent { get; init; }
     public List<string> FrameworkDlls { get; } = new();      // FFU *.mm.dll basenames
+    public List<string> FrameworkDllPaths { get; } = new();  // full paths - the Remove FFU action renames these
     public List<string> FrameworkVersions { get; } = new();  // distinct file versions among them
     public List<string> AutoloaderDlls { get; } = new();     // full paths - the disable action renames these
     public List<string> Evidence { get; } = new();
@@ -133,6 +134,7 @@ public sealed class FfuContext
 
         var evidence = new List<string>();
         var ffuDlls = new List<string>();
+        var ffuDllPaths = new List<string>();
         var ffuVersions = new List<string>();
         bool autoloader = false, monoModPatches = false, framework = false;
 
@@ -165,6 +167,7 @@ public sealed class FfuContext
                 {
                     framework = true;
                     ffuDlls.Add(Path.GetFileName(f));
+                    ffuDllPaths.Add(f);
                     var v = FileVersionOf(f);
                     if (v is not null && !ffuVersions.Contains(v)) ffuVersions.Add(v);
                 }
@@ -190,6 +193,7 @@ public sealed class FfuContext
             MonoModLoaderPresent = loaderPresent,
         };
         ctx.FrameworkDlls.AddRange(ffuDlls);
+        ctx.FrameworkDllPaths.AddRange(ffuDllPaths);
         ctx.FrameworkVersions.AddRange(ffuVersions);
         ctx.AutoloaderDlls.AddRange(autoDlls);
         ctx.Evidence.AddRange(evidence);
@@ -359,8 +363,10 @@ public static class FfuAnalysis
             if (mfp?.GameVersion is { Length: > 0 } gv && env.InstalledVersion is { Length: > 0 } iv && gv != iv)
                 a.Warnings.Add($"FFU VERSION MISMATCH: the installed FFU build targets game {gv} but this game is {iv}. " +
                                "FFU patches the game's data layer at IL level, so a mismatch usually breaks the game " +
-                               "(broken main menu / NullReferenceException spam). Install the FFU build matching your " +
-                               "game version, or remove the FFU files (BepInEx\\monomod) until one exists");
+                               "(broken main menu / NullReferenceException spam). FFU pins your game to the version it " +
+                               "was built for - you cannot safely take game updates until FFU updates too. Ostrasort's " +
+                               "recommendation: remove FFU and use Steam Workshop mods only (the banner's 'Remove FFU' " +
+                               "button / --remove-ffu does this reversibly), or install the FFU build matching your game version");
         }
 
         if (ctx.AnyFfuMods && !ctx.FrameworkPresent)
@@ -410,6 +416,61 @@ public static class FfuAnalysis
             renamed.Add(target);
         }
         return renamed;
+    }
+
+    /// <summary>What <see cref="RemoveFfuCore"/> did: renamed paths + aLoadOrder entries removed.</summary>
+    public sealed record FfuRemoval(List<string> Renamed, List<string> Unregistered)
+    {
+        public bool IsEmpty => Renamed.Count == 0 && Unregistered.Count == 0;
+    }
+
+    /// <summary>
+    /// The "use Steam Workshop mods only" call to action: reversibly removes
+    /// FFU Core from the install - every FFU MonoMod DLL and the Minor Fixes
+    /// Plus data mod get a <c>.disabled</c> rename (rename back to restore),
+    /// and Minor Fixes Plus's aLoadOrder entry is dropped (guarded write,
+    /// .bak kept). Other FFU-dependent mods are left alone - the hygiene
+    /// warnings flag them. Callers gate on the game not running.
+    /// </summary>
+    public static FfuRemoval RemoveFfuCore(GameEnv env, FfuContext ctx, Analysis a)
+    {
+        var renamed = new List<string>();
+        foreach (var dll in ctx.FrameworkDllPaths.Where(File.Exists))
+        {
+            var target = dll + ".disabled";
+            if (File.Exists(target)) File.Delete(target);
+            File.Move(dll, target);
+            renamed.Add(target);
+        }
+
+        // Minor Fixes Plus - wherever it lives (BepInEx\plugins or Mods\)
+        var deadRaws = new List<string>();
+        foreach (var m in a.AllMods.Where(m => m.Dir is not null &&
+                     string.Equals(m.DisplayName, MinorFixesPlus, StringComparison.OrdinalIgnoreCase)))
+        {
+            var dir = Path.TrimEndingDirectorySeparator(m.Dir!);
+            if (Directory.Exists(dir) && !dir.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase))
+            {
+                var target = dir + ".disabled";
+                if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+                Directory.Move(dir, target);
+                renamed.Add(target);
+            }
+            if (m.Registered && m.Raw.Length > 0) deadRaws.Add(m.Raw);
+        }
+
+        var unregistered = new List<string>();
+        if (deadRaws.Count > 0)
+        {
+            var lo = LoadOrderFile.Read(env.LoadingOrderPath);
+            var target = lo.Order.Where(e => !deadRaws.Contains(e, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (target.Count != lo.Order.Count)
+            {
+                lo.Write(target);
+                unregistered.AddRange(deadRaws);
+            }
+        }
+        return new FfuRemoval(renamed, unregistered);
     }
 
     // ------------------------------------------------------------- notices ---

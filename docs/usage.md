@@ -155,7 +155,16 @@ specific game build**. If the installed FFU targets a different game version
 than the one on disk (detected via Minor Fixes Plus's `strGameVersion`),
 Ostrasort raises an **FFU VERSION MISMATCH** warning — a mismatched FFU
 typically breaks the game outright (broken main menu, endless
-NullReferenceExceptions) even though BepInEx's log looks clean.
+NullReferenceExceptions) even though BepInEx's log looks clean. This also
+means FFU **pins your game version**: you can't safely take game updates until
+FFU updates too.
+
+Because of that, **Ostrasort's recommendation is to use Steam Workshop mods
+only**. The banner offers a **"Remove FFU"** button (console: `--remove-ffu`)
+that reversibly removes FFU Core: every FFU MonoMod DLL and the Minor Fixes
+Plus mod are renamed to `.disabled` and unregistered (the load order keeps a
+`.bak`; rename the files back to restore). Other FFU-dependent mods are left
+in place and flagged in Warnings so you can review them yourself.
 
 ## Command-line reference
 
@@ -185,6 +194,10 @@ Ostrasort.exe --allow-rival-stack
 Ostrasort.exe --disable-autoloader
                           rename the OstraAutoloader DLL(s) to .disabled so Ostrasort
                           can manage the load order (reversible: rename them back)
+Ostrasort.exe --remove-ffu
+                          reversibly remove FFU Core (FFU MonoMod DLLs + Minor Fixes
+                          Plus renamed to .disabled and unregistered) — Ostrasort
+                          recommends Steam Workshop mods only
 Ostrasort.exe --version   print the version and exit
 ```
 
