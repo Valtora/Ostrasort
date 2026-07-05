@@ -214,7 +214,8 @@ public sealed class Analysis
             }
 
         // rule 4: register what exists but is invisible to the MODS screen
-        foreach (var m in UnregisteredLocal)
+        // (unless the user chose to leave it unregistered - the ignore list)
+        foreach (var m in UnregisteredLocal.Where(m => !m.Ignored))
         {
             work.Add(m);
             Changes.Add(new Change("add", SuggestedRaw(m),

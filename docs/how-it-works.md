@@ -213,6 +213,10 @@ on the old vanilla base. See [usage.md](usage.md) for the resolver workflow.
   never leave a truncated `loading_order.json` behind. Local entries keep
   their `|edit`/`|disabled` markers, and exact-duplicate entries are dropped
   on write.
+- **Rolling backups.** The `.bak` only survives until the next write, so every
+  overwrite also snapshots the previous text into
+  `%LOCALAPPDATA%\Ostrasort\backups` (the newest **3** are kept). The GUI's
+  *Restore backup…* button lists all of them.
 - **Workshop paths are written in the game's own on-disk case.** The Steam
   registry hands out a lowercase drive (`c:\program files…`), but Ostranauts
   writes `C:\Program Files…`. If Ostrasort wrote the lowercase form the game

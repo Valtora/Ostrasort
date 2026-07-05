@@ -36,7 +36,7 @@ public static class Program
 
     private static int Run(string[] args)
     {
-        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false;
+        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false;
         string? gameRoot = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -44,6 +44,7 @@ public static class Program
             {
                 case "--report": report = true; break;
                 case "--headless": headless = true; break;
+                case "--json": json = true; break;
                 case "--tidy": tidy = true; break;
                 case "--smoke-gui": smokeGui = true; break;   // undocumented: construct windows without showing (CI/self-test)
                 case "--smoke-undo": smokeUndo = true; break; // undocumented: exercise snapshot undo/redo against a fixture
@@ -74,6 +75,9 @@ public static class Program
                           --headless  console only, never any window, never waits for a key.
                                       Alone it acts like --report; combine with --apply/--patch/
                                       --unpatch for unattended runs (implies --no-gui)
+                          --json      like --headless but the report is one machine-readable
+                                      JSON document on stdout (combines with --apply etc.);
+                                      exit codes are unchanged (0 clean / 2 actionable / 1 error)
                           --apply     write the suggested load order (loading_order.json.bak kept)
                           --patch     generate/refresh the "Ostrasort Patch" mod that merges shop
                                       pools two mods both override (conflicts no load order can fix);
@@ -111,8 +115,8 @@ public static class Program
         }
         if (patch && unpatch) { Console.Error.WriteLine("pick one of --patch / --unpatch"); return 1; }
 
-        // --headless: console only, never a window; bare headless = the report
-        if (headless)
+        // --headless / --json: console only, never a window; bare = the report
+        if (headless || json)
         {
             noGui = true;
             gui = false;
@@ -306,7 +310,10 @@ public static class Program
         }
 
         foreach (var act in performed) OpLog.Add($"[cli] {act}");   // record CLI writes in the shared log
-        Report.Print(env, state.Scanner, state.Analysis, state.Patch, Version, performed);
+        if (json)
+            Console.WriteLine(JsonReport.Build(env, state, Version, performed));   // nothing else on stdout
+        else
+            Report.Print(env, state.Scanner, state.Analysis, state.Patch, Version, performed);
         return Engine.Actionable(state) ? 2 : 0;
     }
 

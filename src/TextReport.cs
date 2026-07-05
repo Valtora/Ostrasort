@@ -32,7 +32,8 @@ public static class TextReport
         {
             var cls = m.Kind == EntryKind.Core ? "core" : m.IsPatch ? "patch" : m.Class.ToString().ToLowerInvariant();
             var notes = new List<string>();
-            if (!m.Registered) notes.Add("NOT REGISTERED");
+            if (m.Ignored) notes.Add("ignored (kept unregistered)");
+            else if (!m.Registered) notes.Add("NOT REGISTERED");
             if (m.Dir is null && m.Kind != EntryKind.Core) notes.Add("DEAD ENTRY");
             if (m.Disabled) notes.Add("DISABLED");
             if (m.IsFfuPatch) notes.Add("FFU patch - remove after one use");

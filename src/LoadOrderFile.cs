@@ -92,6 +92,7 @@ public sealed class LoadOrderFile
         }
 
         File.WriteAllText(Path + ".bak", RawText);   // original text, before this write
+        Backups.Snapshot(Path, RawText);             // rolling history (the .bak only survives one write)
         AtomicFile.WriteAllText(Path, json);         // never leave a truncated live file
     }
 }

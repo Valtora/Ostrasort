@@ -33,9 +33,10 @@ already up to date, offline, or rate-limited.)
 6. **Undo anything** with Ctrl+Z.
 7. **Launch the game** (there's a button) and check the in-game MODS screen.
 
-If something ever looks wrong, **Restore .bak** swaps back to the previous
-`loading_order.json`, and **Delete patch** removes the generated patch mod
-entirely.
+If something ever looks wrong, **Restore backup…** offers the previous
+`loading_order.json` (`.bak`) plus a rolling history of the last **3** writes
+(kept in `%LOCALAPPDATA%\Ostrasort\backups`), and **Delete patch** removes the
+generated patch mod entirely.
 
 ## The main window
 
@@ -71,6 +72,14 @@ keeps a `.bak`, and all writes are disabled while the game is running.
 - **Filter** the table by typing in the filter box as your mod list grows.
 - **Right-click** a mod for *Open folder*, *Open Steam Workshop page*, and
   *Copy name / Copy ID*; **double-click** a row to open its folder.
+- **Disable / Enable** (right-click a registered mod) toggles the game's own
+  `|disabled` marker — the same thing the in-game MODS screen does. The entry
+  stays in the list (dimmed) but the mod does not load, and it is excluded
+  from collision analysis while disabled.
+- **Ignore (leave unregistered)** (right-click an unregistered local mod)
+  stops the permanent warning and the "add it" suggestion for a folder you
+  deliberately keep parked. *Stop ignoring* brings both back. The preference
+  is remembered per install.
 - **Tidy grouping** toggles a cosmetic core → infrastructure → code → data
   grouping of the suggested order.
 - **Launch game** starts Ostranauts via Steam; the table **rescans itself**
@@ -185,6 +194,9 @@ Ostrasort.exe             open the GUI (same as double-clicking)
 Ostrasort.exe --report    console analysis report; writes nothing
 Ostrasort.exe --headless  console only, never any window or key-press wait; alone it
                           acts like --report, combine with the flags below for automation
+Ostrasort.exe --json      like --headless but prints ONE machine-readable JSON document
+                          (mods, collisions, patch state, warnings, suggested order);
+                          combines with --apply/--patch/--unpatch, same exit codes
 Ostrasort.exe --apply     write the suggested load order (loading_order.json.bak kept)
 Ostrasort.exe --patch     generate/refresh the patch; contested items open the
                           resolver window unless headless

@@ -34,6 +34,7 @@ public sealed class ModEntry
     public string? GameVersion { get; set; }         // strGameVersion from mod_info.json
     public string? PublishedId { get; set; }         // strWorkshopID from mod_info.json (published local mods)
     public bool Registered { get; set; } = true;
+    public bool Ignored { get; set; }                // user chose to leave it unregistered (see IgnoreList)
 
     /// <summary>Workshop item id: the content folder for subscriptions, strWorkshopID for published local mods.</summary>
     public string? WorkshopId => Kind == EntryKind.Workshop ? Name : PublishedId;
@@ -116,6 +117,18 @@ public sealed class ModEntry
             EditMarker = edit,
             Disabled = disabled,
         };
+    }
+
+    /// <summary>
+    /// This entry's raw aLoadOrder string with the |disabled marker toggled -
+    /// the same edit the in-game MODS screen makes. Re-enabled local mods get
+    /// their |edit marker back (the game strips it when disabling).
+    /// </summary>
+    public string RawToggledDisabled(bool disabled)
+    {
+        var path = (Raw.Length > 0 ? Raw : Name).Split('|')[0];
+        if (disabled) return path + "|disabled";
+        return Kind == EntryKind.Local ? path + "|edit" : path;
     }
 
     /// <summary>

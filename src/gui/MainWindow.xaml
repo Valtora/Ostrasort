@@ -155,6 +155,15 @@
                     <MenuItem x:Name="MenuOpenFolder" Header="Open folder" Click="MenuOpenFolder_Click"/>
                     <MenuItem x:Name="MenuOpenWorkshop" Header="Open Steam Workshop page" Click="MenuOpenWorkshop_Click"/>
                     <Separator/>
+                    <MenuItem x:Name="MenuDisable" Header="Disable (keep entry, skip at load)" Click="MenuDisable_Click"
+                              ToolTip="Adds the game's own |disabled marker to this entry - the same thing the in-game MODS screen toggle does. The mod stays installed and listed but does not load."/>
+                    <MenuItem x:Name="MenuEnable" Header="Enable" Click="MenuEnable_Click"
+                              ToolTip="Removes the |disabled marker so the mod loads again (local mods get their |edit marker back)."/>
+                    <MenuItem x:Name="MenuIgnore" Header="Ignore (leave unregistered)" Click="MenuIgnore_Click"
+                              ToolTip="Stop warning about this unregistered folder and stop suggesting to register it. It stays on disk, invisible to the game, until you register it or stop ignoring it."/>
+                    <MenuItem x:Name="MenuUnignore" Header="Stop ignoring" Click="MenuUnignore_Click"
+                              ToolTip="Warn about this unregistered folder again and offer to register it."/>
+                    <Separator x:Name="MenuStateSeparator"/>
                     <MenuItem x:Name="MenuCopyName" Header="Copy mod name" Click="MenuCopyName_Click"/>
                     <MenuItem x:Name="MenuCopyId" Header="Copy Workshop ID" Click="MenuCopyId_Click"/>
                 </ContextMenu>
@@ -243,7 +252,7 @@
         <DockPanel Grid.Row="6" Margin="0,10,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button x:Name="BtnRescan" Content="Rescan" Padding="14,6" Margin="8,0,0,0" Click="Rescan_Click"/>
-                <Button x:Name="BtnRestoreBak" Content="Restore .bak" Padding="14,6" Margin="8,0,0,0" Click="RestoreBak_Click"/>
+                <Button x:Name="BtnRestoreBak" Content="Restore backup…" Padding="14,6" Margin="8,0,0,0" Click="RestoreBak_Click"/>
                 <Button x:Name="BtnLaunch" Content="Launch game" Padding="14,6" Margin="8,0,0,0" Click="Launch_Click"/>
                 <Button x:Name="BtnApply" Content="Apply suggested order" Padding="14,6" Margin="8,0,0,0" Click="Apply_Click"/>
                 <Button x:Name="BtnPatch" Content="Resolve conflicts &amp; generate patch" Padding="14,6" Margin="8,0,0,0" Click="Patch_Click"/>

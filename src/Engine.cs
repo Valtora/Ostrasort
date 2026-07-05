@@ -7,8 +7,9 @@ public sealed record EngineState(LoadOrderFile Lo, Scanner Scanner, Analysis Ana
 /// <summary>One full read-only pass over the install - shared by the console paths and the GUI.</summary>
 public static class Engine
 {
-    public static EngineState Analyze(GameEnv env, bool tidy = false)
+    public static EngineState Analyze(GameEnv env, bool tidy = false, IgnoreList? ignore = null)
     {
+        ignore ??= IgnoreList.LoadDefault();
         var lo = LoadOrderFile.Read(env.LoadingOrderPath);
         var analysis = new Analysis
         {
@@ -16,7 +17,7 @@ public static class Engine
             Ffu = FfuContext.Detect(env),
             IgnorePatterns = lo.IgnorePatterns,
         };
-        DiscoverUnregistered(env, analysis);
+        DiscoverUnregistered(env, analysis, ignore);
 
         var scanner = new Scanner(env, lo.IgnorePatterns);
         scanner.IndexCore();
@@ -144,7 +145,7 @@ public static class Engine
     /// subscribed Workshop items (the game re-adds those itself on launch;
     /// Ostrasort just surfaces them).
     /// </summary>
-    private static void DiscoverUnregistered(GameEnv env, Analysis a)
+    private static void DiscoverUnregistered(GameEnv env, Analysis a, IgnoreList ignore)
     {
         var localNames = a.Registered.Where(m => m.Kind == EntryKind.Local)
             .Select(m => m.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -156,13 +157,16 @@ public static class Engine
                 if (name.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)) continue;   // parked by Remove FFU
                 if (localNames.Contains(name)) continue;
                 if (!File.Exists(Path.Combine(dir, "mod_info.json"))) continue;   // not a mod folder
-                a.UnregisteredLocal.Add(new ModEntry
+                var entry = new ModEntry
                 {
                     Raw = "", Kind = EntryKind.Local, Name = name, Dir = dir,
                     EditMarker = true, Registered = false,
-                });
-                a.Warnings.Add($"local mod folder '{name}' is not in aLoadOrder - " +
-                               "it does not appear on the MODS screen at all");
+                };
+                entry.Ignored = ignore.Contains(IgnoreList.KeyFor(env, entry));
+                a.UnregisteredLocal.Add(entry);
+                if (!entry.Ignored)
+                    a.Warnings.Add($"local mod folder '{name}' is not in aLoadOrder - " +
+                                   "it does not appear on the MODS screen at all");
             }
         }
 
@@ -200,12 +204,15 @@ public static class Engine
                        .Equals("Workshop", StringComparison.OrdinalIgnoreCase)) continue;   // bridge-managed copies
                 if (!Directory.Exists(Path.Combine(dir, "data"))) continue;                 // no data payload to load
                 if (registeredDirs.Contains(Path.TrimEndingDirectorySeparator(dir))) continue;
-                a.UnregisteredLocal.Add(new ModEntry
+                var entry = new ModEntry
                 {
                     Raw = "", Kind = EntryKind.PluginDir, Name = Path.GetFileName(dir), Dir = dir, Registered = false,
-                });
-                a.Warnings.Add($"data mod '{Path.GetFileName(dir)}' under BepInEx\\plugins is not in aLoadOrder - " +
-                               "the game loads only what aLoadOrder lists");
+                };
+                entry.Ignored = ignore.Contains(IgnoreList.KeyFor(env, entry));
+                a.UnregisteredLocal.Add(entry);
+                if (!entry.Ignored)
+                    a.Warnings.Add($"data mod '{Path.GetFileName(dir)}' under BepInEx\\plugins is not in aLoadOrder - " +
+                                   "the game loads only what aLoadOrder lists");
             }
         }
     }
