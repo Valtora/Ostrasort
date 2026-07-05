@@ -108,9 +108,6 @@ exists.
 
 ## Roadmap
 
-- Merge objects with no base-game version (two mods adding the same new
-  object) — currently reported but not auto-merged, as there is no common
-  ancestor for a 3-way merge.
-- Machine-readable (`--json`) report output.
-- NativeAOT packaging to shrink the exe (WPF isn't AOT-compatible, so this
-  would likely pair with a console-only build).
+Lives in [ROADMAP.md](../ROADMAP.md) at the repo root — planned features
+(mod profiles is the flagship, dark mode the most-requested), plus the
+explicitly-not-planned list.

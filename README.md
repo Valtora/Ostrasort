@@ -104,8 +104,10 @@ Full walkthrough: **[docs/usage.md](docs/usage.md)**.
 - **[How it works](docs/how-it-works.md)** — load order in Ostranauts, how
   mods are classified, what collisions Ostrasort detects, and the safety
   model.
-- **[Building & developing](docs/development.md)** — build/publish, code
-  layout, and the roadmap.
+- **[Building & developing](docs/development.md)** — build/publish and the
+  code layout.
+- **[Roadmap](ROADMAP.md)** — what's planned next (mod profiles, dark mode,
+  …) and what deliberately isn't.
 
 ## Licence / disclaimer
 
