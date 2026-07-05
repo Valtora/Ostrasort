@@ -770,6 +770,28 @@ public partial class MainWindow : Window
         finally { _busy = false; }
     }
 
+    /// <summary>Snapshots the current loading_order.json into the rolling history on demand (safe anytime - LOCALAPPDATA only).</summary>
+    private void MakeBackup_Click(object sender, RoutedEventArgs e)
+    {
+        var live = _env.LoadingOrderPath;
+        if (!File.Exists(live))
+        {
+            MessageBox.Show(this, "There is no loading_order.json to back up yet — launch the game once so it creates one.",
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        try
+        {
+            Backups.Snapshot(live, File.ReadAllText(live));
+            OpLog.Add("Backed up the current loading_order.json (manual).");
+            if (_state is not null) UpdateActionBar(_state);   // refresh the Restore button's count/tooltip
+            var count = (File.Exists(live + ".bak") ? 1 : 0) + Backups.List(live).Count;
+            RunStatus.Text = $"Backup created — {count} restore point(s) available.  ";
+            RunStatus.Foreground = Good;
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
     /// <summary>Offers every available restore point: the sibling .bak plus the rolling backups.</summary>
     private void RestoreBak_Click(object sender, RoutedEventArgs e)
     {

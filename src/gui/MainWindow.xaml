@@ -188,6 +188,32 @@
 
         <!-- detail tabs -->
         <TabControl Grid.Row="5" x:Name="Tabs" FontSize="12.5">
+            <TabItem x:Name="TabProfiles" Header="Profiles">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8,2,8,8">
+                        <Button x:Name="BtnProfileSave" Content="Save current…" Padding="10,4" Click="ProfileSave_Click"
+                                ToolTip="Save the current load order as a named profile you can switch back to later."/>
+                        <Button x:Name="BtnProfileSwitch" Content="Switch…" Padding="10,4" Margin="8,0,0,0" Click="ProfileSwitch_Click"
+                                ToolTip="Load the selected profile — shows a diff and a Replace / Merge-append choice before writing anything."/>
+                        <Button x:Name="BtnProfileRename" Content="Rename…" Padding="10,4" Margin="8,0,0,0" Click="ProfileRename_Click"/>
+                        <Button x:Name="BtnProfileDelete" Content="Delete" Padding="10,4" Margin="8,0,0,0" Click="ProfileDelete_Click"
+                                ToolTip="Delete the saved profile. This removes only the profile, never any mods."/>
+                        <TextBlock x:Name="TxtProfileHint" Foreground="Gray" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                    </StackPanel>
+                    <ListBox x:Name="ListProfiles" Margin="8" SelectionChanged="Profiles_SelectionChanged"
+                             MouseDoubleClick="Profiles_DoubleClick"
+                             ToolTip="Saved load-order sets for this install. Select one, then Switch… to load it.">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="2,3">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"/>
+                                    <TextBlock Text="{Binding Detail}" Foreground="Gray" FontSize="11.5"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
             <TabItem x:Name="TabCollisions" Header="Collisions">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl x:Name="ListCollisions" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
@@ -250,38 +276,14 @@
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
-            <TabItem x:Name="TabProfiles" Header="Profiles">
-                <DockPanel>
-                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8,2,8,8">
-                        <Button x:Name="BtnProfileSave" Content="Save current…" Padding="10,4" Click="ProfileSave_Click"
-                                ToolTip="Save the current load order as a named profile you can switch back to later."/>
-                        <Button x:Name="BtnProfileSwitch" Content="Switch…" Padding="10,4" Margin="8,0,0,0" Click="ProfileSwitch_Click"
-                                ToolTip="Load the selected profile — shows a diff and a Replace / Merge-append choice before writing anything."/>
-                        <Button x:Name="BtnProfileRename" Content="Rename…" Padding="10,4" Margin="8,0,0,0" Click="ProfileRename_Click"/>
-                        <Button x:Name="BtnProfileDelete" Content="Delete" Padding="10,4" Margin="8,0,0,0" Click="ProfileDelete_Click"
-                                ToolTip="Delete the saved profile. This removes only the profile, never any mods."/>
-                        <TextBlock x:Name="TxtProfileHint" Foreground="Gray" VerticalAlignment="Center" Margin="14,0,0,0"/>
-                    </StackPanel>
-                    <ListBox x:Name="ListProfiles" Margin="8" SelectionChanged="Profiles_SelectionChanged"
-                             MouseDoubleClick="Profiles_DoubleClick"
-                             ToolTip="Saved load-order sets for this install. Select one, then Switch… to load it.">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Margin="2,3">
-                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"/>
-                                    <TextBlock Text="{Binding Detail}" Foreground="Gray" FontSize="11.5"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </DockPanel>
-            </TabItem>
         </TabControl>
 
         <!-- action bar -->
         <DockPanel Grid.Row="6" Margin="0,10,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button x:Name="BtnRescan" Content="Rescan" Padding="14,6" Margin="8,0,0,0" Click="Rescan_Click"/>
+                <Button x:Name="BtnMakeBackup" Content="Make backup" Padding="14,6" Margin="8,0,0,0" Click="MakeBackup_Click"
+                        ToolTip="Snapshot the current loading_order.json into the rolling backup history now — restore it later with Restore backup…"/>
                 <Button x:Name="BtnRestoreBak" Content="Restore backup…" Padding="14,6" Margin="8,0,0,0" Click="RestoreBak_Click"/>
                 <Button x:Name="BtnLaunch" Content="Launch game" Padding="14,6" Margin="8,0,0,0" Click="Launch_Click"/>
                 <Button x:Name="BtnApply" Content="Apply suggested order" Padding="14,6" Margin="8,0,0,0" Click="Apply_Click"/>

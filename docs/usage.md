@@ -36,7 +36,8 @@ already up to date, offline, or rate-limited.)
 If something ever looks wrong, **Restore backup…** offers the previous
 `loading_order.json` (`.bak`) plus a rolling history of the last **3** writes
 (kept in `%LOCALAPPDATA%\Ostrasort\backups`), and **Delete patch** removes the
-generated patch mod entirely.
+generated patch mod entirely. **Make backup** adds the current file to that
+history on demand — a handy checkpoint before hand-editing or experimenting.
 
 ## The main window
 
