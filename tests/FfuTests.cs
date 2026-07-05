@@ -151,6 +151,24 @@ public class FfuContextTests
         Touch(Path.Combine(root, "BepInEx", "core", "MonoMod.dll"));
         Assert.True(FfuContext.Detect(EnvAt(root))!.MonoModLoaderPresent);
     });
+
+    [Fact]
+    public void DisableAutoloader_RenamesReversiblyAndClearsDetection() => WithRoot(root =>
+    {
+        var dll = Path.Combine(root, "BepInEx", "plugins", "OstraAutoloader", "Ostranauts.Autoloader.dll");
+        Touch(dll);
+        var ctx = FfuContext.Detect(EnvAt(root));
+        Assert.True(ctx!.AutoloaderActive);
+        Assert.Single(ctx.AutoloaderDlls);
+
+        var renamed = FfuAnalysis.DisableAutoloader(ctx);
+
+        var target = Assert.Single(renamed);
+        Assert.Equal(dll + ".disabled", target);
+        Assert.True(File.Exists(target));
+        Assert.False(File.Exists(dll));
+        Assert.Null(FfuContext.Detect(EnvAt(root)));   // no longer detected as a rival
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -159,12 +177,15 @@ public class FfuContextTests
 
 public class FfuClassifyTests
 {
-    private static GameEnv TestEnv => new()
+    private static GameEnv TestEnv => MakeEnv();
+
+    private static GameEnv MakeEnv(string? installedVersion = null) => new()
     {
         GameRoot = @"C:\nonexistent-ostrasort-test",
         DiscoveredVia = "test",
         CoreDataDir = @"C:\nonexistent-ostrasort-test\data",
         ModsDir = @"C:\nonexistent-ostrasort-test\Mods",
+        InstalledVersion = installedVersion,
     };
 
     private static Analysis Analyze(params ModEntry[] mods)
@@ -256,6 +277,36 @@ public class FfuClassifyTests
         Assert.NotNull(a.Ffu);                       // context created so the banner shows
         Assert.False(a.Ffu!.FrameworkPresent);
         Assert.Contains(a.Warnings, w => w.Contains("framework") && w.Contains("missing"));
+    }
+
+    [Fact]
+    public void FfuGameVersionMismatch_WarnsLoudly()
+    {
+        // the exact failure seen live: FFU built for 0.15.1.0 on a 0.15.1.6 game
+        // = broken main menu + NRE spam, with a clean-looking MonoMod log
+        var mfp = Mod("Minor_Fixes_Plus");
+        mfp.DisplayName = "Minor Fixes Plus";
+        mfp.GameVersion = "0.15.1.0";
+        var a = new Analysis { Registered = [mfp] };
+        a.Ffu = new FfuContext { FrameworkPresent = true };
+
+        FfuAnalysis.Classify(MakeEnv("0.15.1.6"), a);
+
+        Assert.Contains(a.Warnings, w => w.Contains("FFU VERSION MISMATCH") && w.Contains("0.15.1.6"));
+    }
+
+    [Fact]
+    public void FfuGameVersionMatch_NoMismatchWarning()
+    {
+        var mfp = Mod("Minor_Fixes_Plus");
+        mfp.DisplayName = "Minor Fixes Plus";
+        mfp.GameVersion = "0.15.1.6";
+        var a = new Analysis { Registered = [mfp] };
+        a.Ffu = new FfuContext { FrameworkPresent = true };
+
+        FfuAnalysis.Classify(MakeEnv("0.15.1.6"), a);
+
+        Assert.DoesNotContain(a.Warnings, w => w.Contains("FFU VERSION MISMATCH"));
     }
 }
 

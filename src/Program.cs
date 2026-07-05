@@ -57,7 +57,8 @@ public static class Program
                 case "--patch": patch = true; break;
                 case "--fresh": fresh = true; break;
                 case "--unpatch": unpatch = true; break;
-                case "--allow-rival-stack": allowRival = true; break;   // override the FFU/Thunderstore write-block (at your own risk)
+                case "--allow-rival-stack": allowRival = true; break;   // override the autoloader write-block (at your own risk)
+                case "--disable-autoloader": break;                     // rename the OstraAutoloader DLL(s) to .disabled (handled below)
                 case "--gui": gui = true; break;
                 case "--no-gui": noGui = true; break;
                 case "--no-pause": break;
@@ -87,6 +88,9 @@ public static class Program
                                       by default writes are refused there because the autoloader
                                       regenerates loading_order.json at every game launch
                                       (FFU itself is supported and never blocks)
+                          --disable-autoloader
+                                      rename the OstraAutoloader DLL(s) to .disabled so Ostrasort
+                                      can manage the load order (reversible: rename them back)
 
                           --tidy      opt-in cosmetic grouping in the suggestion: core,
                                       infrastructure, code, shells, additive data, overrides, patch
@@ -125,6 +129,25 @@ public static class Program
                 return 1;
             }
             Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()})");
+            return 0;
+        }
+
+        if (args.Contains("--disable-autoloader"))
+        {
+            var denv = GameEnv.Locate(gameRoot);
+            if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
+            if (FfuContext.Detect(denv) is not { AutoloaderActive: true } dctx)
+            {
+                Console.WriteLine("No OstraAutoloader plugin found - nothing to disable.");
+                return 0;
+            }
+            var renamed = FfuAnalysis.DisableAutoloader(dctx);
+            foreach (var f in renamed)
+            {
+                Console.WriteLine($"Disabled: {f}");
+                OpLog.Add($"[cli] Disabled OstraAutoloader: {f}");
+            }
+            Console.WriteLine("OstraAutoloader disabled (rename it back to re-enable). Ostrasort now manages the load order - run --report / --apply next.");
             return 0;
         }
 

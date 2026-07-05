@@ -124,10 +124,12 @@ Anything Ostrasort wrote would be undone at the next launch, so while the
 autoloader DLL is present Ostrasort is **analysis-only**: the GUI opens
 normally with a red banner and disabled write buttons, the console report
 prints the same, and every write flag refuses (`--allow-rival-stack`
-overrides). Disable or uninstall the autoloader to hand the load order to
-Ostrasort — it understands everything the autoloader does, plus Workshop and
-local mods. A meta file **by itself is inert** and never triggers the
-read-only mode.
+overrides). The banner recommends handing the load order to Ostrasort — it
+understands everything the autoloader does, plus Workshop and local mods, and
+unlike the autoloader it is actively maintained — and offers a one-click
+**Disable OstraAutoloader** action (console: `--disable-autoloader`) that
+renames the autoloader DLL(s) to `.disabled`, which is fully reversible. A
+meta file **by itself is inert** and never triggers the read-only mode.
 
 ## The conflict patch
 

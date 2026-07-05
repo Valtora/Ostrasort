@@ -109,6 +109,7 @@ public sealed class FfuContext
     public bool MonoModLoaderPresent { get; init; }
     public List<string> FrameworkDlls { get; } = new();      // FFU *.mm.dll basenames
     public List<string> FrameworkVersions { get; } = new();  // distinct file versions among them
+    public List<string> AutoloaderDlls { get; } = new();     // full paths - the disable action renames these
     public List<string> Evidence { get; } = new();
     /// <summary>Set by <see cref="FfuAnalysis.Classify"/>: at least one FFU-classified mod is present.</summary>
     public bool AnyFfuMods { get; set; }
@@ -135,15 +136,18 @@ public sealed class FfuContext
         var ffuVersions = new List<string>();
         bool autoloader = false, monoModPatches = false, framework = false;
 
+        var autoDlls = new List<string>();
         var plugins = Path.Combine(bep, "plugins");
         if (Directory.Exists(plugins))
         {
-            var autoDll = SafeFiles(plugins, "*.dll")
-                .FirstOrDefault(f => Path.GetFileName(f).Contains("Autoloader", StringComparison.OrdinalIgnoreCase));
-            if (autoDll is not null)
+            autoDlls = SafeFiles(plugins, "*.dll")
+                .Where(f => Path.GetFileName(f).Contains("Autoloader", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (autoDlls.Count > 0)
             {
                 autoloader = true;
-                evidence.Add($"OstraAutoloader plugin: {Rel(env.GameRoot, autoDll)}");
+                foreach (var f in autoDlls)
+                    evidence.Add($"OstraAutoloader plugin: {Rel(env.GameRoot, f)}");
             }
         }
 
@@ -187,6 +191,7 @@ public sealed class FfuContext
         };
         ctx.FrameworkDlls.AddRange(ffuDlls);
         ctx.FrameworkVersions.AddRange(ffuVersions);
+        ctx.AutoloaderDlls.AddRange(autoDlls);
         ctx.Evidence.AddRange(evidence);
         return ctx;
     }
@@ -345,6 +350,17 @@ public static class FfuAnalysis
             else if (!mfp.Registered)
                 a.Warnings.Add($"'{MinorFixesPlus}' exists on disk but is not registered in aLoadOrder - " +
                                "it is mandatory for FFU and must load as the first FFU mod");
+
+            // FFU's MonoMod DLLs are compiled against ONE specific game build; a
+            // mismatch merges stale copies of DataHandler + every Json* data class
+            // into the newer assembly and typically breaks the game outright
+            // (broken main menu, NullReferenceException loops). The FFU core-tier
+            // mod's strGameVersion is the best available statement of the target.
+            if (mfp?.GameVersion is { Length: > 0 } gv && env.InstalledVersion is { Length: > 0 } iv && gv != iv)
+                a.Warnings.Add($"FFU VERSION MISMATCH: the installed FFU build targets game {gv} but this game is {iv}. " +
+                               "FFU patches the game's data layer at IL level, so a mismatch usually breaks the game " +
+                               "(broken main menu / NullReferenceException spam). Install the FFU build matching your " +
+                               "game version, or remove the FFU files (BepInEx\\monomod) until one exists");
         }
 
         if (ctx.AnyFfuMods && !ctx.FrameworkPresent)
@@ -375,6 +391,27 @@ public static class FfuAnalysis
                                    $"load order; load '{other.DisplayName ?? other.Name}' after the remover to keep its version");
     }
 
+    // ------------------------------------------------------------- disable ---
+
+    /// <summary>
+    /// The "hand the load order to Ostrasort" call to action: renames every
+    /// detected autoloader DLL to <c>*.dll.disabled</c> so BepInEx no longer
+    /// loads it. Fully reversible (rename it back). Returns the new paths.
+    /// Callers gate on the game not running; a locked file throws IOException.
+    /// </summary>
+    public static List<string> DisableAutoloader(FfuContext ctx)
+    {
+        var renamed = new List<string>();
+        foreach (var dll in ctx.AutoloaderDlls.Where(File.Exists))
+        {
+            var target = dll + ".disabled";
+            if (File.Exists(target)) File.Delete(target);   // leftover from an earlier disable
+            File.Move(dll, target);
+            renamed.Add(target);
+        }
+        return renamed;
+    }
+
     // ------------------------------------------------------------- notices ---
 
     /// <summary>The non-blocking informational lines for the GUI banner / console FFU section.</summary>
@@ -390,10 +427,14 @@ public static class FfuAnalysis
                       "undone, and local mods (plus |edit / |disabled markers) get silently dropped. The game then " +
                       "re-appends subscribed Workshop mods at the END - after the FFU block, violating FFU's own " +
                       "ordering rule.");
-            lines.Add("Ostrasort is read-only while the autoloader is active. To hand the load order to Ostrasort " +
-                      "(it understands FFU load groups, dependencies and plugins-dir mods): disable OstraAutoloader " +
-                      "in r2modman, or delete its DLL from BepInEx\\plugins - its uninstall mode can restore your " +
-                      "pre-autoloader order.");
+            lines.Add("Ostrasort is read-only while the autoloader is active. Running both is unsupported - " +
+                      "and the autoloader has not been meaningfully updated in about a year, while Ostrasort is " +
+                      "actively maintained and covers everything it does (FFU load groups, dependencies, " +
+                      "plugins-dir mods) plus Workshop and local mods.");
+            lines.Add("Recommended: disable the autoloader and let Ostrasort manage the order - use the " +
+                      "\"Disable OstraAutoloader\" button (or --disable-autoloader from a terminal; r2modman users " +
+                      "should disable it in their profile instead). Disabling renames its DLL to .disabled, so it " +
+                      "is fully reversible.");
             return lines;
         }
 

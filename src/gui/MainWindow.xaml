@@ -119,6 +119,10 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <Button x:Name="BtnDisableAutoloader" Content="Disable OstraAutoloader (reversible)"
+                            Visibility="Collapsed" HorizontalAlignment="Left" Padding="12,4" Margin="0,7,0,1"
+                            Click="DisableAutoloader_Click"
+                            ToolTip="Renames the autoloader DLL(s) to .disabled so BepInEx stops loading them. Rename them back to re-enable. r2modman users should disable the mod in their profile instead."/>
                 </StackPanel>
             </DockPanel>
         </Border>

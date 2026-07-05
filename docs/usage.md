@@ -139,12 +139,23 @@ the suggestion:
 The one exception is Robyn's **OstraAutoloader** plugin: it regenerates
 `loading_order.json` from scratch at **every game launch**, dropping local mods
 (and `|edit`/`|disabled` markers) it doesn't manage — anything Ostrasort wrote
-would be undone. While the autoloader DLL is installed Ostrasort runs
-**analysis-only**: the banner explains, every write is disabled/refused, and
-you can hand the order over by disabling the autoloader (r2modman) or deleting
-its DLL from `BepInEx\plugins\` — Ostrasort then manages the full order, FFU
-included. (Console override for the write refusal: `--allow-rival-stack`, at
+would be undone. Running both is unsupported, and the autoloader has been
+inactive for about a year while Ostrasort is actively maintained and covers
+everything it does. While the autoloader DLL is installed Ostrasort runs
+**analysis-only**: the banner explains and offers a one-click
+**"Disable OstraAutoloader"** button (console: `--disable-autoloader`) that
+renames the autoloader DLL(s) to `.disabled` — fully reversible, rename them
+back to re-enable. r2modman users should disable it in their profile instead.
+After disabling, Ostrasort manages the full order, FFU included. (Console
+override for the write refusal without disabling: `--allow-rival-stack`, at
 your own risk.)
+
+One more FFU-specific safeguard: FFU's MonoMod DLLs are compiled against **one
+specific game build**. If the installed FFU targets a different game version
+than the one on disk (detected via Minor Fixes Plus's `strGameVersion`),
+Ostrasort raises an **FFU VERSION MISMATCH** warning — a mismatched FFU
+typically breaks the game outright (broken main menu, endless
+NullReferenceExceptions) even though BepInEx's log looks clean.
 
 ## Command-line reference
 
@@ -171,6 +182,9 @@ Ostrasort.exe --allow-rival-stack
                           default writes are refused there because the autoloader
                           regenerates loading_order.json at every game launch
                           (FFU itself is supported and never blocks)
+Ostrasort.exe --disable-autoloader
+                          rename the OstraAutoloader DLL(s) to .disabled so Ostrasort
+                          can manage the load order (reversible: rename them back)
 Ostrasort.exe --version   print the version and exit
 ```
 

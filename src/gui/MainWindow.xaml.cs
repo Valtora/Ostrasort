@@ -136,6 +136,7 @@ public partial class MainWindow : Window
             : $"{ctx.Summary} detected — FFU ordering rules are applied";
         TxtFfuBannerTitle.Foreground = rival ? Bad : Warn;
         ListFfuBanner.ItemsSource = FfuAnalysis.Notices(s.Analysis);
+        BtnDisableAutoloader.Visibility = rival ? Visibility.Visible : Visibility.Collapsed;
         FfuBanner.Visibility = Visibility.Visible;
     }
 
@@ -143,6 +144,30 @@ public partial class MainWindow : Window
     {
         _ffuBannerDismissed = true;
         FfuBanner.Visibility = Visibility.Collapsed;
+    }
+
+    private void DisableAutoloader_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state?.Analysis.Ffu is not { AutoloaderActive: true } ctx || !GateRunning()) return;
+        var dlls = string.Join("\n", ctx.AutoloaderDlls.Select(d => "• " + d));
+        if (MessageBox.Show(this,
+                "Disable OstraAutoloader and let Ostrasort manage the load order?\n\n" +
+                "These files will be renamed to *.disabled (fully reversible — rename them back to re-enable):\n\n" +
+                dlls + "\n\nIf you installed it through r2modman, disable it in your profile instead.",
+                "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+        try
+        {
+            var renamed = FfuAnalysis.DisableAutoloader(ctx);
+            foreach (var f in renamed) OpLog.Add($"Disabled OstraAutoloader: {f}");
+            Rescan();
+            RunStatus.Text = "OstraAutoloader disabled — Ostrasort now manages the load order.  ";
+            RunStatus.Foreground = Good;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private ModRow BuildRow(string pos, ModEntry m)
