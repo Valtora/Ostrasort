@@ -323,7 +323,13 @@ public sealed class Analysis
         : m.Raw.Length > 0 ? m.Raw
         : m.Dir ?? m.Name;   // unregistered entries all share Raw "" - identify by folder
 
-    private static string SuggestedRaw(ModEntry m) =>
+    /// <summary>
+    /// The exact aLoadOrder string this mod registers as: local mods keep their
+    /// |edit marker, Workshop/plugins-dir mods register by absolute path, the
+    /// generated patch registers plain. Used by the suggestion and by the
+    /// single-mod Register action.
+    /// </summary>
+    public static string SuggestedRaw(ModEntry m) =>
         m.Registered ? m.Raw
         : m.Kind is EntryKind.Workshop or EntryKind.PluginDir ? m.Dir!   // absolute-path registrations
         : m.IsPatch ? m.Name                 // the patch registers plain, nothing to upload

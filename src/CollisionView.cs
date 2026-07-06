@@ -104,7 +104,7 @@ public static class CollisionView
             else if (anyWrongOrder)
             {
                 Add($"Both stock {what}, and the current load order is dropping items.", LineSev.Bad, 1);
-                Add("→ Fixable — use “Apply suggested order” (or --apply) to reorder them.", LineSev.Warn, 1);
+                Add("→ Fixable — use “Apply Suggested Fixes” (or --apply) to reorder them.", LineSev.Warn, 1);
             }
             else if (anyResolved)
             {

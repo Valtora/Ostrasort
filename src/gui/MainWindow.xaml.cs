@@ -391,7 +391,7 @@ public partial class MainWindow : Window
         var bak = _env.LoadingOrderPath + ".bak";
 
         BtnApply.IsEnabled = (_manualDirty || a.OrderChanged) && !running && !rivalLock;
-        BtnApply.Content = _manualDirty ? "Apply manual order" : "Apply suggested order";
+        BtnApply.Content = _manualDirty ? "Apply manual order" : "Apply Suggested Fixes";
         BtnPatch.IsEnabled = Patcher.HasWork(a) && !running && !rivalLock;
         BtnPatch.Content = s.Patch.Stale ? "Refresh patch (decisions kept)" : "Resolve conflicts & generate patch";
         BtnUnpatch.IsEnabled = s.Patch.Exists && !running && !rivalLock;
@@ -720,7 +720,7 @@ public partial class MainWindow : Window
                 newOrder = _state.Analysis.SuggestedOrder;
             }
 
-            CaptureOp(_manualDirty ? "apply manual order" : "apply suggested order");
+            CaptureOp(_manualDirty ? "apply manual order" : "apply suggested fixes");
             LoadOrderFile.Read(_env.LoadingOrderPath).Write(newOrder);
             OpLog.Add($"Applied {(_manualDirty ? "manual" : "suggested")} load order ({newOrder.Count} entries).");
             Rescan();
@@ -981,6 +981,11 @@ public partial class MainWindow : Window
         Show(MenuDisable, canToggle && row!.M is { Disabled: false });
         Show(MenuEnable, canToggle && row!.M is { Disabled: true });
 
+        // register: any discovered-but-unregistered mod (local, plugins-dir, or a
+        // subscribed Workshop item) - adds it to aLoadOrder in its suggested slot.
+        // The patch is excluded: it registers itself when generated.
+        Show(MenuRegister, !rivalLock && row?.M is { Registered: false, Kind: not EntryKind.Core, IsPatch: false });
+
         // ignore applies to discovered-but-unregistered local / plugins-dir mods
         var canIgnore = row?.M is { Registered: false, Kind: EntryKind.Local or EntryKind.PluginDir };
         Show(MenuIgnore, canIgnore && row!.M is { Ignored: false });
@@ -994,6 +999,7 @@ public partial class MainWindow : Window
 
         MenuStateSeparator.Visibility =
             MenuDisable.Visibility == Visibility.Visible || MenuEnable.Visibility == Visibility.Visible ||
+            MenuRegister.Visibility == Visibility.Visible ||
             MenuIgnore.Visibility == Visibility.Visible || MenuUnignore.Visibility == Visibility.Visible ||
             MenuDeleteMod.Visibility == Visibility.Visible || MenuUnsubscribe.Visibility == Visibility.Visible
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -1025,6 +1031,34 @@ public partial class MainWindow : Window
             RunStatus.Text = disable
                 ? $"'{name}' disabled — the entry stays, the game skips it.  "
                 : $"'{name}' enabled.  ";
+            RunStatus.Foreground = Good;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    /// <summary>Registers the selected unregistered mod into loading_order.json in its suggested slot (guarded write, undoable).</summary>
+    private void MenuRegister_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning()) return;
+        var m = row.M;
+        var name = m.DisplayName ?? m.Name;
+        _busy = true;
+        try
+        {
+            CaptureOp($"register {name}");
+            var result = ModRegistration.Register(_env, m, _state.Analysis);
+            _ignore.Remove(IgnoreList.KeyFor(_env, m));   // registering overrides any "leave unregistered" preference
+            OpLog.Add(result.AlreadyRegistered
+                ? $"'{name}' was already registered ({result.Entry}) - no change."
+                : $"Registered '{name}' ({result.Entry}) at position {result.Position + 1}.");
+            Rescan();
+            RunStatus.Text = result.AlreadyRegistered
+                ? $"'{name}' was already registered.  "
+                : $"'{name}' registered — the game will now load it.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex)

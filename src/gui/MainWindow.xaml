@@ -196,6 +196,8 @@
                               ToolTip="Adds the game's own |disabled marker to this entry - the same thing the in-game MODS screen toggle does. The mod stays installed and listed but does not load."/>
                     <MenuItem x:Name="MenuEnable" Header="Enable" Click="MenuEnable_Click"
                               ToolTip="Removes the |disabled marker so the mod loads again (local mods get their |edit marker back)."/>
+                    <MenuItem x:Name="MenuRegister" Header="Register mod (add to load order)" Click="MenuRegister_Click"
+                              ToolTip="Add this unregistered mod to loading_order.json so the game loads it and the MODS screen lists it. It lands where “Apply Suggested Fixes” would place it (local mods get their |edit marker). Undoable; the game must be closed."/>
                     <MenuItem x:Name="MenuIgnore" Header="Ignore (leave unregistered)" Click="MenuIgnore_Click"
                               ToolTip="Stop warning about this unregistered folder and stop suggesting to register it. It stays on disk, invisible to the game, until you register it or stop ignoring it."/>
                     <MenuItem x:Name="MenuUnignore" Header="Stop ignoring" Click="MenuUnignore_Click"
@@ -323,7 +325,7 @@
                         ToolTip="Snapshot the current loading_order.json into the rolling backup history now — restore it later with Restore backup…"/>
                 <Button x:Name="BtnRestoreBak" Content="Restore backup…" Padding="14,6" Margin="8,0,0,0" Click="RestoreBak_Click"/>
                 <Button x:Name="BtnLaunch" Content="Launch game" Padding="14,6" Margin="8,0,0,0" Click="Launch_Click"/>
-                <Button x:Name="BtnApply" Content="Apply suggested order" Padding="14,6" Margin="8,0,0,0" Click="Apply_Click"/>
+                <Button x:Name="BtnApply" Content="Apply Suggested Fixes" Padding="14,6" Margin="8,0,0,0" Click="Apply_Click"/>
                 <Button x:Name="BtnPatch" Content="Resolve conflicts &amp; generate patch" Padding="14,6" Margin="8,0,0,0" Click="Patch_Click"/>
                 <Button x:Name="BtnUnpatch" Content="Remove patch" Padding="14,6" Margin="8,0,0,0" Click="Unpatch_Click"/>
             </StackPanel>

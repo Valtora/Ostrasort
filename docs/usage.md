@@ -30,7 +30,7 @@ the Logs tab.
    mod in load order.
 3. **Read the tabs.** *Warnings* and *Collisions* highlight anything that
    needs attention; *Order changes* shows what a tidy-up would do and why.
-4. **Apply the suggested order** (one button) if you're happy with it — the
+4. **Apply Suggested Fixes** (one button) if you're happy with it — the
    old file is saved as `loading_order.json.bak` first.
 5. **Resolve shop/kiosk conflicts** if the *Patch* tab reports any (see
    below).
@@ -83,6 +83,12 @@ keeps a `.bak`, and all writes are disabled while the game is running.
   `|disabled` marker — the same thing the in-game MODS screen does. The entry
   stays in the list (dimmed) but the mod does not load, and it is excluded
   from collision analysis while disabled.
+- **Register mod (add to load order)** (right-click an unregistered mod) adds
+  it to `loading_order.json` on its own — so the game loads it and the MODS
+  screen lists it — without having to apply the whole suggested order. The
+  entry lands where *Apply Suggested Fixes* would put it (just before any FFU
+  block and the generated patch; local mods keep their `|edit` marker), any
+  *Ignore* preference on it is cleared, and it's undoable with Ctrl+Z.
 - **Ignore (leave unregistered)** (right-click an unregistered local mod)
   stops the permanent warning and the "add it" suggestion for a folder you
   deliberately keep parked. *Stop ignoring* brings both back. The preference
