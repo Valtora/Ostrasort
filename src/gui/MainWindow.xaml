@@ -64,6 +64,9 @@
                 <TextBlock HorizontalAlignment="Right" Margin="0,5,0,0" FontSize="11">
                     <Hyperlink Click="CheckUpdate_Click" ToolTip="Check GitHub for a newer release now and report the result.">Check for updates</Hyperlink>
                 </TextBlock>
+                <TextBlock HorizontalAlignment="Right" Margin="0,3,0,0" FontSize="11">
+                    <Hyperlink Click="ReportBug_Click" ToolTip="Open a pre-filled bug report on GitHub in your browser.">Report a bug</Hyperlink>
+                </TextBlock>
             </StackPanel>
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -218,6 +221,18 @@
                 <DataGridTextColumn Header="Class" Binding="{Binding Class}" Width="110"/>
                 <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="130"/>
                 <DataGridTextColumn Header="Workshop ID" Binding="{Binding WorkshopId}" Width="110"/>
+                <DataGridTemplateColumn Header="Last Updated" Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding LastUpdated}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding UpdateText}" Foreground="{Binding UpdateBrush}"
+                                           FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"
+                                           ToolTip="A newer version is published on the Steam Workshop. Ostranauts updates subscribed mods automatically the next time you launch it."/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="4*"/>
             </DataGrid.Columns>
         </DataGrid>

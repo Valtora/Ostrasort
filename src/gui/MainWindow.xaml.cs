@@ -14,7 +14,8 @@ namespace Ostrasort.Gui;
 
 public sealed record ModRow(string Pos, string Name, string Source, string Class, string Data,
                             string WorkshopId, string Notes, Brush Brush, string? Dir, string Tooltip,
-                            ModEntry M, bool Draggable);
+                            ModEntry M, bool Draggable,
+                            string LastUpdated, string UpdateText, Brush UpdateBrush);
 public sealed record LineVm(string Text, Brush Brush, Thickness Margin, bool Bold = false)
 {
     public FontWeight Weight => Bold ? FontWeights.Bold : FontWeights.Normal;
@@ -50,6 +51,11 @@ public partial class MainWindow : Window
     private DateTime _lastScan = DateTime.MinValue;
     private Point _dragStart;
     private ModRow? _dragRow;
+
+    // Steam Workshop publish times (published-file id -> unix seconds), fetched
+    // once per session and reused across rescans so we don't re-hit Steam.
+    private readonly Dictionary<string, long> _wsUpdated = new();
+    private System.Threading.CancellationTokenSource? _wsCts;
 
     // undo/redo: disk-level operation snapshots + in-memory drag arrangements
     private readonly Stack<OpSnapshot> _undo = new();
@@ -114,6 +120,7 @@ public partial class MainWindow : Window
         foreach (var (pos, m) in all) _rows.Add(BuildRow(pos, m));
         ModsGrid.ItemsSource = _rows;
         ApplyFilter();
+        _ = RefreshWorkshopUpdatesAsync();
 
         RenderFfuBanner(s);
         RenderTabs(s);
@@ -243,8 +250,32 @@ public partial class MainWindow : Window
         var tooltip = m.Dir ?? m.Raw;
         if (m.Kind != EntryKind.Core && m.Dir is not null) tooltip += "\n(double-click to open the folder)";
         var draggable = m.Registered && m.Kind != EntryKind.Core;
+        var (lastUpdated, updText, updBrush) = UpdateInfo(m);
         return new ModRow(pos, name, source, cls, data, m.WorkshopId ?? "-",
-            string.Join("; ", notes), brush, m.Dir, tooltip, m, draggable);
+            string.Join("; ", notes), brush, m.Dir, tooltip, m, draggable,
+            lastUpdated, updText, updBrush);
+    }
+
+    /// <summary>
+    /// The "Last Updated" cell and its optional "update available" marker.
+    /// For a subscribed Workshop mod we prefer the real publish time from the
+    /// Steam Workshop (populated asynchronously into <see cref="_wsUpdated"/>)
+    /// and flag it when that published version is newer than the copy on disk —
+    /// Ostranauts pulls the newer files itself on the next launch, so this is
+    /// purely informational. Everything else (and any Workshop mod before its
+    /// publish time arrives, or while offline) falls back to the folder's own
+    /// last-write time.
+    /// </summary>
+    private (string Date, string Upd, Brush Brush) UpdateInfo(ModEntry m)
+    {
+        var local = m.Dir is { } d && Directory.Exists(d) ? (DateTime?)Directory.GetLastWriteTime(d) : null;
+        if (m.Kind == EntryKind.Workshop && m.WorkshopId is { } wid && _wsUpdated.TryGetValue(wid, out var tu) && tu > 0)
+        {
+            var published = DateTimeOffset.FromUnixTimeSeconds(tu).LocalDateTime;
+            var newer = local is null || published > local.Value.AddMinutes(5);
+            return (published.ToString("yyyy-MM-dd"), newer ? "⬆ update" : "", newer ? Warn : Dim);
+        }
+        return (local?.ToString("yyyy-MM-dd") ?? "-", "", Dim);
     }
 
     private void RenderTabs(EngineState s)
@@ -942,8 +973,8 @@ public partial class MainWindow : Window
     private void CopyReport_Click(object sender, RoutedEventArgs e)
     {
         if (_state is null) return;
-        Clipboard.SetText(TextReport.Build(_env, _state, Program.Version));
-        RunStatus.Text = "Report copied to the clipboard.  ";
+        Clipboard.SetText(MarkdownReport.Build(_env, _state, Program.Version));
+        RunStatus.Text = "Report copied to the clipboard as Markdown.  ";
         RunStatus.Foreground = Good;
     }
 
@@ -952,11 +983,11 @@ public partial class MainWindow : Window
         if (_state is null) return;
         var dlg = new Microsoft.Win32.SaveFileDialog
         {
-            FileName = "ostrasort-report.txt",
-            Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
+            FileName = "ostrasort-report.md",
+            Filter = "Markdown (*.md)|*.md|All files (*.*)|*.*",
         };
         if (dlg.ShowDialog(this) != true) return;
-        File.WriteAllText(dlg.FileName, TextReport.Build(_env, _state, Program.Version));
+        File.WriteAllText(dlg.FileName, MarkdownReport.Build(_env, _state, Program.Version));
     }
 
     // ---------------------------------------------------------- context menu ---
@@ -1372,15 +1403,35 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task CheckForUpdateAsync(bool manual = false)
     {
+        string tag, latestUrl;
         try
         {
-            var json = await Http.GetStringAsync("https://api.github.com/repos/Valtora/Ostrasort/releases/latest");
+            var json = await Http.GetStringAsync(
+                "https://api.github.com/repos/Valtora/Ostrasort/releases/latest").ConfigureAwait(false);
             using var doc = JsonDocument.Parse(json);
-            var tag = doc.RootElement.GetProperty("tag_name").GetString() ?? "";
-            var url = doc.RootElement.TryGetProperty("html_url", out var u) ? u.GetString() : null;
+            tag = doc.RootElement.GetProperty("tag_name").GetString() ?? "";
+            latestUrl = (doc.RootElement.TryGetProperty("html_url", out var u) ? u.GetString() : null) ?? ReleasesUrl;
+        }
+        catch (Exception ex)
+        {
+            // Marshal back to the dispatcher: the continuation can resume off the
+            // UI thread, and OpLog aside, MessageBox must run on the UI thread.
+            await Dispatcher.InvokeAsync(() =>
+            {
+                OpLog.Add($"Update check failed: {ex.Message}");
+                if (manual)
+                    MessageBox.Show(this, "Couldn't check for updates.\n\n" + ex.Message +
+                        "\n\nYou may be offline, or GitHub may be rate-limiting — its anonymous API allows about 60 checks an hour per network.",
+                        "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            });
+            return;
+        }
+
+        await Dispatcher.InvokeAsync(() =>
+        {
             if (ParseVersion(tag) > ParseVersion(Program.Version))
             {
-                _updateUrl = url ?? ReleasesUrl;
+                _updateUrl = latestUrl;
                 BtnUpdate.Content = $"⬆  Update available: {tag}";
                 BtnUpdate.Visibility = Visibility.Visible;
                 OpLog.Add($"A newer release is available: {tag} (you are on v{Program.Version}).");
@@ -1396,15 +1447,7 @@ public partial class MainWindow : Window
                     MessageBox.Show(this, $"You're on the latest version (v{Program.Version}).",
                         "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-        }
-        catch (Exception ex)
-        {
-            OpLog.Add($"Update check failed: {ex.Message}");
-            if (manual)
-                MessageBox.Show(this, "Couldn't check for updates.\n\n" + ex.Message +
-                    "\n\nYou may be offline, or GitHub may be rate-limiting — its anonymous API allows about 60 checks an hour per network.",
-                    "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
+        });
     }
 
     private static Version ParseVersion(string s) =>
@@ -1412,4 +1455,189 @@ public partial class MainWindow : Window
 
     private void Update_Click(object sender, RoutedEventArgs e) =>
         Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
+
+    // ------------------------------------------------------ report a bug ---
+
+    // GitHub rejects an over-long prefilled issue URL (HTTP 414), so past this
+    // total-URL length we put the report on the clipboard for the user to paste.
+    private const int MaxIssueUrl = 7000;
+
+    private void ReportBug_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var prompt =
+                "# Ostrasort Bug Report\n\n" +
+                "## What were you trying to do?\n\n\n" +
+                "## What went wrong?\n\n\n" +
+                "## Exact steps to reproduce (so I can see it happen too)\n\n1. \n2. \n3. \n\n" +
+                "**Screenshots**\nDrag any screenshots in here.\n\n" +
+                "---\n" +
+                "*Diagnostics (please keep these — they help me reproduce it):*\n" +
+                $"- Ostrasort: v{Program.Version}\n" +
+                $"- OS: {DescribeOs()}\n" +
+                $"- Game version: {_env.InstalledVersion ?? "unknown"}\n" +
+                $"- Mods registered: {_state?.Analysis.Registered.Count ?? 0}\n";
+
+            var report = _state is not null ? MarkdownReport.Build(_env, _state, Program.Version) : null;
+
+            // Try to embed the full report in a collapsed block; fall back to the
+            // clipboard if that would make the URL too long for GitHub.
+            var body = report is not null
+                ? prompt + "\n<details>\n<summary>Full Ostrasort report</summary>\n\n" + report + "\n</details>\n"
+                : prompt;
+            var clipboardFallback = false;
+            if (report is not null && IssueUrl(body).Length > MaxIssueUrl)
+            {
+                Clipboard.SetText(report);
+                body = prompt + "\n*My full Ostrasort report is on the clipboard — pasted below:*\n\n";
+                clipboardFallback = true;
+            }
+
+            Process.Start(new ProcessStartInfo(IssueUrl(body)) { UseShellExecute = true });
+            OpLog.Add("Opened a pre-filled GitHub bug report in the browser" +
+                      (clipboardFallback ? " (report copied to clipboard — too long to auto-fill)." :
+                       report is not null ? " (full report included)." : "."));
+            if (clipboardFallback)
+                MessageBox.Show(this,
+                    "Your mod report was too long to pre-fill automatically, so it's on your clipboard.\n\n" +
+                    "In the GitHub issue that just opened, click into the description and paste it (Ctrl+V) under the diagnostics.",
+                    "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static string IssueUrl(string body) =>
+        "https://github.com/Valtora/Ostrasort/issues/new?labels=bug"
+        + "&title=" + Uri.EscapeDataString("[Bug] ")
+        + "&body=" + Uri.EscapeDataString(body);
+
+    /// <summary>
+    /// A human-readable OS string that distinguishes Windows 11 from 10 (which
+    /// <see cref="System.Runtime.InteropServices.RuntimeInformation.OSDescription"/>
+    /// does not — both report 10.0.x). Windows 11 is build 22000+; the edition
+    /// ("Pro", "Home", …) comes from the registry's ProductName suffix.
+    /// </summary>
+    private static string DescribeOs()
+    {
+        var v = Environment.OSVersion.Version;
+        var name = v.Major == 10 && v.Build >= 22000 ? "Windows 11" : $"Windows {v.Major}";
+        string? edition = null, display = null;
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            display = key?.GetValue("DisplayVersion") as string;   // e.g. "24H2"
+            if (key?.GetValue("ProductName") as string is { } product)
+            {
+                // ProductName is often still "Windows 10 <edition>" even on 11 — trust only the edition suffix.
+                var m = System.Text.RegularExpressions.Regex.Match(product, @"Windows\s+\d+\s+(.+)$");
+                if (m.Success) edition = m.Groups[1].Value.Trim();
+            }
+        }
+        catch { /* registry unavailable — fall back to just the name/version */ }
+
+        var s = name;
+        if (edition is { Length: > 0 }) s += " " + edition;
+        s += $" ({v.Major}.{v.Minor}.{v.Build}";
+        s += display is { Length: > 0 } ? $", {display})" : ")";
+        return s;
+    }
+
+    // ------------------------------------------- Workshop update checking ---
+
+    /// <summary>
+    /// Fills each subscribed Workshop mod's real publish time into the mod list
+    /// and flags any whose published version is newer than the copy on disk.
+    /// Runs after every render, but a session cache means Steam is only queried
+    /// for ids we haven't seen yet, and any failure (offline, rate-limited) is
+    /// silent — the folder-date fallback already rendered.
+    /// </summary>
+    private async Task RefreshWorkshopUpdatesAsync()
+    {
+        var rows = _rows;
+        var toFetch = rows
+            .Where(r => r.M.Kind == EntryKind.Workshop && r.M.WorkshopId is { } w
+                        && long.TryParse(w, out _) && !_wsUpdated.ContainsKey(w))
+            .Select(r => r.M.WorkshopId!)
+            .Distinct()
+            .ToList();
+        if (toFetch.Count == 0) return;
+
+        _wsCts?.Cancel();
+        var cts = new System.Threading.CancellationTokenSource();
+        _wsCts = cts;
+
+        Dictionary<string, long> fetched;
+        try
+        {
+            fetched = await FetchWorkshopUpdateTimesAsync(toFetch, cts.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.InvokeAsync(() => OpLog.Add($"Workshop update check skipped: {ex.Message}"));
+            return;
+        }
+        if (cts.IsCancellationRequested) return;
+
+        // The continuation can resume off the UI thread, but the mod table is an
+        // ObservableCollection bound to a CollectionView — WPF only allows it to
+        // be mutated (and OpLog appended) from the dispatcher thread, so marshal
+        // every UI touch back explicitly rather than trusting the captured context.
+        await Dispatcher.InvokeAsync(() =>
+        {
+            foreach (var kv in fetched) _wsUpdated[kv.Key] = kv.Value;
+            if (!ReferenceEquals(rows, _rows)) return;  // a rescan replaced the table underneath us
+
+            var updates = 0;
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                if (r.M.Kind != EntryKind.Workshop || r.M.WorkshopId is not { } w || !fetched.ContainsKey(w)) continue;
+                var (lu, upd, ub) = UpdateInfo(r.M);
+                rows[i] = r with { LastUpdated = lu, UpdateText = upd, UpdateBrush = ub };
+                if (upd.Length > 0) updates++;
+            }
+            OpLog.Add($"Workshop: checked {fetched.Count} item(s) for updates" +
+                      (updates > 0 ? $"; {updates} have a newer version published." : "."));
+        });
+    }
+
+    /// <summary>
+    /// Batched, key-less Steam Workshop lookup of publish times. Returns a map of
+    /// published-file id -> unix seconds (time_updated) for every item Steam
+    /// reported successfully; ids Steam couldn't resolve are simply absent.
+    /// </summary>
+    private static async Task<Dictionary<string, long>> FetchWorkshopUpdateTimesAsync(
+        List<string> ids, System.Threading.CancellationToken token)
+    {
+        var form = new List<KeyValuePair<string, string>> { new("itemcount", ids.Count.ToString()) };
+        for (var i = 0; i < ids.Count; i++)
+            form.Add(new($"publishedfileids[{i}]", ids[i]));
+
+        using var content = new FormUrlEncodedContent(form);
+        using var resp = await Http.PostAsync(
+            "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/", content, token);
+        resp.EnsureSuccessStatusCode();
+        var json = await resp.Content.ReadAsStringAsync(token);
+
+        var result = new Dictionary<string, long>();
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("response", out var respEl) ||
+            !respEl.TryGetProperty("publishedfiledetails", out var arr) ||
+            arr.ValueKind != JsonValueKind.Array)
+            return result;
+
+        foreach (var d in arr.EnumerateArray())
+        {
+            if (!d.TryGetProperty("publishedfileid", out var idEl) || idEl.GetString() is not { } id) continue;
+            if (d.TryGetProperty("result", out var rEl) && rEl.ValueKind == JsonValueKind.Number && rEl.GetInt32() != 1) continue;
+            if (d.TryGetProperty("time_updated", out var tuEl) && tuEl.TryGetInt64(out var tu) && tu > 0)
+                result[id] = tu;
+        }
+        return result;
+    }
 }

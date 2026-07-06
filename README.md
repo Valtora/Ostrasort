@@ -34,6 +34,10 @@ Around those two jobs it works as a complete mod manager:
 - **Manual control** — drag rows to reorder by hand with live rule-violation
   checks, or apply the suggested order in one click. **Organise Mods by Class**
   optionally groups the list for readability.
+- **Workshop freshness** — the mod table shows each mod's **Last Updated** date
+  (the real Steam Workshop publish time, folder date for local mods) and flags
+  any Workshop mod whose published version is newer than your local copy. The
+  game pulls the newer files itself on next launch, so it's purely a heads-up.
 - **Backups & undo** — every `loading_order.json` write keeps a `.bak` **and** a
   rolling backup history; **Make backup** snapshots on demand, **Restore
   backup** picks any restore point, and **Ctrl+Z / Ctrl+Y** undo/redo covers
@@ -41,6 +45,10 @@ Around those two jobs it works as a complete mod manager:
 - **Light / dark / system theming**, a **Logs** tab (Ostrasort's own log plus
   the game's `Player.log` and the BepInEx log), and an update checker that runs
   on launch and on demand (**Check for updates**).
+- **Markdown reports & one-click bug reports** — **Copy report** / **Save
+  report…** produce a Markdown report of the whole analysis with each Workshop
+  mod linked to its Steam page; **Report a bug** opens a pre-filled GitHub issue
+  with that report and your environment (OS, game and tool version) filled in.
 - **Scriptable** — a console mode drives every capability: `--report`, `--json`
   (machine-readable), `--apply`, `--patch` / `--unpatch`, and
   `--profile-list` / `--profile-save` / `--profile-load`.
