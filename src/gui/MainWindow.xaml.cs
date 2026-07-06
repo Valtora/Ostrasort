@@ -400,6 +400,28 @@ public partial class MainWindow : Window
             Clipboard.SetText(string.Join(Environment.NewLine, vms.Select(v => v.Text)));
     }
 
+    private void ClearLog_Click(object sender, RoutedEventArgs e)
+    {
+        var idx = CmbLogSource?.SelectedIndex ?? 0;
+        var (label, path) = idx switch
+        {
+            1 => ("the game log (Player.log)", GameEnv.PlayerLogPath),
+            2 => ("the BepInEx log", _env.BepInExLogPath),
+            _ => ("the Ostrasort operations log", OpLog.FilePath),
+        };
+        if (MessageBox.Show(this, $"Clear {label}? This empties the file on disk and cannot be undone.",
+                "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        if (idx == 0)
+            OpLog.Clear();
+        else if (!OpLog.ClearFile(path))
+            MessageBox.Show(this, $"Could not clear {path}.", "Ostrasort",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+
+        RenderLogs();
+    }
+
     private void OpenLog_Click(object sender, RoutedEventArgs e)
     {
         var path = (CmbLogSource?.SelectedIndex ?? 0) switch

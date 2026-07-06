@@ -57,6 +57,33 @@ public static class OpLog
         catch { /* unreadable log is not fatal */ }
     }
 
+    /// <summary>Clears the operations log - wipes the in-memory history and empties the file on disk.</summary>
+    public static void Clear()
+    {
+        lock (Lock)
+        {
+            _loaded = true;   // nothing left to lazily load
+            Mem.Clear();
+            try
+            {
+                Directory.CreateDirectory(Dir);
+                File.WriteAllText(LogPath, string.Empty);
+            }
+            catch { /* clearing must never throw */ }
+        }
+    }
+
+    /// <summary>Empties a game log file on disk (Player.log / BepInEx). Returns false if it could not be written.</summary>
+    public static bool ClearFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.WriteAllText(path, string.Empty);
+            return true;
+        }
+        catch { return false; }
+    }
+
     public static string FilePath => LogPath;
 
     /// <summary>Last <paramref name="lines"/> lines of a game log file (Player.log / BepInEx), or a note if absent.</summary>

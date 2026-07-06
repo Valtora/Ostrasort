@@ -320,6 +320,9 @@
                             <TextBlock VerticalAlignment="Center" Margin="0,0,10,0">
                                 <Hyperlink Click="CopyLog_Click">Copy</Hyperlink>
                             </TextBlock>
+                            <TextBlock VerticalAlignment="Center" Margin="0,0,10,0">
+                                <Hyperlink Click="ClearLog_Click">Clear Logs</Hyperlink>
+                            </TextBlock>
                             <TextBlock VerticalAlignment="Center">
                                 <Hyperlink Click="OpenLog_Click">Open file</Hyperlink>
                             </TextBlock>
