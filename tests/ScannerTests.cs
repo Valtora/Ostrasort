@@ -110,4 +110,40 @@ public class ScannerTests : IDisposable
         Assert.DoesNotContain(("loot", "Big"), filtered.CoreIndex);
         Assert.Contains(filtered.IgnoredCoreFiles, f => f.Pattern == "LA_");
     }
+
+    [Fact]
+    public void Scan_AcceptsJsonComments_ButStillFlagsTrailingCommas()
+    {
+        var mod = MakeMod("Comments");
+        // // and /* */ comments are game-legal (core ships them, e.g. tokens/verbs.json) - no warning
+        WriteJson(mod.Dir!, @"data\items\commented.json", """
+            [
+              // a line comment, like the game's own data files carry
+              {"strName":"ItmCommented"}  /* and a block comment */
+            ]
+            """);
+        // a trailing comma is NOT game-legal - the loader errors on it, so keep flagging it
+        WriteJson(mod.Dir!, @"data\items\trailing.json", "[{\"strName\":\"ItmTrailing\"},]");
+
+        new Scanner(Env(), useCoreCache: false).Scan(mod);
+
+        Assert.True(mod.Claims.ContainsKey(("items", "ItmCommented")));   // parsed despite comments
+        Assert.True(mod.Claims.ContainsKey(("items", "ItmTrailing")));    // parsed leniently too
+        Assert.DoesNotContain(mod.JsonErrors, e => e.Contains("commented.json"));
+        Assert.Contains(mod.JsonErrors, e => e.Contains("trailing.json") && e.Contains("trailing comma"));
+    }
+
+    [Fact]
+    public void Scan_ReadsBFFUHintFromModInfo_AsAnFfuSignal()
+    {
+        var mod = MakeMod("Fragment");
+        WriteJson(mod.Dir!, "mod_info.json", """[{"strName":"Fragment Mod","bFFU":true}]""");
+        // a pure field-merge fragment: partial object, no auto-detectable FFU marker
+        WriteJson(mod.Dir!, @"data\condowners\frag.json", """[{"strName":"AABarTechnoLowPass","fMass":9.0}]""");
+
+        new Scanner(Env(), useCoreCache: false).Scan(mod);
+
+        Assert.True(mod.UsesElasticApi);                            // feeds FFU classification (AfterFFU)
+        Assert.Contains(mod.FfuSignals, s => s.Contains("bFFU"));
+    }
 }

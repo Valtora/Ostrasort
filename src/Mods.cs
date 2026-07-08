@@ -155,6 +155,16 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         CommentHandling = JsonCommentHandling.Skip,
     };
 
+    // What the game's own loader actually tolerates: // and /* */ comments, but
+    // NOT trailing commas. The game ships comments in its own core data (e.g.
+    // tokens/verbs.json, conditions_simple/conditions_simple.json), so a file
+    // that parses once comments are skipped is game-legal and must not be flagged.
+    private static readonly JsonDocumentOptions CommentsOnly = new()
+    {
+        AllowTrailingCommas = false,
+        CommentHandling = JsonCommentHandling.Skip,
+    };
+
     private readonly IReadOnlyList<string> _ignore = ignorePatterns ?? [];
 
     public HashSet<(string Type, string Name)> CoreIndex { get; } = new();
@@ -186,8 +196,8 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         {
             var entries = new List<CoreIndexCache.Entry>();
             var problems = 0;
-            // core ships a handful of files with non-standard JSON the game's own
-            // (lenient) parser accepts; count them so the index gap is visible
+            // count only files the game's own loader would reject (trailing
+            // commas); // and /* */ comments are game-legal and parse silently
             foreach (var d in EnumerateDataObjects(env.CoreDataDir, wantLoot: false, _ => problems++))
                 entries.Add(new CoreIndexCache.Entry(d.Type, d.Name, d.RelPath));
             snap = new CoreIndexCache.Snapshot(entries, problems);
@@ -264,6 +274,15 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
     private static bool HasDlls(string dir) =>
         Directory.Exists(dir) && Directory.EnumerateFiles(dir, "*.dll", SearchOption.AllDirectories).Any();
 
+    /// <summary>true / "true" / "1" / a non-zero number all read as true (mod_info bools are sometimes strings).</summary>
+    private static bool JsonTrue(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.True => true,
+        JsonValueKind.String => bool.TryParse(e.GetString(), out var b) ? b : e.GetString() == "1",
+        JsonValueKind.Number => e.TryGetDouble(out var d) && d != 0,
+        _ => false,
+    };
+
     private void ReadModInfo(ModEntry mod)
     {
         var path = Path.Combine(mod.Dir!, "mod_info.json");
@@ -303,6 +322,20 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 mod.UsesElasticApi = true;
                 mod.FfuSignals.Add("changesMap in mod_info.json");
             }
+
+            // Ostrasort-specific opt-in hint. A pure FFU field-merge mod (partial
+            // objects that overwrite only a few fields by strName) carries no
+            // auto-detectable marker - it is content-identical to a normal whole-
+            // object override - so Ostrasort would otherwise move it up out of the
+            // FFU block. bFFU lets the author declare "sort me as FFU-dependent".
+            // It is a SORTING HINT ONLY: FFU's field-merge is automatic in-game and
+            // neither FFU nor the game reads this key. The standard Autoload.Meta.toml
+            // LoadGroup is still detected as well (this is the mod_info route).
+            if (root.TryGetProperty("bFFU", out var ffu) && JsonTrue(ffu))
+            {
+                mod.UsesElasticApi = true;
+                mod.FfuSignals.Add("bFFU hint in mod_info.json");
+            }
         }
         catch (JsonException e)
         {
@@ -328,9 +361,10 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
     /// it defines, under type "conditions" with FromSimple set - the game parses
     /// them into the same dictionary as conditions\ (after every mod loads).
     /// Files matching an aIgnorePattern are skipped exactly as the game skips
-    /// them, reported via <paramref name="onIgnored"/>. Files that only parse
-    /// leniently (trailing commas etc.) are reported via
-    /// <paramref name="onError"/> - the game's own loader would ERROR on them.
+    /// them, reported via <paramref name="onIgnored"/>. Comments (// and /* */)
+    /// are accepted silently - the game's own loader allows them (core ships them,
+    /// e.g. tokens/verbs.json). Only a trailing comma (or otherwise invalid JSON)
+    /// is reported via <paramref name="onError"/> - that the game would ERROR on.
     /// </summary>
     internal static IEnumerable<DataObject> EnumerateDataObjects(
         string dataDir, bool wantLoot, Action<string> onError,
@@ -355,19 +389,31 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 var text = File.ReadAllText(file);
                 try
                 {
-                    doc = JsonDocument.Parse(text);   // strict, like the game
+                    doc = JsonDocument.Parse(text);   // strict
                 }
                 catch (JsonException)
                 {
+                    // Strict rejects both comments and trailing commas; the game
+                    // rejects only trailing commas. Retry allowing comments but not
+                    // trailing commas: if THAT parses, the file is game-legal (just
+                    // has comments) and gets no warning. Only if it still needs
+                    // trailing-comma tolerance would the game's loader ERROR.
                     try
                     {
-                        doc = JsonDocument.Parse(text, Lenient);
-                        onError($"{relPath}: parses only leniently (trailing comma/comment?) - the game load would ERROR");
+                        doc = JsonDocument.Parse(text, CommentsOnly);   // comments only - game-legal
                     }
-                    catch (JsonException e)
+                    catch (JsonException)
                     {
-                        onError($"{relPath}: invalid JSON - {e.Message}");
-                        continue;
+                        try
+                        {
+                            doc = JsonDocument.Parse(text, Lenient);
+                            onError($"{relPath}: has a trailing comma - the game load would ERROR");
+                        }
+                        catch (JsonException e)
+                        {
+                            onError($"{relPath}: invalid JSON - {e.Message}");
+                            continue;
+                        }
                     }
                 }
 

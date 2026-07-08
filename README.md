@@ -27,6 +27,11 @@ Around those two jobs it works as a complete mod manager:
   with a diff preview, either **replacing** the whole order or **merging** the
   profile over what you already have. Mods a profile references that are no
   longer installed are skipped and reported, never a hard failure.
+- **Installations** — manage more than one game install from one Ostrasort.
+  Save named installs, each with its own **game folder** and **mods folder**
+  (they can live on different disks), and switch which one Ostrasort manages
+  from the header. Auto-detect still honours the game's own relocated mods
+  folder. Each install keeps its own profiles and backups.
 - **In-place mod management** — from the mod table, **enable / disable** a mod
   (the game's own `|disabled` marker), **ignore** an unregistered folder you
   keep parked, **remove** a mod (park it as `.disabled` or delete it), or
@@ -50,8 +55,9 @@ Around those two jobs it works as a complete mod manager:
   mod linked to its Steam page; **Report a bug** opens a pre-filled GitHub issue
   with that report and your environment (OS, game and tool version) filled in.
 - **Scriptable** — a console mode drives every capability: `--report`, `--json`
-  (machine-readable), `--apply`, `--patch` / `--unpatch`, and
-  `--profile-list` / `--profile-save` / `--profile-load`.
+  (machine-readable), `--apply`, `--patch` / `--unpatch`,
+  `--profile-list` / `--profile-save` / `--profile-load`, and `--mods` /
+  `--install` to point at a mods folder or saved install on another disk.
 
 ## Scope — what it can and can't do
 

@@ -17,7 +17,7 @@ namespace Ostrasort;
 /// </summary>
 public static class CoreIndexCache
 {
-    private const int FormatVersion = 1;
+    private const int FormatVersion = 2;   // v2: JSON comments no longer counted as problem files
     private const int MaxCacheFiles = 8;   // fixture/--game runs get their own files; prune the rest
 
     public sealed record Entry(string Type, string Name, string RelPath);

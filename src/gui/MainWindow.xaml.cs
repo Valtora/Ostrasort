@@ -39,8 +39,11 @@ public partial class MainWindow : Window
         return c;
     }
 
-    private readonly GameEnv _env;
+    private GameEnv _env;
     private readonly GuiSettings _settings;
+    private readonly InstallationStore _installs;
+    private string? _activeInstall;
+    private bool _switchingInstall;
     private readonly IgnoreList _ignore = IgnoreList.LoadDefault();
     private EngineState? _state;
     private System.Collections.ObjectModel.ObservableCollection<ModRow> _rows = new();
@@ -63,10 +66,12 @@ public partial class MainWindow : Window
     private readonly Stack<List<string>> _arrUndo = new();
     private readonly Stack<List<string>> _arrRedo = new();
 
-    public MainWindow(GameEnv env)
+    public MainWindow(GameEnv env, InstallationStore? installs = null, string? activeInstall = null)
     {
         _env = env;
         _settings = GuiSettings.Load();
+        _installs = installs ?? InstallationStore.Load();
+        _activeInstall = activeInstall;
         InitializeComponent();
         RestoreWindowState();
         CmbTheme.SelectedIndex = _settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
@@ -74,6 +79,7 @@ public partial class MainWindow : Window
         Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
+        PopulateInstallations();
         OpLog.Add($"Ostrasort v{Program.Version} opened ({_env.GameRoot}).");
         Rescan();
         _ = CheckForUpdateAsync();
@@ -101,6 +107,57 @@ public partial class MainWindow : Window
             Mouse.OverrideCursor = null;
             _lastScan = DateTime.Now;
         }
+    }
+
+    // -------------------------------------------------------- installations ---
+
+    private void PopulateInstallations()
+    {
+        _switchingInstall = true;
+        CmbInstall.Items.Clear();
+        CmbInstall.Items.Add("Auto-detect");
+        foreach (var it in _installs.Items) CmbInstall.Items.Add(it.Name);
+        var name = _installs.Find(_activeInstall)?.Name;   // null unless it's a real saved install
+        CmbInstall.SelectedIndex = name is null ? 0 : CmbInstall.Items.IndexOf(name);
+        _switchingInstall = false;
+    }
+
+    private void Install_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_switchingInstall) return;
+        SwitchInstall(CmbInstall.SelectedIndex <= 0 ? null : CmbInstall.SelectedItem as string);
+    }
+
+    private void SwitchInstall(string? name)
+    {
+        GameEnv env;
+        var inst = _installs.Find(name);
+        try { env = GameEnv.Locate(inst?.Game, inst?.Mods); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            PopulateInstallations();   // snap the combo back to the still-active install
+            return;
+        }
+        _env = env;
+        _activeInstall = name;
+        _installs.Active = name;
+        _installs.Save();
+        OpLog.Add($"Switched to installation '{name ?? "Auto-detect"}' ({_env.GameRoot}).");
+        Rescan();
+    }
+
+    private void ManageInstalls_Click(object sender, RoutedEventArgs e)
+    {
+        if (new InstallationsDialog(_installs, null) { Owner = this }.ShowDialog() != true)
+        {
+            PopulateInstallations();   // discard any visual edits the dialog made to the list
+            return;
+        }
+        _installs.Save();
+        if (_installs.Find(_activeInstall) is null) _activeInstall = null;   // active was renamed/removed
+        PopulateInstallations();
+        SwitchInstall(_activeInstall);   // re-resolve in case the active install's folders changed
     }
 
     private void RenderState(EngineState s)

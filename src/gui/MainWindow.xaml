@@ -68,11 +68,22 @@
                     <Hyperlink Click="ReportBug_Click" ToolTip="Open a pre-filled bug report on GitHub in your browser.">Report a bug</Hyperlink>
                 </TextBlock>
             </StackPanel>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Vertical">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,7">
+                    <TextBlock Text="Installation" Foreground="{DynamicResource SecondaryTextBrush}"
+                               VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <ComboBox x:Name="CmbInstall" MinWidth="200" VerticalAlignment="Center"
+                              SelectionChanged="Install_Changed"
+                              ToolTip="Switch which game install Ostrasort manages. Add installs (game and mods folders, even on different disks) with Manage."/>
+                    <TextBlock VerticalAlignment="Center" Margin="12,0,0,0">
+                        <Hyperlink Click="ManageInstalls_Click" ToolTip="Add, edit or remove saved installs and their game / mods folders.">Manage…</Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
                 </Grid.RowDefinitions>
@@ -107,7 +118,8 @@
 
                 <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource HdrLabel}" Text="Core data"/>
                 <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HdrValue}" x:Name="TxtCoreInfo"/>
-            </Grid>
+                </Grid>
+            </StackPanel>
         </DockPanel>
 
         <!-- toolbar -->

@@ -100,8 +100,10 @@ Surfaced in the same pass:
 - **`strGameVersion` mismatch** vs the installed game version (worded by
   direction: a mod that predates the game vs one built for a newer game)
 - **`aIgnorePatterns` removals** — which core/mod files the patterns skip
-- **invalid/lenient JSON** — files that only parse with trailing commas etc.,
-  which the game's own loader treats as an ERROR
+- **invalid/lenient JSON** — files with a trailing comma (or otherwise invalid
+  JSON), which the game's own loader treats as an ERROR. Comments (`//` and
+  `/* */`) are **not** flagged: the game accepts them, and ships them in its own
+  core data (`tokens/verbs.json`, `conditions_simple/conditions_simple.json`)
 - **image overrides** — two mods shipping the same `images\` path (last wins
   the whole file)
 - **BepInEx sanity** — plugins that can never load because the loader isn't
@@ -119,10 +121,21 @@ entries merge **field-by-field** into existing objects at load,
 world in an `Autoload.Meta.toml`: a `LoadGroup` (`WithVanilla`, `FFUCore`,
 `AfterFFU`) plus dependencies keyed by `strName`.
 
+A **pure field-merge mod** (partial objects that overwrite only a few fields by
+`strName`, with no `--ADD--`-style commands or `strReference`) carries no marker
+Ostrasort can see — it is content-identical to a normal whole-object override,
+so by default it would be sorted *up*, out of the FFU block. Two ways to keep it
+in place: give it an `Autoload.Meta.toml` with `LoadGroup="AfterFFU"` (the
+standard FFU declaration, which also tells FFU to load it after its target), or
+add `"bFFU": true` to its `mod_info.json` — an **Ostrasort-only sorting hint**
+(FFU's field-merge is automatic once FFU is installed; neither FFU nor the game
+reads this key).
+
 Ostrasort treats all of that as a **supported ordering contract**:
 
 - a mod is classified **FFU** when its meta declares `FFUCore`/`AfterFFU`, it
-  depends on an FFU mod, or its data uses the FFU-only API features above;
+  depends on an FFU mod, its data uses the FFU-only API features above, or its
+  `mod_info.json` carries the `bFFU` hint;
 - the sort keeps every FFU mod **after all non-FFU mods** (the game loads
   non-FFU content first — this is FFU's own rule), with the **Minor Fixes
   Plus** tier leading the FFU block and dependencies before dependents;

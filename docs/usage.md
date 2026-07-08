@@ -68,6 +68,13 @@ any problems. Below it, a row of tabs:
 - **Profiles** — save named load orders and switch between them (see
   [Profiles](#profiles) below).
 
+Above the table, the **Installation** picker chooses which game install
+Ostrasort manages. **Auto-detect** finds your Steam install and its mods folder
+(honouring the game's own `strPathMods`); **Manage…** saves named installs, each
+with its own **game folder** and **mods folder** — which can live on different
+disks — and switches between them in one click. Each install keeps its own load
+order, profiles and backups.
+
 Nothing is written until you press a button, every `loading_order.json` write
 keeps a `.bak`, and all writes are disabled while the game is running.
 
@@ -268,6 +275,12 @@ Ostrasort.exe --tidy      opt-in cosmetic grouping in the suggested order
 Ostrasort.exe --no-gui    like --headless but only for the resolver: contested items
                           fall back to the later-loaded mod's entry, marked for review
 Ostrasort.exe --game <p>  point at a non-standard install manually
+Ostrasort.exe --mods <p>  point at the mods folder that holds loading_order.json — for a
+                          mods folder on a different disk from the game; default is the
+                          game's own strPathMods, else <game>\Ostranauts_Data\Mods
+Ostrasort.exe --install <name>
+                          use a saved installation's game + mods folders (manage saved
+                          installs in the GUI); --game/--mods still override per slot
 Ostrasort.exe --allow-rival-stack
                           write even while Robyn's OstraAutoloader is installed; by
                           default writes are refused there because the autoloader

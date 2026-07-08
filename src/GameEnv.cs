@@ -31,7 +31,7 @@ public sealed class GameEnv
     /// <summary>BepInEx's log (code-mod loading), in the game folder.</summary>
     public string BepInExLogPath => Path.Combine(BepInExDir, "LogOutput.log");
 
-    public static GameEnv Locate(string? gameRootOverride)
+    public static GameEnv Locate(string? gameRootOverride, string? modsDirOverride = null)
     {
         string root, via;
         if (gameRootOverride is not null)
@@ -68,21 +68,36 @@ public sealed class GameEnv
         var modsDir = Path.Combine(dataDir, "Mods");
 
         // settings.json can relocate the Mods folder via strPathMods - but only
-        // honor that for the auto-detected install: with an explicit --game the
-        // caller means THAT install's own Mods folder (e.g. a test fixture)
+        // honor that for a fully auto-detected install: an explicit --game / --mods
+        // names a specific install's own folders (e.g. a test fixture). The game
+        // stores strPathMods as the path to loading_order.json (a FILE), so accept
+        // either a folder or a file whose parent folder is the real Mods dir.
         var settings = Path.Combine(
             Environment.GetEnvironmentVariable("USERPROFILE") ?? "",
             @"AppData\LocalLow\Blue Bottle Games\Ostranauts\settings.json");
-        if (gameRootOverride is null && File.Exists(settings))
+        if (gameRootOverride is null && modsDirOverride is null && File.Exists(settings))
         {
             try
             {
                 var custom = JsonNode.Parse(File.ReadAllText(settings))?["strPathMods"]?.GetValue<string>();
-                if (!string.IsNullOrWhiteSpace(custom) && Directory.Exists(custom))
-                    modsDir = custom;
+                if (ResolveModsDir(custom) is { } relocated) modsDir = relocated;
             }
             catch { /* unreadable settings.json is not Ostrasort's problem */ }
         }
+
+        // An explicit mods-folder override wins over everything - this is the
+        // two-install case (game on one disk, its mods folder on another). It
+        // must exist; a missing override is surfaced, not silently ignored.
+        if (modsDirOverride is not null)
+        {
+            var full = Path.GetFullPath(modsDirOverride);
+            if (!Directory.Exists(full))
+                throw new DirectoryNotFoundException(
+                    $"'{full}' does not exist. Point Ostrasort at the mods folder that holds loading_order.json.");
+            modsDir = full;
+        }
+
+        modsDir = PathCase.Canonical(modsDir);
 
         // steamapps\common\Ostranauts -> steamapps\workshop\content\1022980
         string? workshop = null;
@@ -102,6 +117,19 @@ public sealed class GameEnv
             WorkshopContentDir = workshop,
             InstalledVersion = ReadInstalledVersion(dataDir),
         };
+    }
+
+    /// <summary>
+    /// The game stores strPathMods as the path to loading_order.json (a FILE),
+    /// not the folder. Accept either: a directory as-is, or a file whose parent
+    /// directory exists. Returns null when neither resolves to a real folder.
+    /// </summary>
+    private static string? ResolveModsDir(string? strPathMods)
+    {
+        if (string.IsNullOrWhiteSpace(strPathMods)) return null;
+        if (Directory.Exists(strPathMods)) return strPathMods;
+        var dir = Path.GetDirectoryName(strPathMods);   // …/Mods/loading_order.json -> …/Mods
+        return !string.IsNullOrEmpty(dir) && Directory.Exists(dir) ? dir : null;
     }
 
     /// <summary>

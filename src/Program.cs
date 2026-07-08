@@ -37,7 +37,7 @@ public static class Program
     private static int Run(string[] args)
     {
         bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false;
-        string? gameRoot = null, profileSave = null, profileLoad = null;
+        string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -66,6 +66,8 @@ public static class Program
                 case "--no-gui": noGui = true; break;
                 case "--no-pause": break;   // vestigial (WinExe never pauses) - accepted for old scripts
                 case "--game" when i + 1 < args.Length: gameRoot = args[++i]; break;
+                case "--mods" when i + 1 < args.Length: modsDir = args[++i]; break;
+                case "--install" when i + 1 < args.Length: installName = args[++i]; break;
                 case "--version":
                     Console.WriteLine(Version);
                     return 0;
@@ -116,6 +118,11 @@ public static class Program
                           --no-gui    never open a window: contested items fall back to the
                                       later-loaded mod's entry (marked for review in the GUI)
                           --game <p>  path to the Ostranauts folder (default: auto-detect via Steam)
+                          --mods <p>  path to the mods folder that holds loading_order.json (default:
+                                      the game's own strPathMods, else <game>\Ostranauts_Data\Mods)
+                          --install <name>
+                                      use a saved installation's game + mods folders (add/edit saved
+                                      installs in the GUI); --game/--mods still override per slot
                           --version   print the version and exit
                         """);
                     return 0;
@@ -126,6 +133,16 @@ public static class Program
         }
         if (patch && unpatch) { Console.Error.WriteLine("pick one of --patch / --unpatch"); return 1; }
         if (profileLoad is not null && apply) { Console.Error.WriteLine("pick one of --profile-load / --apply (both set the load order)"); return 1; }
+
+        // --install <name> selects a saved installation's directories; an explicit
+        // --game / --mods still wins for that slot. An unknown name is a hard error.
+        if (installName is not null)
+        {
+            var inst = InstallationStore.Load().Find(installName)
+                ?? throw new InvalidOperationException($"no saved installation named '{installName}' (manage installations in the GUI).");
+            gameRoot ??= inst.Game;
+            modsDir ??= inst.Mods;
+        }
 
         // --headless / --json: console only, never a window; bare = the report
         if (headless || json)
@@ -139,13 +156,14 @@ public static class Program
         {
             _ = System.Windows.Application.Current ?? new System.Windows.Application();   // so Fluent theming applies for real
             Gui.ThemeManager.Apply("light");                                             // populate the Application theme resources
-            var smokeEnv = GameEnv.Locate(gameRoot);
+            var smokeEnv = GameEnv.Locate(gameRoot, modsDir);
             var smokeState = Engine.Analyze(smokeEnv);
             _ = new Gui.MainWindow(smokeEnv);                                       // ctor runs a full rescan/render
             var smokePlan = Patcher.PlanMerge(smokeEnv, smokeState.Analysis);
             var resolver = new Gui.ResolverDialog(smokePlan);
             _ = new Gui.ParkOrDeleteDialog("self-test", "self-test");
             _ = new Gui.PromptDialog("self-test");
+            _ = new Gui.InstallationsDialog(new InstallationStore(), "self-test");
             _ = new Gui.ProfileSwitchDialog(smokeEnv, smokeState.Analysis,
                     Profile.Capture(smokeState.Analysis, "self-test", smokeEnv.InstalledVersion, null));
             if (smokePlan.ContestedItems.Any() && resolver.SelectorsInTree() == 0)
@@ -172,7 +190,7 @@ public static class Program
 
         if (args.Contains("--disable-autoloader"))
         {
-            var denv = GameEnv.Locate(gameRoot);
+            var denv = GameEnv.Locate(gameRoot, modsDir);
             if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
             if (FfuContext.Detect(denv) is not { AutoloaderActive: true } dctx)
             {
@@ -193,7 +211,7 @@ public static class Program
 
         if (args.Contains("--remove-ffu"))
         {
-            var renv = GameEnv.Locate(gameRoot);
+            var renv = GameEnv.Locate(gameRoot, modsDir);
             if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
             var rstate = Engine.Analyze(renv);
             var rctx = rstate.Analysis.Ffu ?? new FfuContext();
@@ -222,7 +240,7 @@ public static class Program
 
         if (args.Contains("--normalize"))   // undocumented: rewrite loading_order in canonical path case, deduped
         {
-            var nenv = GameEnv.Locate(gameRoot);
+            var nenv = GameEnv.Locate(gameRoot, modsDir);
             if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
             GateNoRival(FfuContext.Detect(nenv), allowRival, "normalize the load order");
             var nlo = LoadOrderFile.Read(nenv.LoadingOrderPath);
@@ -237,7 +255,7 @@ public static class Program
 
         if (args.Contains("--dump-collisions"))   // undocumented: print the GUI collision view as text
         {
-            var env2 = GameEnv.Locate(gameRoot);
+            var env2 = GameEnv.Locate(gameRoot, modsDir);
             foreach (var v in CollisionView.Build(Engine.Analyze(env2).Analysis))
                 Console.WriteLine(new string(' ', v.Indent * 2) + v.Text);
             return 0;
@@ -245,7 +263,7 @@ public static class Program
 
         if (profileList)
         {
-            var penv = GameEnv.Locate(gameRoot);
+            var penv = GameEnv.Locate(gameRoot, modsDir);
             var profiles = ProfileStore.List(penv.LoadingOrderPath);
             if (json)
                 Console.WriteLine(JsonReport.ProfilesJson(profiles));
@@ -261,7 +279,7 @@ public static class Program
 
         if (profileSave is not null)
         {
-            var senv = GameEnv.Locate(gameRoot);
+            var senv = GameEnv.Locate(gameRoot, modsDir);
             var profile = Profile.Capture(Engine.Analyze(senv).Analysis, profileSave, senv.InstalledVersion, DateTime.Now.ToString("o"));
             ProfileStore.Save(senv.LoadingOrderPath, profile);
             OpLog.Add($"[cli] Saved profile '{profileSave}' ({profile.ModCount} mods).");
@@ -271,7 +289,7 @@ public static class Program
 
         if (smokeUndo)
         {
-            var env0 = GameEnv.Locate(gameRoot);
+            var env0 = GameEnv.Locate(gameRoot, modsDir);
             var before = UndoOps.Capture(env0, "baseline");
             var state0 = Engine.Analyze(env0);
             var plan0 = Patcher.PlanMerge(env0, state0.Analysis);
@@ -298,9 +316,9 @@ public static class Program
 
         // bare launch (or explicit --gui) = the app's face
         if (gui || (!report && !apply && !patch && !unpatch && profileLoad is null))
-            return RunGui(gameRoot);
+            return RunGui(gameRoot, modsDir, installName);
 
-        var env = GameEnv.Locate(gameRoot);
+        var env = GameEnv.Locate(gameRoot, modsDir);
         var state = Engine.Analyze(env, tidy);
         var performed = new List<string>();
 
@@ -385,7 +403,8 @@ public static class Program
         return Engine.Actionable(state) ? 2 : 0;
     }
 
-    private static int RunGui(string? gameRoot) => Gui.GuiHost.RunMainWindow(gameRoot);
+    private static int RunGui(string? gameRoot, string? modsDir, string? installName) =>
+        Gui.GuiHost.RunMainWindow(gameRoot, modsDir, installName);
 
     private static void GateGameClosed(string action)
     {

@@ -5,15 +5,8 @@ namespace Ostrasort.Gui;
 /// <summary>Bootstraps WPF from the console entry point.</summary>
 public static class GuiHost
 {
-    public static int RunMainWindow(string? gameRoot)
+    public static int RunMainWindow(string? gameRoot, string? modsDir, string? installName)
     {
-        GameEnv env;
-        try { env = GameEnv.Locate(gameRoot); }
-        catch (Exception e)
-        {
-            MessageBox.Show(e.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
-            return 1;
-        }
         // FFU installs open normally: the main window shows a banner and, while
         // the OstraAutoloader is active, disables every write (analysis-only).
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
@@ -40,8 +33,39 @@ public static class GuiHost
         };
 
         ThemeManager.Apply(GuiSettings.Load().Theme);   // app-level, before the first window loads
-        app.Run(new MainWindow(env));
+
+        // Which install to open: an explicit --install selects (and becomes) the
+        // active one; otherwise the remembered active install, else auto-detect.
+        var store = InstallationStore.Load();
+        if (installName is not null) store.Active = installName;
+        var (env, activeName) = ResolveOrPrompt(gameRoot, modsDir, store);
+        if (env is null) return 1;   // user cancelled the install picker
+
+        app.Run(new MainWindow(env, store, activeName));
         return 0;
+    }
+
+    /// <summary>
+    /// Resolve the install to open. On a Locate failure (missing/bad folders, or
+    /// nothing auto-detected) open the Installations manager so the user can point
+    /// Ostrasort at a real install and retry, instead of a dead-end error box.
+    /// Returns (null, null) if the user gives up.
+    /// </summary>
+    private static (GameEnv? Env, string? Active) ResolveOrPrompt(string? cliGame, string? cliMods, InstallationStore store)
+    {
+        while (true)
+        {
+            var inst = store.Find(store.Active);
+            try { return (GameEnv.Locate(cliGame ?? inst?.Game, cliMods ?? inst?.Mods), store.Active); }
+            catch (Exception e)
+            {
+                if (new InstallationsDialog(store, e.Message).ShowDialog() != true) return (null, null);
+                store.Save();
+                cliGame = null; cliMods = null;   // after configuring, honor the saved install
+                if (store.Find(store.Active) is null && store.Items.Count > 0)
+                    store.Active = store.Items[0].Name;
+            }
+        }
     }
 
     /// <summary>Modal resolver for the console --patch path. True = decisions made, generate.</summary>

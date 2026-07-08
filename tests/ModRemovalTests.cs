@@ -24,7 +24,14 @@ public class ModRemovalTests : IDisposable
         };
     }
 
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    public void Dispose()
+    {
+        // clear ReadOnly first so a failing ReadOnly test doesn't make teardown hit
+        // the very bug under test (which would mask the real assertion failure)
+        foreach (var i in new DirectoryInfo(_root).EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
+            i.Attributes &= ~FileAttributes.ReadOnly;
+        Directory.Delete(_root, recursive: true);
+    }
 
     private ModEntry ModA() => ModEntry.Parse("ModA|edit", _env);
 
@@ -48,6 +55,25 @@ public class ModRemovalTests : IDisposable
         Assert.True(result.Deleted);
         Assert.False(Directory.Exists(Path.Combine(_env.ModsDir, "ModA")));
         Assert.False(Directory.Exists(Path.Combine(_env.ModsDir, "ModA.disabled")));
+        Assert.Equal(new[] { "core" }, LoadOrderFile.Read(_env.LoadingOrderPath).Order);
+    }
+
+    [Fact]
+    public void Delete_SucceedsWhenFoldersAreReadOnly()
+    {
+        // mods unzipped from a download often carry the ReadOnly attribute on their
+        // folders; plain Directory.Delete(recursive) can't remove those and would
+        // leave a half-deleted mod (files gone, folders + "access denied" left).
+        var data = Path.Combine(_env.ModsDir, "ModA", "data");
+        Directory.CreateDirectory(data);
+        File.WriteAllText(Path.Combine(data, "items.json"), "[]");
+        new DirectoryInfo(data).Attributes |= FileAttributes.ReadOnly;
+        new DirectoryInfo(Path.Combine(_env.ModsDir, "ModA")).Attributes |= FileAttributes.ReadOnly;
+
+        var result = ModRemoval.RemoveLocal(_env, ModA(), delete: true);
+
+        Assert.True(result.Deleted);
+        Assert.Empty(Directory.GetDirectories(_env.ModsDir));   // ModA gone, and no leftover husk
         Assert.Equal(new[] { "core" }, LoadOrderFile.Read(_env.LoadingOrderPath).Order);
     }
 

@@ -1,0 +1,68 @@
+<Window x:Class="Ostrasort.Gui.InstallationsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ostrasort — Installations" Height="460" Width="740" MinHeight="380" MinWidth="640"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" WindowStyle="ToolWindow">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" x:Name="ErrorBanner" Visibility="Collapsed" CornerRadius="4"
+                BorderThickness="1" Padding="10,7" Margin="0,0,0,10"
+                Background="#FDECEC" BorderBrush="#D98A8A">
+            <TextBlock x:Name="TxtError" TextWrapping="Wrap" Foreground="#8A2D2D"/>
+        </Border>
+
+        <TextBlock Grid.Row="1" Margin="0,0,0,10" TextWrapping="Wrap"
+                   Foreground="{DynamicResource SecondaryTextBrush}"
+                   Text="Save one entry per game install. Leave a folder blank to auto-detect it. Switch between saved installs from the Installation picker on the main window."/>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0">
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Content="Add" Padding="14,3" Margin="0,0,6,0" Click="Add_Click"/>
+                    <Button x:Name="BtnRemove" Content="Remove" Padding="10,3" Click="Remove_Click"/>
+                </StackPanel>
+                <ListBox x:Name="ListInstalls" DisplayMemberPath="Name" SelectionChanged="List_Changed"/>
+            </DockPanel>
+
+            <StackPanel Grid.Column="2" x:Name="Editor" IsEnabled="False">
+                <TextBlock Text="Name" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,3"/>
+                <TextBox x:Name="TxtName" Margin="0,0,0,14" TextChanged="Field_Changed"/>
+
+                <TextBlock Text="Game folder" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,3"/>
+                <DockPanel Margin="0,0,0,3">
+                    <Button DockPanel.Dock="Right" Content="Browse…" Padding="10,2" Margin="6,0,0,0" Click="BrowseGame_Click"/>
+                    <TextBox x:Name="TxtGame" TextChanged="Field_Changed"/>
+                </DockPanel>
+                <TextBlock Text="The Ostranauts folder inside steamapps\common. Blank = auto-detect via Steam."
+                           FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,14"/>
+
+                <TextBlock Text="Mods folder" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,3"/>
+                <DockPanel Margin="0,0,0,3">
+                    <Button DockPanel.Dock="Right" Content="Browse…" Padding="10,2" Margin="6,0,0,0" Click="BrowseMods_Click"/>
+                    <TextBox x:Name="TxtMods" TextChanged="Field_Changed"/>
+                </DockPanel>
+                <TextBlock Text="The folder that holds loading_order.json (may be on another disk). Blank = the game's own strPathMods, else the default Mods folder under the game."
+                           FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="Save &amp; Close" Padding="16,4" Margin="0,0,8,0" IsDefault="True" Click="Save_Click"/>
+            <Button Content="Cancel" Padding="16,4" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>
