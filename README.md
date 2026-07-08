@@ -114,7 +114,7 @@ installs so it can diagnose them and offer the way out: a one-click, reversible
 
 ## Quick start
 
-**Windows only** (64-bit Windows 10/11). Nothing to install:
+**Windows only** (64-bit Windows 11). Nothing to install:
 
 1. **Download `Ostrasort.exe`** from the
    [latest release](https://github.com/Valtora/Ostrasort/releases/latest).
