@@ -1476,9 +1476,10 @@ public partial class MainWindow : Window
     /// launch (queried live each time, so a release published after this build
     /// is picked up on the next start - there is no cached "latest" to go
     /// stale) and on demand from the "Check for updates" link. A newer release
-    /// surfaces the Update button; the automatic run is otherwise quiet apart
-    /// from a Logs-tab line, while the manual run always reports the result and
-    /// offers to open the download page.
+    /// surfaces the Update button, writes a Logs-tab line, and raises a modal
+    /// (UpdateDialog) offering to Download Latest Version or dismiss with Not
+    /// Now - shown on every launch while behind, not only on the manual check.
+    /// The manual run additionally reports when you are already up to date.
     /// </summary>
     private async Task CheckForUpdateAsync(bool manual = false)
     {
@@ -1514,9 +1515,11 @@ public partial class MainWindow : Window
                 BtnUpdate.Content = $"⬆  Update available: {tag}";
                 BtnUpdate.Visibility = Visibility.Visible;
                 OpLog.Add($"A newer release is available: {tag} (you are on v{Program.Version}).");
-                if (manual &&
-                    MessageBox.Show(this, $"{tag} is available — you're on v{Program.Version}.\n\nOpen the download page?",
-                        "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                // A newer release always raises the modal (every launch), not only on the manual
+                // check - the toolbar button stays as the persistent affordance after "Not Now".
+                // "Download Latest Version" opens the release page.
+                if (UpdateDialog.Show(this, "Update available",
+                        $"{tag} is available to download.\nYou're on v{Program.Version}."))
                     Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
             }
             else

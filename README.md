@@ -127,11 +127,12 @@ installs so it can diagnose them and offer the way out: a one-click, reversible
    to come back to this setup, pick a **theme** to taste, and **Ctrl+Z** undoes
    anything.
 
-Ostrasort checks GitHub for a newer release on startup — showing an **Update
-available** button at the top-right when one exists — and you can run the check
-yourself any time with the **Check for updates** link (both silent-friendly:
-quiet when you're up to date or offline, with the outcome noted in the Logs
-tab).
+Ostrasort checks GitHub for a newer release on startup and whenever you use the
+**Check for updates** link. When a newer release exists it pops an update dialog
+(**Download Latest Version** opens the Releases page, **Not Now** dismisses) and
+reveals an **Update available** button at the top-right that stays as a
+persistent reminder. The check stays quiet when you're already up to date,
+offline, or rate-limited, always noting the outcome in the Logs tab.
 
 > Windows SmartScreen may warn on first run because the exe isn't
 > code-signed — choose *More info → Run anyway*, or unblock it in the file's

@@ -10,15 +10,16 @@ it manually with `--game <path>`.)
 On first run Windows SmartScreen may warn because the exe isn't code-signed —
 choose *More info → Run anyway*, or unblock it in the file's Properties.
 
-Ostrasort opens straight to its window — no console window appears. It also
-checks GitHub for a newer release **each time it starts** — queried live, so a
-release published after your build is picked up on the next launch. If one
-exists, an **Update available: vX.Y.Z** button appears at the top-right — click
-it to open the Releases page and download the new build. You can also run the
-check yourself any time with the **Check for updates** link (top-right), which
-reports the result either way. The automatic check stays quiet when you're
-already up to date, offline, or rate-limited, but always notes the outcome in
-the Logs tab.
+Ostrasort opens straight to its window (no console window appears). It also
+checks GitHub for a newer release **each time it starts**, queried live, so a
+release published after your build is picked up on the next launch. When one
+exists, Ostrasort pops an update dialog with **Download Latest Version** (opens
+the Releases page) and **Not Now**, and reveals an **Update available: vX.Y.Z**
+button at the top-right that stays as a reminder after you dismiss the dialog.
+You can also run the check yourself any time with the **Check for updates** link
+(top-right), which reports the result either way. The check stays quiet when
+you're already up to date, offline, or rate-limited, but always notes the
+outcome in the Logs tab.
 
 > Close Ostranauts first — Ostrasort disables all writes while the game is
 > running.
@@ -117,8 +118,9 @@ keeps a `.bak`, and all writes are disabled while the game is running.
   when you switch back to Ostrasort (e.g. after closing the game).
 - **Copy report / Save report** export the full analysis as plain text for
   sharing when helping someone debug their setup.
-- The window **remembers its size, position, and selected tab**, and a quiet
-  link appears in the header when a newer release is on GitHub.
+- The window **remembers its size, position, and selected tab**, and when a
+  newer release is on GitHub an update dialog appears on launch alongside a
+  persistent **Update** button in the header.
 
 ### Undo / redo
 
