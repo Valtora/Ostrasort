@@ -20,7 +20,11 @@ public sealed class SchemaValidator
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["conditions"] = "conditions-schema.json",
-            ["conditions_simple"] = "conditions-schema.json",
+            // NB: conditions_simple is deliberately NOT mapped here. Its files are
+            // flat-packed containers ({strName:"Simple Conditions", aValues:[...]}),
+            // not per-condition objects, so conditions-schema.json does not describe
+            // them (they lack the required strColor/strDesc/strNameFriendly at the
+            // container root). They are never merged into the patch anyway.
             ["condowners"] = "condowners-schema.json",
             ["interactions"] = "interactions-schema.json",
             ["items"] = "items-schema.json",

@@ -164,21 +164,26 @@ lights up the **Patch** tab if so. Profiles are stored per install under
 ## The conflict resolver
 
 When two mods change the same thing and the game would keep only one,
-**Resolve conflicts & generate patch** opens the resolver. It handles two
-kinds of unit:
+**Resolve conflicts & generate patch** opens the resolver. Each conflict is a
+titled card (the object's friendly type and name, and which mods edit it), and
+every contested decision shows the choices **side by side** so you can compare
+them at a glance rather than reading raw JSON. It handles two kinds of unit:
 
 **Shop pools** — every **contested item** (both mods stock it with different
-values) is a row: pick which mod's entry wins, use **Take all from *<mod>***
-for a whole column, or **Exclude** to stock it from nobody. Items only one mod
-stocks carry over automatically; expand the **carried-over** list to reject
-unwanted strays (handy when a mod ships a stale copy of a whole kiosk and you
-only want its one new item).
+values) is a card of columns: each mod's entry (shown as a plain *count /
+weight*) plus **Stock from nobody** to drop it. Use **Take all from *<mod>***
+to claim a whole column at once. Items only one mod stocks carry over
+automatically; expand the **carried-over** list to reject unwanted strays
+(handy when a mod ships a stale copy of a whole kiosk and you only want its one
+new item).
 
-**Objects** — for a conflicting game object, each **contested field** (both
-mods set it differently) is a row: pick a mod's value, the **union** (for
-array fields), or **Vanilla** to keep the base game's value. Fields only one
-mod changed merge automatically; expand the **auto-merged** list to review or
-revert any of them.
+**Objects** — for a conflicting game object, each **contested field** is a card
+with a plain-English label (the raw field name shown beneath it) and one column
+per choice: the **Vanilla (unchanged)** baseline, each mod's value, and — for
+array fields — the **Union of both**. Array values are shown as a **diff
+against vanilla** (what each mod *adds* in green, *removes* in red), so the
+actual disagreement is obvious. Fields only one mod changed merge
+automatically; expand the **auto-merged** list to review or revert any of them.
 
 The result is written as a `Mods\OstrasortPatch` mod that loads last, so no
 mod's changes are lost. Merged objects are validated against the game's
@@ -193,7 +198,9 @@ them in game.
 - **Rebuild patch from scratch** (Patch tab) discards every stored decision —
   source picks *and* exclusions — and resolves everything again from a blank
   slate.
-- **Delete patch** removes the generated mod and its load-order entry.
+- **Delete patch** removes the generated mod and its load-order entry. You can
+  also **right-click the patch in the mod table → Remove generated patch**, the
+  same way you remove any other mod — both routes do the same guarded delete.
 - Both are undoable. The `OstrasortPatch` folder is wholly owned by Ostrasort
   — don't edit it by hand; it's safe to delete.
 

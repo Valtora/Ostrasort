@@ -88,6 +88,16 @@ order**. Ostrasort expands each container's entries into individual claims so
 those cross-folder collisions are detected, and explains the always-wins rule
 in the collision notes.
 
+**Flat-packed containers are never whole-object-merged.** `conditions_simple`
+and its cousins (`strings`, `names_first|full|last|robots|ship|ship_adjectives|ship_nouns`,
+`crewskins`, `manpages`, `traitscores`) each ship a *single* container object
+whose `aValues` is a fixed-width record array the game **explodes into
+individual records** after every mod loads — it never replaces the container
+whole. So two mods that each add their own records lose nothing; only a record
+**both** define collides (last-loaded wins). Ostrasort reports these as
+additive-at-load and **never folds them into the patch** — unioning a
+fixed-width `aValues` would scramble the packing and crash the game on load.
+
 ## Hygiene checks
 
 Surfaced in the same pass:

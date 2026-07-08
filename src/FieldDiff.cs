@@ -46,6 +46,24 @@ public static class FieldDiff
                 continue;
             }
 
+            // flat-packed "JsonSimple" containers (conditions_simple, strings,
+            // names_*, crewskins, manpages, traitscores) are never whole-object-
+            // replaced: the game explodes their aValues into individual records
+            // and merges them into a namespace one-by-one AFTER every mod loads.
+            // So two mods each shipping their own container lose nothing unless
+            // they define the SAME record (then the last-loaded wins). NEVER
+            // field-merge/patch the container - a union of its fixed-width
+            // aValues corrupts the packing and crashes the game on load.
+            if (Scanner.SimpleContainerTypes.TryGetValue(col.Type, out var namespaceDesc))
+            {
+                col.AdditiveAtLoad = true;
+                col.ObjectMergeable = false;
+                col.FieldNotes.Add($"both ship a {col.Type} container - the game merges their entries into " +
+                                   $"the {namespaceDesc} one-by-one at load, so nothing is lost unless two mods " +
+                                   "define the same entry (then the last-loaded mod's version wins)");
+                continue;
+            }
+
             // conditions defined via conditions_simple are parsed into the
             // conditions dictionary AFTER every mod loads (ParseConditionsSimple),
             // so they beat any conditions\ version of the same name regardless of

@@ -167,6 +167,36 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
 
     private readonly IReadOnlyList<string> _ignore = ignorePatterns ?? [];
 
+    /// <summary>
+    /// Data folders whose files are flat-packed "JsonSimple" containers: a
+    /// single object whose <c>strName</c> is just a container label and whose
+    /// <c>aValues</c> is a fixed-width record array the game explodes into
+    /// individual records AFTER every mod loads (DataHandler.ParseConditionsSimple
+    /// and friends), merging them into a target namespace key-by-key. The game
+    /// NEVER whole-object-replaces one of these, so two mods each shipping their
+    /// own container do not lose anything unless they define the same record.
+    /// The value is a short, human description of where those records land -
+    /// used in the collision notes. Treating a container as a mergeable whole
+    /// object (a union of the flat <c>aValues</c>) corrupts the packing and
+    /// crashes the game on load, so these are always report-only, never patched.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> SimpleContainerTypes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["conditions_simple"] = "conditions",
+            ["strings"] = "game strings",
+            ["names_first"] = "first names",
+            ["names_full"] = "full names",
+            ["names_last"] = "last names",
+            ["names_robots"] = "robot names",
+            ["names_ship"] = "ship names",
+            ["names_ship_adjectives"] = "ship-name adjectives",
+            ["names_ship_nouns"] = "ship-name nouns",
+            ["crewskins"] = "crew skins",
+            ["manpages"] = "manual pages",
+            ["traitscores"] = "trait scores",
+        };
+
     public HashSet<(string Type, string Name)> CoreIndex { get; } = new();
     public int CoreTypes { get; private set; }
     public int CoreProblemFiles { get; private set; }

@@ -83,6 +83,31 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void Remove_DeletesFolderAndDropsLoadOrderEntry()
+    {
+        var state = Engine.Analyze(_env);
+        Patcher.Generate(_env, Patcher.PlanMerge(_env, state.Analysis), state.Analysis, _env.InstalledVersion, "test");
+        var dir = Path.Combine(_env.ModsDir, Patcher.FolderName);
+        Assert.True(Directory.Exists(dir));
+        Assert.Contains(Patcher.FolderName, LoadOrderFile.Read(_env.LoadingOrderPath).Order);
+
+        Patcher.Remove(_env);   // what the GUI's mod-table "Remove" and the Patch tab both call
+
+        Assert.False(Directory.Exists(dir));
+        Assert.DoesNotContain(Patcher.FolderName, LoadOrderFile.Read(_env.LoadingOrderPath).Order);
+    }
+
+    [Fact]
+    public void Remove_RefusesAFolderItDidNotGenerate()
+    {
+        // a folder named like the patch but WITHOUT the marker must not be deleted
+        var dir = Path.Combine(_env.ModsDir, Patcher.FolderName);
+        Directory.CreateDirectory(dir);
+        Assert.Throws<InvalidOperationException>(() => Patcher.Remove(_env));
+        Assert.True(Directory.Exists(dir));
+    }
+
+    [Fact]
     public void PatchLifecycle_StaleWhenASourceModChanges()
     {
         var state = Engine.Analyze(_env);

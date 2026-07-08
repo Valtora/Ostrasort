@@ -171,6 +171,17 @@ public static class Program
                 Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");
                 return 1;
             }
+            // the real install may have no contested plan, so also render a
+            // synthetic one that exercises every resolver path (scalar + array
+            // diff + union columns, loot rows, the carried/auto expander) - this
+            // guards the resolver rendering against a construction-time throw and
+            // a zero-selector regression regardless of the local mod set
+            var synthResolver = new Gui.ResolverDialog(SyntheticResolverPlan());
+            if (synthResolver.SelectorsInTree() == 0)
+            {
+                Console.Error.WriteLine("gui-smoke FAIL: synthetic contested plan rendered no selectors.");
+                return 1;
+            }
             // verify Fluent dark theming actually applies (not silently swallowed)
             Gui.ThemeManager.Apply("dark");
 #pragma warning disable WPF0001
@@ -182,7 +193,8 @@ public static class Program
                 Console.Error.WriteLine("gui-smoke FAIL: dark ThemeMode did not apply.");
                 return 1;
             }
-            Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()}; theming ok)");
+            Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()}; " +
+                              $"synthetic resolver selectors={synthResolver.SelectorsInTree()}; theming ok)");
             return 0;
         }
 
@@ -441,6 +453,83 @@ public static class Program
     /// Ostrasort ships as a WinExe (GUI subsystem), so double-clicking it opens
     /// the window with no console flashing up behind it. The console paths still
     /// need to print, so when we were launched from a terminal - and stdout is
+    /// <summary>
+    /// A hand-built merge plan covering every resolver rendering path, so the
+    /// --smoke-gui self-test exercises the dialog even when the real install has
+    /// no contested conflict: an object with a contested scalar field, a
+    /// contested array field (with the union option), and an auto-merged field;
+    /// plus a loot pool with a contested and a carried item.
+    /// </summary>
+    private static MergePlan SyntheticResolverPlan()
+    {
+        static ModEntry M(string n) => new() { Raw = n, Kind = EntryKind.Local, Name = n, Dir = n, DisplayName = n };
+        static System.Text.Json.Nodes.JsonNode J(string s) => System.Text.Json.Nodes.JsonNode.Parse(s)!;
+        var a = M("Alpha Mod");
+        var b = M("Beta Mod");
+
+        var descItem = new MergeItem
+        {
+            Token = "strDesc",
+            BaseNode = J("\"A plain sink.\""),
+            Options = new()
+            {
+                new MergeOption(a.Dir!, a.DisplayName!, "\"A fancy sink.\"", J("\"A fancy sink.\"")),
+                new MergeOption(b.Dir!, b.DisplayName!, "\"A rusty sink.\"", J("\"A rusty sink.\"")),
+            },
+        };
+        var condsItem = new MergeItem
+        {
+            Token = "aStartingConds",
+            IsArrayField = true,
+            BaseNode = J("[\"IsSink=1.0x1\"]"),
+            Options = new()
+            {
+                new MergeOption(a.Dir!, a.DisplayName!, "[IsSink, IsShiny]", J("[\"IsSink=1.0x1\",\"IsShiny=1.0x1\"]")),
+                new MergeOption(b.Dir!, b.DisplayName!, "[IsSink, IsRusty]", J("[\"IsSink=1.0x1\",\"IsRusty=1.0x1\"]")),
+                new MergeOption("__union__", "union of both", "[IsSink, IsShiny, IsRusty]",
+                    J("[\"IsSink=1.0x1\",\"IsShiny=1.0x1\",\"IsRusty=1.0x1\"]")),
+            },
+        };
+        var autoItem = new MergeItem
+        {
+            Token = "fMass",
+            BaseNode = J("1.0"),
+            Options = new() { new MergeOption(a.Dir!, a.DisplayName!, "2.0", J("2.0")) },
+            ChosenSourceId = a.Dir!,
+        };
+        var objPlan = new ObjectPlan
+        {
+            Collision = new Collision { Type = "condowners", ObjName = "AABarTechnoLowPass", Claimants = new() { a, b } },
+            Type = "condowners",
+            BaseObject = J("{\"strName\":\"AABarTechnoLowPass\"}"),
+            Fields = new() { descItem, condsItem, autoItem },
+        };
+
+        var lootContested = new MergeItem
+        {
+            Token = "ItmChair01Loose",
+            Options = new()
+            {
+                new MergeOption(a.Dir!, a.DisplayName!, "ItmChair01Loose=1.0x5"),
+                new MergeOption(b.Dir!, b.DisplayName!, "ItmChair01Loose=1.0x9"),
+            },
+        };
+        var lootCarried = new MergeItem
+        {
+            Token = "ItmLamp01Loose",
+            Options = new() { new MergeOption(a.Dir!, a.DisplayName!, "ItmLamp01Loose=1.0x2") },
+        };
+        var poolPlan = new PoolPlan
+        {
+            Collision = new Collision { Type = "loot", ObjName = "CONDStationShop", Claimants = new() { a, b } },
+            BaseObject = J("{\"strName\":\"CONDStationShop\"}"),
+            LootItems = new() { lootContested, lootCarried },
+            CoItems = new(),
+        };
+
+        return new MergePlan { Pools = new() { poolPlan }, Objects = new() { objPlan } };
+    }
+
     /// not already redirected to a pipe/file (automation, shell redirection) -
     /// attach to that terminal's console and point Console.Out/Error at it.
     /// A pure double-click has no parent console, so AttachConsole simply fails

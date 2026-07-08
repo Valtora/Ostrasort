@@ -895,10 +895,18 @@ public partial class MainWindow : Window
         finally { _busy = false; }
     }
 
-    private void Unpatch_Click(object sender, RoutedEventArgs e)
+    private void Unpatch_Click(object sender, RoutedEventArgs e) => RemovePatch();
+
+    /// <summary>
+    /// Deletes the generated Ostrasort Patch (folder + load-order entry) after a
+    /// confirmation. Shared by the Patch tab's Remove button and the mod table's
+    /// right-click Remove, so the patch can be removed like any other mod.
+    /// </summary>
+    private void RemovePatch()
     {
         if (_state is null || !GateRunning()) return;
-        if (MessageBox.Show(this, "Remove the generated Ostrasort Patch (folder + load-order entry)?",
+        if (MessageBox.Show(this, "Remove the generated Ostrasort Patch (folder + load-order entry)?\n\n" +
+                "It is safe to remove - regenerate it any time with “Resolve conflicts & generate patch”.",
                 "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         _busy = true;
         try
@@ -907,6 +915,8 @@ public partial class MainWindow : Window
             Patcher.Remove(_env);
             OpLog.Add("Removed the Ostrasort Patch.");
             Rescan();
+            RunStatus.Text = "Ostrasort Patch removed (folder + load-order entry).  ";
+            RunStatus.Foreground = Good;
         }
         catch (Exception ex)
         {
@@ -1101,10 +1111,17 @@ public partial class MainWindow : Window
         Show(MenuIgnore, canIgnore && row!.M is { Ignored: false });
         Show(MenuUnignore, canIgnore && row!.M is { Ignored: true });
 
-        // removal: local/plugins-dir folders only (Workshop belongs to Steam,
-        // the patch has its own Remove action); unsubscribe: subscriptions only
-        Show(MenuDeleteMod, !rivalLock && row?.M is { Kind: EntryKind.Local or EntryKind.PluginDir, Dir: not null }
-                             && !row.M.IsPatch);
+        // removal: local/plugins-dir folders (park or delete), the generated
+        // patch (its own guarded removal, regenerable), or Workshop (Steam owns
+        // the files - offer Unsubscribe instead)
+        var isPatch = row?.M.IsPatch == true;
+        Show(MenuDeleteMod, !rivalLock && (isPatch
+            ? _state?.Patch.Exists == true
+            : row?.M is { Kind: EntryKind.Local or EntryKind.PluginDir, Dir: not null }));
+        MenuDeleteMod.Header = isPatch ? "Remove generated patch…" : "Remove mod (park or delete)…";
+        MenuDeleteMod.ToolTip = isPatch
+            ? "Delete the generated OstrasortPatch folder and drop its load-order entry. Safe to remove - regenerate it any time with “Resolve conflicts & generate patch”."
+            : "Park the mod folder as *.disabled (reversible) or delete it permanently, and drop its load-order entry either way. Deleted files are NOT restored by Ostrasort's undo.";
         Show(MenuUnsubscribe, row?.M is { Kind: EntryKind.Workshop, WorkshopId: not null });
 
         MenuStateSeparator.Visibility =
@@ -1186,6 +1203,9 @@ public partial class MainWindow : Window
     {
         if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning()) return;
         var m = row.M;
+        // the generated patch is Ostrasort's own - it has no park option and its
+        // own guarded removal (validates the marker, drops the entry, regenerable)
+        if (m.IsPatch) { RemovePatch(); return; }
         var name = m.DisplayName ?? m.Name;
         var choice = ParkOrDeleteDialog.Show(this,
             $"Remove local mod '{name}'?",
