@@ -24,6 +24,18 @@ outcome in the Logs tab.
 > Close Ostranauts first — Ostrasort disables all writes while the game is
 > running.
 
+## Installing it (optional)
+
+The exe runs fine from wherever you downloaded it, but on **first run**
+Ostrasort offers to install itself into `%LOCALAPPDATA%\Programs\Ostrasort` and
+create **Desktop** and **Start Menu** shortcuts, so you have one fixed home for
+it instead of hunting through your Downloads folder. It's entirely optional
+(dismiss with **Not now**), needs no admin rights, and writes nothing outside
+your user profile — to uninstall, just delete that folder and the shortcuts.
+You can install or refresh the shortcuts any time from the **Install /
+shortcuts** link (top-right). Keeping it in one place also means future updates
+land in a single known location.
+
 ## Typical workflow
 
 1. **Close Ostranauts.**
@@ -47,8 +59,9 @@ history on demand — a handy checkpoint before hand-editing or experimenting.
 ## The main window
 
 The table lists every mod in load order with its name, source
-(game/Workshop/local/generated), class, data-object counts, Workshop ID, and
-any problems. Below it, a row of tabs:
+(game/Workshop/local/generated), class, data-object counts, its own **Version**
+(`strModVersion`), Workshop ID, a **Last Updated** date, and any problems. Below
+it, a row of tabs:
 
 - **Collisions** — who claims the same objects and whether the order handles
   it, including field-level analysis of non-shop overrides. Only **active**

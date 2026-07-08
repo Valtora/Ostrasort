@@ -32,6 +32,7 @@ public sealed class ModEntry
     public bool Disabled { get; init; }              // "<entry>|disabled" - the game keeps the entry but skips it at load
     public string? DisplayName { get; set; }         // strName from mod_info.json
     public string? GameVersion { get; set; }         // strGameVersion from mod_info.json
+    public string? ModVersion { get; set; }          // strModVersion from mod_info.json (the mod's own version)
     public string? PublishedId { get; set; }         // strWorkshopID from mod_info.json (published local mods)
     public bool Registered { get; set; } = true;
     public bool Ignored { get; set; }                // user chose to leave it unregistered (see IgnoreList)
@@ -328,6 +329,9 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 mod.DisplayName = n.GetString();
             if (root.TryGetProperty("strGameVersion", out var v) && v.ValueKind == JsonValueKind.String)
                 mod.GameVersion = v.GetString();
+            if (root.TryGetProperty("strModVersion", out var mv) && mv.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(mv.GetString()))
+                mod.ModVersion = mv.GetString();
             if (root.TryGetProperty("strWorkshopID", out var w) && w.ValueKind == JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(w.GetString()))
                 mod.PublishedId = w.GetString();

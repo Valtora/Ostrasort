@@ -146,4 +146,17 @@ public class ScannerTests : IDisposable
         Assert.True(mod.UsesElasticApi);                            // feeds FFU classification (AfterFFU)
         Assert.Contains(mod.FfuSignals, s => s.Contains("bFFU"));
     }
+
+    [Fact]
+    public void Scan_ReadsModVersionFromModInfo()
+    {
+        var mod = MakeMod("Versioned");
+        WriteJson(mod.Dir!, "mod_info.json",
+            """[{"strName":"Versioned Mod","strModVersion":"1.2.3","strGameVersion":"0.16.0.5"}]""");
+
+        new Scanner(Env(), useCoreCache: false).Scan(mod);
+
+        Assert.Equal("1.2.3", mod.ModVersion);
+        Assert.Equal("0.16.0.5", mod.GameVersion);
+    }
 }

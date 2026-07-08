@@ -40,8 +40,8 @@ public static class MarkdownReport
 
         sb.AppendLine($"## Mods ({a.Registered.Count} registered)");
         sb.AppendLine();
-        sb.AppendLine("| # | Mod | Source | Class | Data | Notes |");
-        sb.AppendLine("|--:|-----|--------|-------|------|-------|");
+        sb.AppendLine("| # | Mod | Version | Source | Class | Data | Notes |");
+        sb.AppendLine("|--:|-----|---------|--------|-------|------|-------|");
         var rows = a.Registered.Select((m, i) => (Pos: (i + 1).ToString(), Mod: m))
             .Concat(a.UnregisteredLocal.Concat(a.UnregisteredWorkshop).Select(m => (Pos: "–", Mod: m)));
         foreach (var (pos, m) in rows)
@@ -71,7 +71,8 @@ public static class MarkdownReport
             };
             var data = m.Kind == EntryKind.Core ? $"{s.Scanner.CoreIndex.Count:N0} objects"
                      : m.DataObjects > 0 ? $"{m.DataObjects} objs / {m.CoreOverrides} ovr" : "–";
-            sb.AppendLine($"| {pos} | {name} | {source} | {cls} | {data} | {Md(string.Join("; ", notes))} |");
+            var modVersion = m.Kind == EntryKind.Core ? "–" : m.ModVersion ?? "–";
+            sb.AppendLine($"| {pos} | {name} | {Md(modVersion)} | {source} | {cls} | {data} | {Md(string.Join("; ", notes))} |");
         }
         sb.AppendLine();
 

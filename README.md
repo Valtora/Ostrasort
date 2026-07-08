@@ -39,10 +39,11 @@ Around those two jobs it works as a complete mod manager:
 - **Manual control** — drag rows to reorder by hand with live rule-violation
   checks, or apply the suggested order in one click. **Organise Mods by Class**
   optionally groups the list for readability.
-- **Workshop freshness** — the mod table shows each mod's **Last Updated** date
-  (the real Steam Workshop publish time, folder date for local mods) and flags
-  any Workshop mod whose published version is newer than your local copy. The
-  game pulls the newer files itself on next launch, so it's purely a heads-up.
+- **Version & freshness** — the mod table shows each mod's own **Version**
+  (`strModVersion` from its `mod_info.json`) and its **Last Updated** date (the
+  real Steam Workshop publish time, folder date for local mods), and flags any
+  Workshop mod whose published version is newer than your local copy. The game
+  pulls the newer files itself on next launch, so it's purely a heads-up.
 - **Backups & undo** — every `loading_order.json` write keeps a `.bak` **and** a
   rolling backup history; **Make backup** snapshots on demand, **Restore
   backup** picks any restore point, and **Ctrl+Z / Ctrl+Y** undo/redo covers
@@ -121,7 +122,10 @@ installs so it can diagnose them and offer the way out: a one-click, reversible
 2. **Close Ostranauts** (Ostrasort won't write while the game is running).
 3. **Double-click `Ostrasort.exe`.** It opens straight to its window (no
    console), finds your install automatically, and lists every mod in load
-   order.
+   order. On first run it offers to **install itself** into
+   `%LOCALAPPDATA%\Programs\Ostrasort` and create Desktop / Start Menu shortcuts,
+   so you have one fixed place to keep and launch it (optional, dismissible, and
+   repeatable any time from the **Install / shortcuts** link).
 4. Read the highlighted tabs, **Apply the suggested order** and **Resolve
    conflicts** as needed, then launch the game. Save a **profile** if you want
    to come back to this setup, pick a **theme** to taste, and **Ctrl+Z** undoes

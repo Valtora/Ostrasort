@@ -162,6 +162,7 @@ public static class Program
             var smokePlan = Patcher.PlanMerge(smokeEnv, smokeState.Analysis);
             var resolver = new Gui.ResolverDialog(smokePlan);
             _ = new Gui.ParkOrDeleteDialog("self-test", "self-test");
+            _ = new Gui.InstallDialog(alreadyInstalled: false);
             _ = new Gui.PromptDialog("self-test");
             _ = new Gui.InstallationsDialog(new InstallationStore(), "self-test");
             _ = new Gui.ProfileSwitchDialog(smokeEnv, smokeState.Analysis,

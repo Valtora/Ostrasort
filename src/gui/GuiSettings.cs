@@ -14,6 +14,7 @@ public sealed class GuiSettings
     public bool Tidy { get; set; }
     public int Tab { get; set; }
     public string Theme { get; set; } = "system";   // "system" | "light" | "dark"
+    public bool InstallPromptDismissed { get; set; } // the first-run "install to %LOCALAPPDATA%" prompt was answered/dismissed
 
     private static string PathFor() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

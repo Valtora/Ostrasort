@@ -1,0 +1,16 @@
+<Window x:Class="Ostrasort.Gui.InstallDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Install Ostrasort" SizeToContent="WidthAndHeight" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" WindowStyle="ToolWindow">
+    <StackPanel Margin="18,14" MaxWidth="460">
+        <TextBlock x:Name="TxtHeader" FontWeight="SemiBold" FontSize="13.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
+        <TextBlock x:Name="TxtBody" TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12"/>
+        <CheckBox x:Name="ChkDesktop" Content="Create a Desktop shortcut" IsChecked="True" Margin="0,0,0,4"/>
+        <CheckBox x:Name="ChkStartMenu" Content="Create a Start Menu shortcut" IsChecked="True" Margin="0,0,0,14"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="BtnInstall" Content="Install" Padding="14,4" Margin="0,0,8,0" IsDefault="True" Click="Install_Click"/>
+            <Button Content="Not now" Padding="14,4" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

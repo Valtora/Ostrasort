@@ -13,7 +13,7 @@ using System.Windows.Media;
 namespace Ostrasort.Gui;
 
 public sealed record ModRow(string Pos, string Name, string Source, string Class, string Data,
-                            string WorkshopId, string Notes, Brush Brush, string? Dir, string Tooltip,
+                            string Version, string WorkshopId, string Notes, Brush Brush, string? Dir, string Tooltip,
                             ModEntry M, bool Draggable,
                             string LastUpdated, string UpdateText, Brush UpdateBrush);
 public sealed record LineVm(string Text, Brush Brush, Thickness Margin, bool Bold = false)
@@ -308,7 +308,8 @@ public partial class MainWindow : Window
         if (m.Kind != EntryKind.Core && m.Dir is not null) tooltip += "\n(double-click to open the folder)";
         var draggable = m.Registered && m.Kind != EntryKind.Core;
         var (lastUpdated, updText, updBrush) = UpdateInfo(m);
-        return new ModRow(pos, name, source, cls, data, m.WorkshopId ?? "-",
+        var version = m.Kind == EntryKind.Core ? "-" : m.ModVersion ?? "-";
+        return new ModRow(pos, name, source, cls, data, version, m.WorkshopId ?? "-",
             string.Join("; ", notes), brush, m.Dir, tooltip, m, draggable,
             lastUpdated, updText, updBrush);
     }
@@ -1557,6 +1558,60 @@ public partial class MainWindow : Window
 
     private void Update_Click(object sender, RoutedEventArgs e) =>
         Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
+
+    // ---------------------------------------------------- self-install ---
+
+    /// <summary>
+    /// One-time, dismissible first-run offer to install the exe to a fixed
+    /// per-user location + shortcuts. Fires on first render (never during
+    /// --smoke-gui, which constructs the window without showing it) and only
+    /// when running from somewhere other than the install location.
+    /// </summary>
+    private void Window_ContentRendered(object? sender, EventArgs e)
+    {
+        if (_settings.InstallPromptDismissed || !SelfInstall.CanOfferInstall()) return;
+        _settings.InstallPromptDismissed = true;   // ask once, never nag - the link stays for later
+        _settings.Save();
+        RunInstall(alreadyInstalled: false);
+    }
+
+    private void Install_Click(object sender, RoutedEventArgs e) =>
+        RunInstall(SelfInstall.IsInstalled());
+
+    /// <summary>Shows the install prompt and performs the chosen install + shortcut creation.</summary>
+    private void RunInstall(bool alreadyInstalled)
+    {
+        var choice = InstallDialog.Show(this, alreadyInstalled);
+        if (choice is not { } c) return;
+        try
+        {
+            var result = SelfInstall.Install(c.Desktop, c.StartMenu);
+            OpLog.Add(result.Copied
+                ? $"Installed Ostrasort to {result.ExePath}."
+                : $"Ostrasort already installed at {result.ExePath}.");
+            foreach (var s in result.Shortcuts) OpLog.Add($"Created shortcut: {s}");
+
+            var shortcutNote = result.Shortcuts.Count > 0
+                ? $" {result.Shortcuts.Count} shortcut(s) created."
+                : " No shortcuts requested.";
+            RunStatus.Text = (result.Copied
+                ? "Installed to %LOCALAPPDATA%\\Programs\\Ostrasort."
+                : "Shortcuts refreshed.") + shortcutNote + "  ";
+            RunStatus.Foreground = Good;
+            MessageBox.Show(this,
+                (result.Copied ? $"Ostrasort was installed to:\n{result.ExePath}\n\n" : $"Using the installed copy at:\n{result.ExePath}\n\n") +
+                (result.Shortcuts.Count > 0
+                    ? "Shortcuts created:\n" + string.Join("\n", result.Shortcuts)
+                    : "No shortcuts were created.") +
+                "\n\nLaunch Ostrasort from the shortcut or that folder from now on so updates land in one place.",
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "Install failed:\n\n" + ex.Message,
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     // ------------------------------------------------------ report a bug ---
 
