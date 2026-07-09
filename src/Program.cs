@@ -37,7 +37,7 @@ public static class Program
     private static int Run(string[] args)
     {
         bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false;
-        string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null;
+        string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null, installZip = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -58,6 +58,8 @@ public static class Program
                 case "--profile-load" when i + 1 < args.Length: profileLoad = args[++i]; break;
                 case "--merge": merge = true; break;
                 case "--unpatch": unpatch = true; break;
+                case "--install-zip" when i + 1 < args.Length: installZip = args[++i]; break;
+                case "--overwrite": break;                              // modifier for --install-zip (handled below)
                 case "--allow-rival-stack": allowRival = true; break;   // override the autoloader write-block (at your own risk)
                 case "--disable-autoloader": break;                     // park/delete the OstraAutoloader DLL(s) (handled below)
                 case "--remove-ffu": break;                             // remove FFU Core (handled below)
@@ -91,6 +93,14 @@ public static class Program
                           --fresh     with --patch: discard all previously stored decisions
                                       (source picks AND exclusions) and rebuild from scratch
                           --unpatch   remove the generated patch mod and its load-order entry
+                          --install-zip <p>
+                                      install a mod from a .zip package: extract it into the game
+                                      (data mods into the Mods folder, BepInEx bundles into the
+                                      BepInEx tree, zip-slip safe) and register each data mod in
+                                      the load order. A GitHub-style wrapper folder is stripped and
+                                      a multi-mod archive installs every mod it holds
+                          --overwrite with --install-zip: replace a mod that is already installed
+                                      (default: skip it and report)
                           --profile-list          list saved load-order profiles for this install
                           --profile-save <name>   save the current load order as a named profile
                           --profile-load <name>   switch to a saved profile (Replace by default);
@@ -162,6 +172,14 @@ public static class Program
             var smokePlan = Patcher.PlanMerge(smokeEnv, smokeState.Analysis);
             var resolver = new Gui.ResolverDialog(smokePlan);
             _ = new Gui.ParkOrDeleteDialog("self-test", "self-test");
+            _ = new Gui.InstallConfirmDialog(new ModInstall.Plan("self-test.zip",
+                    new[]
+                    {
+                        new ModInstall.Component("Self Test Mod", @"C:\Mods\Self Test Mod", "SelfTest/", null,
+                            ModInstall.ComponentKind.LocalMod, HasData: true, Exists: true,
+                            new[] { @"C:\Mods\Self Test Mod" }),
+                    },
+                    new[] { "self-test warning" }));
             _ = new Gui.InstallDialog(alreadyInstalled: false);
             _ = new Gui.PromptDialog("self-test");
             _ = new Gui.InstallationsDialog(new InstallationStore(), "self-test");
@@ -248,6 +266,47 @@ public static class Program
             Console.WriteLine(removal.Deleted
                 ? "FFU Core removed (files deleted; .bak kept for the load order)."
                 : "FFU Core removed (everything renamed to .disabled - rename back to restore; .bak kept for the load order).");
+            return 0;
+        }
+
+        if (installZip is not null)
+        {
+            var ienv = GameEnv.Locate(gameRoot, modsDir);
+            if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
+
+            var plan = ModInstall.Inspect(ienv, installZip);
+            foreach (var w in plan.Warnings) Console.WriteLine($"note: {w}");
+            if (plan.IsEmpty)
+            {
+                Console.Error.WriteLine("No installable Ostranauts mod found in the archive.");
+                return 1;
+            }
+
+            var result = ModInstall.Execute(ienv, plan, null, args.Contains("--overwrite"));
+            // registration writes loading_order.json; skip it while the autoloader owns the file
+            var canRegister = FfuContext.Detect(ienv) is not { AutoloaderActive: true } || allowRival;
+            var registered = canRegister ? ModInstall.RegisterInstalled(ienv, result) : new List<string>();
+
+            foreach (var c in result.Installed)
+            {
+                Console.WriteLine($"Installed: {c.Name} -> {c.TargetDir}");
+                OpLog.Add($"[cli] Installed '{c.Name}' from {Path.GetFileName(installZip)} -> {c.TargetDir}");
+            }
+            foreach (var r in registered)
+            {
+                Console.WriteLine($"Registered: {r}");
+                OpLog.Add($"[cli] Registered installed mod: {r}");
+            }
+            foreach (var c in result.Skipped)
+                Console.WriteLine($"Skipped (already installed): {c.Name}  - pass --overwrite to replace it");
+
+            if (result.Installed.Count == 0)
+            {
+                Console.WriteLine("Nothing installed.");
+                return result.Skipped.Count > 0 ? 2 : 1;
+            }
+            if (!canRegister)
+                Console.WriteLine("Not registered: OstraAutoloader manages the load order (override: --allow-rival-stack).");
             return 0;
         }
 

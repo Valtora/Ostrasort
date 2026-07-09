@@ -35,6 +35,13 @@ Around those two jobs it works as a complete mod manager:
   (they can live on different disks), and switch which one Ostrasort manages
   from the header. Auto-detect still honours the game's own relocated mods
   folder. Each install keeps its own profiles and backups.
+- **Install from file** — **Install from file…** (or drag a `.zip` onto the
+  window) installs a mod that didn't come through the Workshop (a FFU build, a
+  GitHub release, a Nexus/Discord download): it finds the mod inside the archive
+  (stripping a GitHub `repo-main\` wrapper), installs every mod in a multi-mod
+  zip, routes a **BepInEx** bundle into the game's BepInEx tree and a data mod
+  into the Mods folder, then registers each data mod — no unzipping by hand.
+  Path-traversal safe, with an overwrite prompt when a mod is already installed.
 - **In-place mod management** — from the mod table, **enable / disable** a mod
   (the game's own `|disabled` marker), **ignore** an unregistered folder you
   keep parked, **remove** a mod (park it as `.disabled` or delete it), or
@@ -60,6 +67,7 @@ Around those two jobs it works as a complete mod manager:
   with that report and your environment (OS, game and tool version) filled in.
 - **Scriptable** — a console mode drives every capability: `--report`, `--json`
   (machine-readable), `--apply`, `--patch` / `--unpatch`,
+  `--install-zip` (install a mod from a `.zip`),
   `--profile-list` / `--profile-save` / `--profile-load`, and `--mods` /
   `--install` to point at a mods folder or saved install on another disk.
 

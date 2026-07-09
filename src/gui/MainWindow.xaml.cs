@@ -1058,6 +1058,118 @@ public partial class MainWindow : Window
         }
     }
 
+    // ----------------------------------------------------- install from file ---
+
+    private void InstallZip_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "Install mod from file",
+            Filter = "Mod archive (*.zip)|*.zip|All files (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = true,
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        foreach (var f in dlg.FileNames) InstallFromZip(f);
+    }
+
+    private static string[] DroppedZips(DragEventArgs e) =>
+        e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files
+            ? files.Where(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToArray()
+            : Array.Empty<string>();
+
+    // Tunneling handlers at the window: claim .zip file-drops before they reach
+    // the grid. The grid's own drag reorder carries a ModRow (not FileDrop), so
+    // the two never collide - a non-zip drop is left unhandled and falls through.
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        if (DroppedZips(e).Length == 0) return;
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        var zips = DroppedZips(e);
+        if (zips.Length == 0) return;
+        e.Handled = true;
+        foreach (var z in zips) InstallFromZip(z);
+    }
+
+    /// <summary>
+    /// Inspect a .zip, confirm what it holds, extract it (zip-slip safe) and
+    /// register each installed data mod. The extracted files are removed via the
+    /// mod table's Remove action, not Ctrl+Z (undo covers the load-order entry).
+    /// </summary>
+    private void InstallFromZip(string zipPath)
+    {
+        if (_state is null || !GateRunning()) return;
+
+        ModInstall.Plan plan;
+        try
+        {
+            plan = ModInstall.Inspect(_env, zipPath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (plan.IsEmpty)
+        {
+            MessageBox.Show(this,
+                $"No installable Ostranauts mod was found in {Path.GetFileName(zipPath)}.\n\n" +
+                string.Join("\n", plan.Warnings),
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (InstallConfirmDialog.Show(this, plan) is not bool overwrite) return;
+
+        // OstraAutoloader owns the load order - extraction is fine, but a
+        // registration write would be undone at the next launch, so skip it.
+        var rivalLock = _state.Analysis.Ffu is { AutoloaderActive: true };
+        _busy = true;
+        try
+        {
+            CaptureOp($"install {Path.GetFileName(zipPath)}");
+            var result = ModInstall.Execute(_env, plan, null, overwrite);
+            var registered = rivalLock ? new List<string>() : ModInstall.RegisterInstalled(_env, result);
+
+            foreach (var c in result.Installed) OpLog.Add($"Installed '{c.Name}' from {Path.GetFileName(zipPath)} → {c.TargetDir}.");
+            foreach (var r in registered) OpLog.Add($"Registered installed mod: {r}.");
+            foreach (var c in result.Skipped) OpLog.Add($"Skipped '{c.Name}' — already installed (overwrite not chosen).");
+            Rescan();
+
+            if (result.Installed.Count == 0)
+            {
+                RunStatus.Text = "Nothing installed — every item was already present (tick Overwrite to replace).  ";
+                RunStatus.Foreground = Warn;
+                return;
+            }
+
+            var names = string.Join(", ", result.Installed.Select(c => c.Name));
+            RunStatus.Text = $"Installed {result.Installed.Count} item(s) from {Path.GetFileName(zipPath)}.  ";
+            RunStatus.Foreground = Good;
+
+            var msg = $"Installed: {names}.";
+            if (registered.Count > 0) msg += $"\n\nAdded {registered.Count} to the load order.";
+            else if (rivalLock) msg += "\n\nNot registered: OstraAutoloader manages the load order on this install.";
+            else msg += "\n\nNothing needed registering (code-only plugins auto-load; no data mod to add).";
+            if (result.Skipped.Count > 0)
+                msg += $"\n\nSkipped {result.Skipped.Count} already-installed item(s).";
+            msg += "\n\nTo undo, use the mod table's Remove action (Ctrl+Z removes only the load-order entry).";
+            MessageBox.Show(this, msg, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            Rescan();
+        }
+        finally { _busy = false; }
+    }
+
     // ------------------------------------------------------- report export ---
 
     private void CopyReport_Click(object sender, RoutedEventArgs e)

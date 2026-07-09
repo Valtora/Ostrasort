@@ -4,7 +4,8 @@
         Title="Ostrasort" Height="760" Width="1120" MinHeight="560" MinWidth="860"
         Icon="/app.ico" WindowStartupLocation="CenterScreen"
         Activated="Window_Activated" Closing="Window_Closing" ContentRendered="Window_ContentRendered"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown"
+        AllowDrop="True" PreviewDragOver="Window_DragOver" PreviewDrop="Window_Drop">
     <Window.Resources>
         <!-- Button-like tab headers so they keep contrast on both palettes; the
              brushes come from ThemeManager (pushed into Application resources). -->
@@ -149,6 +150,9 @@
                 </TextBlock>
             </StackPanel>
             <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnInstallZip" Content="Install from file…" Padding="12,2" Margin="0,0,18,0"
+                        VerticalAlignment="Center" Click="InstallZip_Click"
+                        ToolTip="Install a mod from a .zip package (also: drag a .zip onto this window). Extracts it into the game and adds it to the load order."/>
                 <TextBlock Text="Filter:" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <TextBox x:Name="TxtFilter" Width="240" VerticalAlignment="Center"
                          TextChanged="Filter_Changed"

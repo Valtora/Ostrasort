@@ -92,6 +92,27 @@ order, profiles and backups.
 Nothing is written until you press a button, every `loading_order.json` write
 keeps a `.bak`, and all writes are disabled while the game is running.
 
+### Installing a mod from a file
+
+**Install from file…** (toolbar) — or just **drag a `.zip` onto the window** —
+installs a mod that did not come through the Steam Workshop (a FFU build, a
+GitHub release, a Nexus or Discord download). Ostrasort looks inside the
+archive, extracts each mod it finds to the right place, and adds it to the load
+order for you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
+
+- It finds the mod even when the archive wraps it in a folder (GitHub's
+  `repo-main\…`), installs **every** mod when the zip holds several, and routes
+  a **BepInEx** bundle (Thunderstore/FFU style) into the game's BepInEx tree
+  while a plain data mod goes to the Mods folder.
+- A confirmation lists exactly what will be installed and where. If a mod is
+  **already installed**, it is skipped unless you tick **Overwrite** (which
+  cleanly replaces it).
+- Each installed **data** mod is registered in the load order automatically;
+  code-only plugins are copied (BepInEx auto-loads them, so they need no entry).
+- Extraction is path-traversal safe and the game must be closed, like every
+  other write. To undo an install, use **Remove mod** on the table row —
+  Ctrl+Z reverses only the load-order entry, not the extracted files.
+
 ### Working with the list
 
 - **Drag rows** to reorder manually — rule violations are validated before
@@ -287,6 +308,12 @@ Ostrasort.exe --patch     generate/refresh the patch; contested items open the
                           resolver window unless headless
 Ostrasort.exe --fresh     with --patch: discard all stored decisions and rebuild
 Ostrasort.exe --unpatch   remove the generated patch mod
+Ostrasort.exe --install-zip <p>
+                          install a mod from a .zip: extract it into the game (data mods to
+                          the Mods folder, BepInEx bundles to the BepInEx tree; zip-slip safe)
+                          and register each data mod. Strips a GitHub-style wrapper folder and
+                          installs every mod in a multi-mod archive
+Ostrasort.exe --overwrite with --install-zip: replace a mod already installed (default: skip)
 Ostrasort.exe --profile-list          list saved load-order profiles for this install
 Ostrasort.exe --profile-save <name>   save the current load order as a named profile
 Ostrasort.exe --profile-load <name>   switch to a saved profile: Replace by default (mods it
