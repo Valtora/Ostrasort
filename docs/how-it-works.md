@@ -72,6 +72,14 @@ Pools are compared **pairwise across all claimants**, not just neighbours —
 with three or more mods on one pool, a partial overlap between the first and
 last claimant is still caught even when each adjacent pair looks clean.
 
+Not every collision is a problem. Outcomes that lose nothing (identical item
+sets, a correct-order superset, or an object type the game or FFU merges
+field-by-field at load) move to the **Resolved / handled** tab, alongside
+anything the generated patch merges. The **Collisions** tab (and its badge and
+the "needs attention" total) shows only collisions where something is actually
+lost or is fixable (partial-overlap loot, wrong-order drops, or a mergeable
+object override), so it reads clean when there is nothing to do.
+
 **Every other object type** (condowners, interactions, conditions, …) gets
 **field-level analysis**: Ostrasort diffs each mod's version against the base
 game and reports which fields each one changes. If the changed field sets are
@@ -263,6 +271,12 @@ patch straight away.
   never leave a truncated `loading_order.json` behind. Local entries keep
   their `|edit`/`|disabled` markers, and exact-duplicate entries are dropped
   on write.
+- **One writer at a time.** Every write takes a short-lived, per-file lock
+  around the ritual above, so the GUI and a headless run (for example Ostraplan
+  registering a ship mod through Ostrasort) can't interleave writes to the same
+  `loading_order.json`. On top of that the GUI notices when the file changed on
+  disk since it last scanned (a background registration, another tool), and
+  reloads instead of overwriting that change with a stale view.
 - **Rolling backups.** The `.bak` only survives until the next write, so every
   overwrite also snapshots the previous text into
   `%LOCALAPPDATA%\Ostrasort\backups` (the newest **3** are kept). The GUI's

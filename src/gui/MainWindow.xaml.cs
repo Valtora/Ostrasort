@@ -76,6 +76,12 @@ public partial class MainWindow : Window
         RestoreWindowState();
         CmbTheme.SelectedIndex = _settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        // Single-instance signals fire on a background thread - marshal to the UI.
+        // Activate = a second launch asks us to come forward; Shutdown = the
+        // updater asks us to close so it can replace the exe (Close() runs the
+        // usual Window_Closing save path, then the app exits).
+        SingleInstance.OnActivate = () => Dispatcher.Invoke(BringToFront);
+        SingleInstance.OnShutdown = () => Dispatcher.Invoke(Close);
         Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
@@ -380,16 +386,18 @@ public partial class MainWindow : Window
 
         // tab highlighting: bold + orange headers on tabs that need action,
         // and the same set drives the "N things need attention" status line
-        var collAttention = a.Collisions.Any(c => !c.ResolvedByPatch &&
-            (c.ObjectMergeable || c.Pairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation)));
+        // Count/highlight only collisions that actually need action; benign ones
+        // (load-order/FFU/additive-handled, same-set loot) stay visible in the
+        // tab's "no action needed" section but don't inflate the badge or alarm.
+        var collAttention = a.Collisions.Any(CollisionView.NeedsAttention);
         var orderAttention = a.OrderChanged;
         var patchAttention = s.Patch.Stale || s.Patch.Obsolete;
         var warnAttention = warnCount > 0;
 
-        var activeColl = a.Collisions.Count(c => !c.ResolvedByPatch);
-        var resolvedColl = a.Collisions.Count - activeColl;
-        SetTabHeader(TabCollisions, $"Collisions ({activeColl})", collAttention);
-        SetTabHeader(TabResolved, resolvedColl == 0 ? "Resolved collisions" : $"Resolved collisions ({resolvedColl})", attention: false);
+        var attentionColl = a.Collisions.Count(CollisionView.NeedsAttention);
+        var handledColl = a.Collisions.Count - attentionColl;   // benign + patch-merged + FFU/additive handled
+        SetTabHeader(TabCollisions, attentionColl == 0 ? "Collisions" : $"Collisions ({attentionColl})", collAttention);
+        SetTabHeader(TabResolved, handledColl == 0 ? "Resolved / handled" : $"Resolved / handled ({handledColl})", attention: false);
         SetTabHeader(TabOrder, a.OrderChanged ? $"Order changes ({a.Changes.Count})" : "Order changes", orderAttention);
         SetTabHeader(TabPatch, "Patch", patchAttention);
         SetTabHeader(TabWarnings, warnCount == 0 ? "Warnings" : $"Warnings ({warnCount})", warnAttention);
@@ -686,6 +694,31 @@ public partial class MainWindow : Window
         return false;
     }
 
+    /// <summary>
+    /// Guards a whole-order rewrite (Apply, profile switch) against clobbering an
+    /// external edit. If loading_order.json changed on disk since our last scan
+    /// (e.g. Ostraplan registered a ship mod headlessly, or another tool wrote
+    /// it), we reload instead of overwriting it with our stale view, and tell the
+    /// user to retry. Read-modify-write actions (patch, toggle, remove) re-read
+    /// the file themselves and so preserve such edits - only these full rewrites
+    /// need the check. Returns true when it is safe to proceed.
+    /// </summary>
+    private bool ConfirmLoadOrderCurrent()
+    {
+        if (_state is null) return true;
+        string current;
+        try { current = File.ReadAllText(_env.LoadingOrderPath); }
+        catch { return true; }   // unreadable/missing now - let the write path surface the real error
+        if (current == _state.Lo.RawText) return true;
+        OpLog.Add("loading_order.json changed on disk since the last scan — reloaded instead of overwriting.");
+        Rescan();
+        MessageBox.Show(this,
+            "loading_order.json changed on disk since Ostrasort last scanned it (another tool or a background " +
+            "registration edited it). Ostrasort reloaded it so that change isn't lost — review the list and try again.",
+            "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+        return false;
+    }
+
     private void Rescan_Click(object sender, RoutedEventArgs e) => Rescan();
 
     // ------------------------------------------------------------ undo/redo ---
@@ -804,7 +837,7 @@ public partial class MainWindow : Window
 
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || !GateRunning()) return;
+        if (_state is null || !GateRunning() || !ConfirmLoadOrderCurrent()) return;
         _busy = true;
         try
         {
@@ -1481,7 +1514,7 @@ public partial class MainWindow : Window
 
     private void ProfileSwitch_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || ListProfiles.SelectedItem is not ProfileRow row || !GateRunning()) return;
+        if (_state is null || ListProfiles.SelectedItem is not ProfileRow row || !GateRunning() || !ConfirmLoadOrderCurrent()) return;
         var dlg = new ProfileSwitchDialog(_env, _state.Analysis, row.Profile) { Owner = this };
         if (dlg.ShowDialog() != true || dlg.Result is not { } plan) return;
         _busy = true;
@@ -1568,6 +1601,16 @@ public partial class MainWindow : Window
         Rescan();
     }
 
+    /// <summary>Restore + raise the window to the foreground (a second launch asked us to).</summary>
+    private void BringToFront()
+    {
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+        Topmost = true;
+        Topmost = false;   // flash to the front without staying pinned above everything
+        Focus();
+    }
+
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
@@ -1642,7 +1685,7 @@ public partial class MainWindow : Window
 
         await Dispatcher.InvokeAsync(() =>
         {
-            if (ParseVersion(tag) > ParseVersion(Program.Version))
+            if (Updater.Parse(tag) > Updater.Parse(Program.Version))
             {
                 _updateUrl = latestUrl;
                 BtnUpdate.Content = $"⬆  Update available: {tag}";
@@ -1664,9 +1707,6 @@ public partial class MainWindow : Window
             }
         });
     }
-
-    private static Version ParseVersion(string s) =>
-        Version.TryParse(s.TrimStart('v', 'V').Split('+', '-')[0], out var v) ? v : new Version(0, 0);
 
     private void Update_Click(object sender, RoutedEventArgs e) =>
         Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });

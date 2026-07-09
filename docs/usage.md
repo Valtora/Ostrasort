@@ -21,6 +21,23 @@ You can also run the check yourself any time with the **Check for updates** link
 you're already up to date, offline, or rate-limited, but always notes the
 outcome in the Logs tab.
 
+**Applying an update is one step.** Download the new `Ostrasort.exe` and run it.
+If you've installed Ostrasort (see below), the new build notices it's newer than
+your installed copy and offers to **Update and restart**: it closes the running
+copy, overwrites the installed binary, refreshes your Desktop and Start Menu
+shortcuts, and relaunches from the install location. The download can be named
+anything (`Ostrasort-v0.21.0.exe`, `Ostrasort (1).exe`), the version is read
+from the file itself. Choose **Just run this copy** to skip that and run the
+download in place instead. If you haven't installed Ostrasort, the new exe just
+runs, and the first-run install offer below still applies.
+
+Ostrasort runs as a **single instance** per Windows session. Two windows could
+both write `loading_order.json` and race each other, so a second launch simply
+brings the existing window to the front and exits. If another tool edits
+`loading_order.json` while Ostrasort is open (for example Ostraplan registering
+a ship mod), Ostrasort notices and reloads it rather than overwriting that
+change, so nothing you didn't intend gets lost.
+
 > Close Ostranauts first — Ostrasort disables all writes while the game is
 > running.
 
@@ -64,11 +81,15 @@ The table lists every mod in load order with its name, source
 it, a row of tabs:
 
 - **Collisions** — who claims the same objects and whether the order handles
-  it, including field-level analysis of non-shop overrides. Only **active**
-  conflicts appear here.
-- **Resolved collisions** — conflicts the generated patch already merges away,
-  kept on their own tab so the Collisions tab shows only what still needs
-  attention.
+  it, including field-level analysis of non-shop overrides. It shows **only
+  collisions that need action**, so it reads clean when there is nothing to do.
+  Collisions the load order, FFU, or the game already handle losslessly (for
+  example two shops stocking the same items with different quantities) move to
+  the **Resolved / handled** tab instead of cluttering this one.
+- **Resolved / handled** — every collision that needs no action: merged by the
+  generated patch, merged at load by FFU or the game, or handled losslessly by
+  the load order. Kept on its own tab so the Collisions tab stays focused on
+  real problems.
 - **Order changes** — the current order and the suggested order side by side,
   applied with one button.
 - **Patch** — state of the generated conflict patch, with *Rebuild from

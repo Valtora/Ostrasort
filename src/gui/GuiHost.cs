@@ -32,17 +32,41 @@ public static class GuiHost
             e.SetObserved();
         };
 
-        ThemeManager.Apply(GuiSettings.Load().Theme);   // app-level, before the first window loads
+        ThemeManager.Apply(GuiSettings.Load().Theme);   // app-level, before the first window loads (and before the adopt prompt)
 
-        // Which install to open: an explicit --install selects (and becomes) the
-        // active one; otherwise the remembered active install, else auto-detect.
-        var store = InstallationStore.Load();
-        if (installName is not null) store.Active = installName;
-        var (env, activeName) = ResolveOrPrompt(gameRoot, modsDir, store);
-        if (env is null) return 1;   // user cancelled the install picker
+        // Self-adopting updater: if this is a newer build the user downloaded and
+        // ran from outside the install location, offer to replace the installed
+        // copy and restart from it. MUST run before the single-instance check -
+        // otherwise the mutex would just focus the old window instead of letting
+        // the new binary take over. On "Just run this copy" we fall through.
+        if (Updater.Detect() is { } pending && Updater.PromptAndApply(pending))
+            return 0;   // handed off to the relaunched installed copy
 
-        app.Run(new MainWindow(env, store, activeName));
-        return 0;
+        // Single instance per session: two windows could both write
+        // loading_order.json. A second launch signals the first to come forward
+        // (SingleInstance.OnActivate, wired by MainWindow) and exits.
+        if (!SingleInstance.TryAcquire())
+        {
+            SingleInstance.SignalActivateExisting();
+            return 0;
+        }
+
+        try
+        {
+            // Which install to open: an explicit --install selects (and becomes) the
+            // active one; otherwise the remembered active install, else auto-detect.
+            var store = InstallationStore.Load();
+            if (installName is not null) store.Active = installName;
+            var (env, activeName) = ResolveOrPrompt(gameRoot, modsDir, store);
+            if (env is null) return 1;   // user cancelled the install picker
+
+            app.Run(new MainWindow(env, store, activeName));
+            return 0;
+        }
+        finally
+        {
+            SingleInstance.Release();
+        }
     }
 
     /// <summary>

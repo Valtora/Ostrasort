@@ -149,6 +149,13 @@ reveals an **Update available** button at the top-right that stays as a
 persistent reminder. The check stays quiet when you're already up to date,
 offline, or rate-limited, always noting the outcome in the Logs tab.
 
+If you've installed Ostrasort (below), just download the new `Ostrasort.exe` and
+run it: it recognises it's newer than your installed copy, closes the running
+one, replaces the installed binary, refreshes your shortcuts, and restarts. No
+manual re-install. Ostrasort also runs as a **single instance** per Windows
+session, so a second launch just brings the existing window to the front rather
+than opening a rival that could fight it over `loading_order.json`.
+
 > Windows SmartScreen may warn on first run because the exe isn't
 > code-signed — choose *More info → Run anyway*, or unblock it in the file's
 > Properties.

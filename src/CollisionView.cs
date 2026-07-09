@@ -43,38 +43,80 @@ public static class CollisionView
     public static List<ViewLine> Build(Analysis a) =>
         Render(a.Collisions, "No two mods claim the same object — no conflicts.");
 
-    /// <summary>Only collisions still in effect — the Collisions tab. Patch-resolved ones move to <see cref="BuildResolved"/>.</summary>
-    public static List<ViewLine> BuildActive(Analysis a)
+    /// <summary>
+    /// A collision still needs the user's eyes: the load order / patch / FFU do
+    /// NOT already handle it losslessly. Benign cases return false - patch-merged,
+    /// FFU- or additively-merged at load, or same-set loot where only quantities
+    /// differ (nothing lost). Drives BOTH the Collisions tab count and the
+    /// "no action needed" split, so the number and the sections always agree.
+    /// </summary>
+    public static bool NeedsAttention(Collision c)
     {
-        var active = a.Collisions.Where(c => !c.ResolvedByPatch).ToList();
-        var resolved = a.Collisions.Count - active.Count;
-        var empty = resolved > 0
-            ? $"No active conflicts — {resolved} resolved by the patch (see the Resolved collisions tab)."
-            : "No two mods claim the same object — no conflicts.";
-        return Render(active, empty);
+        if (c.ResolvedByPatch || c.FfuMergedAtLoad || c.AdditiveAtLoad) return false;
+        if (c.ObjectMergeable) return true;                             // a field merge would preserve more than last-wins
+        return c.Pairs.Any(p => p.Rel is Relation.Partial              // loot: each side loses items (patch merges)
+                                       or Relation.SubsetViolation      // loot: order drops items (reorder fixes)
+                                       or Relation.NonLoot);            // object: last-wins drops a version, nothing to merge
     }
 
-    /// <summary>Only collisions the generated patch merges away — the Resolved collisions tab.</summary>
+    /// <summary>Stable key for the set of mods in a collision, used to group the display.</summary>
+    private static string GroupKey(Collision c) =>
+        string.Join("", c.Claimants.Select(m => m.Kind == EntryKind.Workshop ? m.Name : "local:" + m.Name));
+
+    /// <summary>
+    /// The Collisions tab: ONLY collisions that need action. Benign ones (handled
+    /// losslessly by the load order / FFU / the game, or already patch-merged)
+    /// are not shown here at all - they live on the Resolved / handled tab - so
+    /// this tab reads clean when there is nothing to do.
+    /// </summary>
+    public static List<ViewLine> BuildActive(Analysis a)
+    {
+        var attention = a.Collisions.Where(NeedsAttention).ToList();
+        if (attention.Count > 0)
+        {
+            var lines = new List<ViewLine>();
+            RenderGroups(attention, lines);
+            return lines;
+        }
+
+        var handled = a.Collisions.Count - attention.Count;
+        return new List<ViewLine>
+        {
+            new(handled > 0
+                ? $"No conflicts need action — {handled} detected, all handled (see the Resolved / handled tab)."
+                : "No two mods claim the same object — no conflicts.", LineSev.Good, 0),
+        };
+    }
+
+    /// <summary>
+    /// The Resolved / handled tab: every collision that needs no action - merged
+    /// by the Ostrasort Patch, merged field-/entry-by-entry at load by FFU or the
+    /// game, or handled losslessly by the load order (e.g. same-set shop pools).
+    /// </summary>
     public static List<ViewLine> BuildResolved(Analysis a) =>
-        Render(a.Collisions.Where(c => c.ResolvedByPatch).ToList(),
-               "No collisions have been merged into a patch yet.");
+        Render(a.Collisions.Where(c => !NeedsAttention(c)).ToList(),
+               a.Collisions.Count == 0
+                   ? "No two mods claim the same object — no conflicts."
+                   : "Nothing handled automatically — every collision needs action (see the Collisions tab).");
 
     private static List<ViewLine> Render(IReadOnlyList<Collision> collisions, string emptyMessage)
     {
         var lines = new List<ViewLine>();
         if (collisions.Count == 0)
-        {
             lines.Add(new ViewLine(emptyMessage, LineSev.Good, 0));
-            return lines;
-        }
+        else
+            RenderGroups(collisions, lines);
+        return lines;
+    }
 
+    private static void RenderGroups(IReadOnlyList<Collision> collisions, List<ViewLine> lines)
+    {
         void Add(string text, LineSev sev, int indent, bool bold = false) =>
             lines.Add(new ViewLine(text, sev, indent, bold));
 
         // one group per distinct set of conflicting mods (in load order)
         foreach (var group in collisions
-            .GroupBy(c => string.Join("", c.Claimants.Select(m =>
-                m.Kind == EntryKind.Workshop ? m.Name : "local:" + m.Name)))
+            .GroupBy(GroupKey)
             .OrderByDescending(g => g.Count()).ThenBy(g => g.Key))
         {
             var cols = group.ToList();
@@ -159,6 +201,5 @@ public static class CollisionView
             }
             Add("", LineSev.Normal, 0);
         }
-        return lines;
     }
 }

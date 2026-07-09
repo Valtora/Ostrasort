@@ -1,6 +1,9 @@
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 
 namespace Ostrasort;
 
@@ -56,6 +59,15 @@ public sealed class LoadOrderFile
 
     public void Write(IReadOnlyList<string> newOrder)
     {
+        // Serialize the write across processes. The GUI and a headless tap (e.g.
+        // Ostraplan registering a ship mod) both funnel through here, so a
+        // short-lived, per-file named mutex stops them interleaving writes to the
+        // same loading_order.json. Held ONLY for this ritual - deliberately not
+        // the GUI single-instance mutex (that one lives for the whole window, and
+        // a headless tap must never block on it). AtomicFile stops a torn file;
+        // this stops a lost update mid-swap.
+        using var _writeLock = AcquireWriteLock(Path);
+
         // Two self-heals at this single choke point, both to stop the game
         // duplicating mods on launch:
         //   1. Canonicalise every absolute (workshop) path to its real on-disk
@@ -94,5 +106,50 @@ public sealed class LoadOrderFile
         File.WriteAllText(Path + ".bak", RawText);   // original text, before this write
         Backups.Snapshot(Path, RawText);             // rolling history (the .bak only survives one write)
         AtomicFile.WriteAllText(Path, json);         // never leave a truncated live file
+    }
+
+    /// <summary>
+    /// A session-local named mutex keyed to this file's canonical path, so writers
+    /// to the same loading_order.json serialize while writers to different installs
+    /// don't. Best-effort: if the lock can't be taken (times out or errors) the
+    /// write still proceeds - AtomicFile keeps the file intact regardless.
+    /// </summary>
+    private static WriteLockScope AcquireWriteLock(string path)
+    {
+        string? name = null;
+        try
+        {
+            var key = System.IO.Path.GetFullPath(path).ToLowerInvariant();   // same file -> same name, case-insensitive
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)))[..32];
+            name = "Ostrasort.LoadOrderWrite." + hash;   // mutex names can't contain '\', so hash the path
+        }
+        catch { /* leave name null = run without the lock */ }
+        return new WriteLockScope(name);
+    }
+
+    private sealed class WriteLockScope : IDisposable
+    {
+        private readonly Mutex? _mutex;
+        private readonly bool _held;
+
+        public WriteLockScope(string? name)
+        {
+            if (name is null) return;
+            try
+            {
+                _mutex = new Mutex(false, name);
+                try { _held = _mutex.WaitOne(TimeSpan.FromSeconds(10)); }
+                catch (AbandonedMutexException) { _held = true; }   // prior holder died mid-write; it's ours now
+            }
+            catch { _mutex = null; _held = false; }
+        }
+
+        // WaitOne/ReleaseMutex must be same-thread; Write runs synchronously, so
+        // this using-scope releases on the same thread that acquired it.
+        public void Dispose()
+        {
+            try { if (_held) _mutex?.ReleaseMutex(); } catch { /* ignore */ }
+            _mutex?.Dispose();
+        }
     }
 }

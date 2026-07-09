@@ -52,10 +52,13 @@ Operational gotchas:
 | `src\CollisionView.cs` | the grouped, humanized collision rendering (GUI + console share it) |
 | `src\Engine.cs` | the shared analyze pass + hygiene checks (image, BepInEx, autoloader) |
 | `src\Ffu.cs` | FFU support: `Autoload.Meta.toml` parser, install detection (`FfuContext`), FFU classification + hygiene (`FfuAnalysis`) |
-| `src\LoadOrderFile.cs` | guarded `loading_order.json` read/write ritual |
+| `src\LoadOrderFile.cs` | guarded `loading_order.json` read/write ritual, incl. the per-file cross-process write lock (GUI + headless share the choke point) |
 | `src\Report.cs` / `src\TextReport.cs` | console report / plain-text export |
 | `src\Program.cs` | CLI parsing + GUI/console routing |
 | `src\gui\` | WPF main window (incl. the FFU/autoloader banner), conflict resolver, persisted settings |
+| `src\gui\SelfInstall.cs` | opt-in copy to `%LOCALAPPDATA%\Programs\Ostrasort` + Desktop/Start Menu shortcuts (`RefreshShortcuts` re-points existing ones) |
+| `src\gui\SingleInstance.cs` | one instance per session (named mutex + activate/shutdown signal events); a second launch focuses the first window |
+| `src\gui\Updater.cs` | self-adopting updater: a newer downloaded exe closes the old instance, replaces the installed copy, refreshes shortcuts, and relaunches |
 
 `--smoke-gui` (hidden flag) constructs the WPF windows without showing them —
 used for headless verification. `--smoke-undo` exercises the snapshot
@@ -77,7 +80,9 @@ Unit tests live in `tests\Ostrasort.Tests.csproj` (xUnit) and cover the pure
 logic — the field-merge engine (including FFU fragment semantics), the schema
 validator, the guarded `loading_order.json` read/write, the sort rules
 (including the FFU block), `Autoload.Meta.toml` parsing, FFU classification,
-and autoloader detection:
+autoloader detection, and the updater's version-comparison gate
+(`UpdaterTests`, which drives `Updater.ShouldAdopt` through its tag/garbage
+edge cases):
 
 ```powershell
 dotnet test tests\Ostrasort.Tests.csproj
@@ -101,10 +106,16 @@ fixtures stay self-contained).
 
 ## Releasing
 
-The repo is public. To cut a release: tag the version, run `publish.ps1`, and
-attach `publish\Ostrasort.exe` as the GitHub Release asset. The in-app update
-check reads the GitHub releases API and shows a header link when a newer tag
-exists.
+The repo is public. To cut a release: bump `<Version>` in `Ostrasort.csproj`,
+tag the version, run `publish.ps1`, and attach `publish\Ostrasort.exe` as the
+GitHub Release asset. The in-app update check reads the GitHub releases API and
+shows a header link when a newer tag exists.
+
+The `<Version>` you set is what the self-adopting updater compares: it flows
+into the exe's embedded version resource, and a freshly downloaded build reads
+the *installed* copy's version straight off disk (`FileVersionInfo`) to decide
+whether it should replace it. So a release whose `<Version>` didn't move will
+not trigger an auto-adopt.
 
 ## Roadmap
 
