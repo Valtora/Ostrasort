@@ -36,6 +36,7 @@
         <DataTemplate x:Key="LineTemplate">
             <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}"
                        FontFamily="Consolas" FontSize="12.5" TextWrapping="Wrap"
+                       Cursor="{Binding Cursor}"
                        FontWeight="{Binding Weight}" Margin="{Binding Margin}"/>
         </DataTemplate>
     </Window.Resources>
@@ -289,14 +290,26 @@
                 </DockPanel>
             </TabItem>
             <TabItem x:Name="TabCollisions" Header="Collisions">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <ItemsControl x:Name="ListCollisions" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
-                </ScrollViewer>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="8,6,8,0" TextWrapping="Wrap" FontSize="11.5"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               Text="Tip: double-click a collision (the • line) to see each mod's values side by side."/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="ListCollisions" ItemTemplate="{StaticResource LineTemplate}" Margin="8"
+                                      MouseDoubleClick="Collision_DoubleClick"/>
+                    </ScrollViewer>
+                </DockPanel>
             </TabItem>
             <TabItem x:Name="TabResolved" Header="Resolved / handled">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <ItemsControl x:Name="ListResolved" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
-                </ScrollViewer>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="8,6,8,0" TextWrapping="Wrap" FontSize="11.5"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               Text="Tip: double-click a collision (the • line) to see each mod's values side by side."/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="ListResolved" ItemTemplate="{StaticResource LineTemplate}" Margin="8"
+                                      MouseDoubleClick="Collision_DoubleClick"/>
+                    </ScrollViewer>
+                </DockPanel>
             </TabItem>
             <TabItem x:Name="TabOrder" Header="Order changes">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">

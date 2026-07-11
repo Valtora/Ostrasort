@@ -2,8 +2,10 @@ namespace Ostrasort;
 
 public enum LineSev { Normal, Dim, Good, Warn, Bad }
 
-/// <summary>A presentation line - UI-agnostic so both the GUI and tests use it.</summary>
-public sealed record ViewLine(string Text, LineSev Sev, int Indent, bool Bold = false);
+/// <summary>A presentation line - UI-agnostic so both the GUI and tests use it.
+/// <see cref="Collision"/> is set on a collision's headline row so the GUI can
+/// open the side-by-side detail view for it on double-click.</summary>
+public sealed record ViewLine(string Text, LineSev Sev, int Indent, bool Bold = false, Collision? Collision = null);
 
 /// <summary>
 /// Human-readable rendering of the collision list, grouped by the set of mods
@@ -111,8 +113,8 @@ public static class CollisionView
 
     private static void RenderGroups(IReadOnlyList<Collision> collisions, List<ViewLine> lines)
     {
-        void Add(string text, LineSev sev, int indent, bool bold = false) =>
-            lines.Add(new ViewLine(text, sev, indent, bold));
+        void Add(string text, LineSev sev, int indent, bool bold = false, Collision? col = null) =>
+            lines.Add(new ViewLine(text, sev, indent, bold, col));
 
         // one group per distinct set of conflicting mods (in load order)
         foreach (var group in collisions
@@ -194,7 +196,7 @@ public static class CollisionView
                             Relation.Equal => "same items, different quantities",
                             _ => $"only {Short(p.Later)}'s version applies",
                         };
-                Add($"• {c.ObjName}  ({HumanType(c.Type).One})", LineSev.Normal, 2);
+                Add($"• {c.ObjName}  ({HumanType(c.Type).One})", LineSev.Normal, 2, col: c);
                 if (c.FriendlyName is { Length: > 0 } friendly)
                     Add($"“{friendly}”", LineSev.Dim, 3);
                 Add(outcome, LineSev.Dim, 3);

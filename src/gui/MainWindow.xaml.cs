@@ -16,9 +16,10 @@ public sealed record ModRow(string Pos, string Name, string Source, string Class
                             string Version, string WorkshopId, string Notes, Brush Brush, string? Dir, string Tooltip,
                             ModEntry M, bool Draggable,
                             string LastUpdated, string UpdateText, Brush UpdateBrush);
-public sealed record LineVm(string Text, Brush Brush, Thickness Margin, bool Bold = false)
+public sealed record LineVm(string Text, Brush Brush, Thickness Margin, bool Bold = false, Collision? Collision = null)
 {
     public FontWeight Weight => Bold ? FontWeights.Bold : FontWeights.Normal;
+    public Cursor Cursor => Collision is null ? Cursors.Arrow : Cursors.Hand;
 }
 public sealed record ProfileRow(string Name, string Detail, Profile Profile);
 
@@ -420,7 +421,22 @@ public partial class MainWindow : Window
     // here we just map its severity to a brush.
     private List<LineVm> ToLineVms(IEnumerable<ViewLine> lines) =>
         lines.Select(v => new LineVm(v.Text, SevBrush(v.Sev),
-            new Thickness(v.Indent * 18, 1, 0, 1), v.Bold)).ToList();
+            new Thickness(v.Indent * 18, 1, 0, 1), v.Bold, v.Collision)).ToList();
+
+    /// <summary>Double-click a tagged collision row to open its side-by-side detail view.</summary>
+    private void Collision_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is not LineVm { Collision: { } c }) return;
+        try
+        {
+            new CollisionDetailDialog(_env, c, _state?.Analysis.IgnorePatterns) { Owner = this }.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Could not open the collision detail: {ex.Message}", "Ostrasort",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     private static Brush SevBrush(LineSev sev) => sev switch
     {

@@ -185,6 +185,12 @@ public static class Program
             _ = new Gui.InstallationsDialog(new InstallationStore(), "self-test");
             _ = new Gui.ProfileSwitchDialog(smokeEnv, smokeState.Analysis,
                     Profile.Capture(smokeState.Analysis, "self-test", smokeEnv.InstalledVersion, null));
+            // the collision drill-down dialog: a real collision when one exists,
+            // else a synthetic one, so its construction is always exercised
+            var detailCol = smokeState.Analysis.Collisions.FirstOrDefault()
+                ?? new Collision { Type = "condowners", ObjName = "SelfTestCO",
+                    Claimants = new() { new ModEntry { Raw = "A", Kind = EntryKind.Local, Name = "A", Dir = null } } };
+            _ = new Gui.CollisionDetailDialog(smokeEnv, detailCol, smokeState.Analysis.IgnorePatterns);
             if (smokePlan.ContestedItems.Any() && resolver.SelectorsInTree() == 0)
             {
                 Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");

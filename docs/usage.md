@@ -86,6 +86,10 @@ it, a row of tabs:
   Collisions the load order, FFU, or the game already handle losslessly (for
   example two shops stocking the same items with different quantities) move to
   the **Resolved / handled** tab instead of cluttering this one.
+  **Double-click any collision** (the `•` line) to open a read-only,
+  side-by-side view of the base game's version and each mod's version, with
+  changed fields highlighted and disagreements flagged in red — *Copy JSON*
+  puts every version on the clipboard.
 - **Resolved / handled** — every collision that needs no action: merged by the
   generated patch, merged at load by FFU or the game, or handled losslessly by
   the load order. Kept on its own tab so the Collisions tab stays focused on

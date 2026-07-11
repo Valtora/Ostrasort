@@ -1,0 +1,21 @@
+<Window x:Class="Ostrasort.Gui.CollisionDetailDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Collision detail" Height="620" Width="900" MinHeight="380" MinWidth="560"
+        Icon="/app.ico" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock x:Name="TxtTitle" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock x:Name="TxtFriendly" TextWrapping="Wrap" Margin="0,1,0,0"/>
+            <TextBlock x:Name="TxtSubtitle" TextWrapping="Wrap" Margin="0,1,0,0"/>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <TextBlock x:Name="TxtLegend" VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <Button Content="Copy JSON" Padding="14,6" Margin="0,0,8,0" Click="CopyJson_Click"/>
+            <Button Content="Close" Padding="16,6" IsDefault="True" IsCancel="True"/>
+        </StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <Grid x:Name="TableHost" Margin="0,0,4,0"/>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
