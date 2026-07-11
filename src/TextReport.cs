@@ -52,6 +52,7 @@ public static class TextReport
         foreach (var col in a.Collisions)
         {
             sb.AppendLine($"  {col.Key} - claimed by {string.Join(" THEN ", col.Claimants.Select(m => m.DisplayName ?? m.Name))}");
+            if (col.FriendlyName is { Length: > 0 } fn) sb.AppendLine($"    ({fn})");
             foreach (var p in col.Pairs)
                 sb.AppendLine("    " + p.Rel switch
                 {

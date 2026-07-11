@@ -50,6 +50,13 @@ public partial class ResolverDialog : Window
             FontSize = 15,
             FontWeight = FontWeights.SemiBold,
         });
+        if (c.FriendlyName is { Length: > 0 } friendly)
+            head.Children.Add(new TextBlock
+            {
+                Text = $"“{friendly}”",
+                Foreground = ThemeManager.Dim,
+                Margin = new Thickness(0, 1, 0, 0),
+            });
         head.Children.Add(new TextBlock
         {
             Text = (isLoot ? "stocked by " : "edited by ") + ModList(c),

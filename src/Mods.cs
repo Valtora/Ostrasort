@@ -199,6 +199,8 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         };
 
     public HashSet<(string Type, string Name)> CoreIndex { get; } = new();
+    /// <summary>Reverse index: a core loot-pool id -> the friendly name(s) of the core object(s) that use it.</summary>
+    public LootPoolNames LootNames { get; private set; } = LootPoolNames.Empty;
     public int CoreTypes { get; private set; }
     public int CoreProblemFiles { get; private set; }
     /// <summary>Core data files skipped by loading_order.json's aIgnorePatterns (rel path, pattern).</summary>
@@ -226,15 +228,22 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         if (snap is null)
         {
             var entries = new List<CoreIndexCache.Entry>();
+            var lootRefs = new List<CoreIndexCache.LootRef>();
             var problems = 0;
             // count only files the game's own loader would reject (trailing
             // commas); // and /* */ comments are game-legal and parse silently
             foreach (var d in EnumerateDataObjects(env.CoreDataDir, wantLoot: false, _ => problems++))
+            {
                 entries.Add(new CoreIndexCache.Entry(d.Type, d.Name, d.RelPath));
-            snap = new CoreIndexCache.Snapshot(entries, problems);
+                if (d.Friendly is { Length: > 0 } friendly && d.LootPoolRefs is { Length: > 0 })
+                    foreach (var pool in d.LootPoolRefs)
+                        lootRefs.Add(new CoreIndexCache.LootRef(pool, friendly));
+            }
+            snap = new CoreIndexCache.Snapshot(entries, problems, lootRefs);
             if (useCoreCache) CoreIndexCache.Save(env.CoreDataDir, snap);
         }
         CoreProblemFiles = snap.ProblemFiles;
+        LootNames = new LootPoolNames(snap.LootRefs);
 
         var types = new HashSet<string>();
         var ignoredFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -380,7 +389,10 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
     /// <summary>One data object found in a mod: its claim plus the FFU elastic-API markers it carries.</summary>
     internal readonly record struct DataObject(
         string Type, string Name, string[]? Loots, bool HasReference, bool ArrayCommands,
-        string RelPath, bool FromSimple = false);
+        string RelPath, bool FromSimple = false, string? Friendly = null, string[]? LootPoolRefs = null);
+
+    /// <summary>Object fields that name a loot pool - drives the core loot-pool reverse index.</summary>
+    private static readonly string[] LootRefFields = { "strLoot", "strCondLoot" };
 
     /// <summary>FFU precision array commands: "--ADD--", "--INS--4", "5|--MOD--|..." sub-array rows, etc.</summary>
     private static readonly System.Text.RegularExpressions.Regex FfuCommand =
@@ -466,6 +478,21 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                                            && refEl.ValueKind == JsonValueKind.String;
                         var commands = HasFfuArrayCommands(obj);
 
+                        // reverse-index fuel: this object's friendly label and any
+                        // loot pool it names, so a raw pool id can be described by
+                        // the object(s) that use it (core indexing consumes these)
+                        string? friendly =
+                            obj.TryGetProperty("strNameFriendly", out var frEl) && frEl.ValueKind == JsonValueKind.String
+                                ? frEl.GetString()
+                            : obj.TryGetProperty("strNameShort", out var shEl) && shEl.ValueKind == JsonValueKind.String
+                                ? shEl.GetString()
+                            : null;
+                        List<string>? poolRefs = null;
+                        foreach (var fld in LootRefFields)
+                            if (obj.TryGetProperty(fld, out var lv) && lv.ValueKind == JsonValueKind.String
+                                && lv.GetString() is { Length: > 0 } pool)
+                                (poolRefs ??= new()).Add(pool);
+
                         string[]? loots = null;
                         if (wantLoot && type == "loot" &&
                             obj.TryGetProperty("aLoots", out var lootsEl) && lootsEl.ValueKind == JsonValueKind.Array)
@@ -477,7 +504,8 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                             // command-driven aLoots merge at load (FFU) - not a whole-pool replacement
                             if (!entries.Any(e => FfuCommand.IsMatch(e))) loots = entries;
                         }
-                        yield return new DataObject(type, nameEl.GetString()!, loots, hasReference, commands, relPath);
+                        yield return new DataObject(type, nameEl.GetString()!, loots, hasReference, commands, relPath,
+                            Friendly: friendly, LootPoolRefs: poolRefs?.ToArray());
 
                         // each 7-tuple in a conditions_simple container defines one
                         // condition in the CONDITIONS namespace (ParseConditionsSimple)

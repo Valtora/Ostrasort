@@ -112,6 +112,24 @@ public class ScannerTests : IDisposable
     }
 
     [Fact]
+    public void IndexCore_BuildsLootPoolReverseIndex_AndCachesIt()
+    {
+        var env = Env();
+        WriteJson(env.CoreDataDir, @"loot\p.json", """[{"strName":"CNDOLKioskEmbassyOKLG","aLoots":["x=1x1"]}]""");
+        // a kiosk item names the pool via strCondLoot and carries a friendly name
+        WriteJson(env.CoreDataDir, @"cooverlays\traders.json",
+            """[{"strName":"ItmKioskEmbassy01OKLG","strNameFriendly":"Embassy Services: K-Leg","strCondLoot":"CNDOLKioskEmbassyOKLG"}]""");
+
+        var fresh = new Scanner(env, useCoreCache: true);
+        fresh.IndexCore();                                   // cold: parses + caches lootRefs
+        Assert.Equal("Embassy Services: K-Leg", fresh.LootNames.Describe("CNDOLKioskEmbassyOKLG"));
+
+        var cached = new Scanner(env, useCoreCache: true);
+        cached.IndexCore();                                  // warm: the reverse index survives the cache
+        Assert.Equal("Embassy Services: K-Leg", cached.LootNames.Describe("CNDOLKioskEmbassyOKLG"));
+    }
+
+    [Fact]
     public void Scan_AcceptsJsonComments_ButStillFlagsTrailingCommas()
     {
         var mod = MakeMod("Comments");

@@ -25,6 +25,8 @@ public static class Engine
 
         FfuAnalysis.Classify(env, analysis);          // FFU block membership, patch targets, FFU hygiene
         analysis.FindCollisions();
+        foreach (var c in analysis.Collisions.Where(c => c.Type == "loot"))
+            c.FriendlyName = scanner.LootNames.Describe(c.ObjName);   // readable name for the raw pool id
         FieldDiff.Annotate(env, analysis);
         CheckImages(analysis);
         CheckBepInEx(env, analysis);

@@ -195,6 +195,8 @@ public static class CollisionView
                             _ => $"only {Short(p.Later)}'s version applies",
                         };
                 Add($"• {c.ObjName}  ({HumanType(c.Type).One})", LineSev.Normal, 2);
+                if (c.FriendlyName is { Length: > 0 } friendly)
+                    Add($"“{friendly}”", LineSev.Dim, 3);
                 Add(outcome, LineSev.Dim, 3);
                 foreach (var n in c.FieldNotes)
                     Add(n, n.StartsWith("conflict") ? LineSev.Bad : n.StartsWith("auto-merge") ? LineSev.Good : LineSev.Dim, 3);

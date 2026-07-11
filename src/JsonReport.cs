@@ -39,6 +39,7 @@ public static class JsonReport
             {
                 ["type"] = c.Type,
                 ["strName"] = c.ObjName,
+                ["friendlyName"] = c.FriendlyName,
                 ["claimants"] = new JsonArray(c.Claimants.Select(m => (JsonNode)(m.DisplayName ?? m.Name)).ToArray()),
                 ["resolvedByPatch"] = c.ResolvedByPatch,
                 ["ffuMergedAtLoad"] = c.FfuMergedAtLoad,

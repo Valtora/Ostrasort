@@ -17,11 +17,13 @@ namespace Ostrasort;
 /// </summary>
 public static class CoreIndexCache
 {
-    private const int FormatVersion = 2;   // v2: JSON comments no longer counted as problem files
+    private const int FormatVersion = 3;   // v3: also caches the loot-pool reverse index (LootRefs)
     private const int MaxCacheFiles = 8;   // fixture/--game runs get their own files; prune the rest
 
     public sealed record Entry(string Type, string Name, string RelPath);
-    public sealed record Snapshot(List<Entry> Entries, int ProblemFiles);
+    /// <summary>One core object's friendly-name reference to a loot pool (via strLoot / strCondLoot).</summary>
+    public sealed record LootRef(string Pool, string Friendly);
+    public sealed record Snapshot(List<Entry> Entries, int ProblemFiles, List<LootRef> LootRefs);
 
     private static string Dir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Ostrasort");
@@ -69,7 +71,13 @@ public static class CoreIndexCache
                 entries.Add(new Entry(
                     triple[0]!.GetValue<string>(), triple[1]!.GetValue<string>(), triple[2]!.GetValue<string>()));
             }
-            return new Snapshot(entries, root["problemFiles"]?.GetValue<int>() ?? 0);
+            var lootRefs = new List<LootRef>();
+            foreach (var r in (root["lootRefs"] as JsonArray) ?? new JsonArray())
+            {
+                if (r is not JsonArray { Count: 2 } pair) return null;   // corrupt - rebuild
+                lootRefs.Add(new LootRef(pair[0]!.GetValue<string>(), pair[1]!.GetValue<string>()));
+            }
+            return new Snapshot(entries, root["problemFiles"]?.GetValue<int>() ?? 0, lootRefs);
         }
         catch { return null; }   // any cache problem = cache miss, never an error
     }
@@ -83,6 +91,9 @@ public static class CoreIndexCache
             var entries = new JsonArray();
             foreach (var e in snap.Entries)
                 entries.Add(new JsonArray(e.Type, e.Name, e.RelPath));
+            var lootRefs = new JsonArray();
+            foreach (var r in snap.LootRefs)
+                lootRefs.Add(new JsonArray(r.Pool, r.Friendly));
             var root = new JsonObject
             {
                 ["v"] = FormatVersion,
@@ -92,6 +103,7 @@ public static class CoreIndexCache
                 ["maxTicks"] = maxTicks,
                 ["problemFiles"] = snap.ProblemFiles,
                 ["entries"] = entries,
+                ["lootRefs"] = lootRefs,
             };
             File.WriteAllText(PathFor(coreDataDir), root.ToJsonString(new JsonSerializerOptions()));
             Prune();

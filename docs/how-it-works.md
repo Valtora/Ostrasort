@@ -198,6 +198,14 @@ A loot pool's `aLoots` is an additive list, so merging two versions is the
 per-item union — every mod's wares survive, and where two mods stock the same
 item with different quantities, you pick which wins (or exclude it).
 
+A pool's internal id (`CNDOLKioskEmbassyOKLG`) means little on its own, so
+Ostrasort annotates it with a **friendly name**: it reverse-indexes the core
+game so a pool is described by the kiosk/shop that uses it (its
+`strNameFriendly`, e.g. "Embassy Services: K-Leg, 1036-Ganymed"), falling back
+to a decode of the id itself for shop-like pools ("OKLG furnishings kiosk
+inventory"). This index is cached alongside the core index, so it costs nothing
+after the first scan following a game update.
+
 ### Game objects (3-way field merge)
 
 For non-loot objects (conditions, condowners, interactions, …) Ostrasort does

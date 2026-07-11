@@ -81,7 +81,8 @@ public static class MarkdownReport
         if (a.Collisions.Count == 0) sb.AppendLine("None — no two mods claim the same object.");
         foreach (var col in a.Collisions)
         {
-            sb.AppendLine($"- **{Md(col.Key)}** — claimed by {Md(string.Join(" → ", col.Claimants.Select(m => m.DisplayName ?? m.Name)))}");
+            sb.AppendLine($"- **{Md(col.Key)}** — claimed by {Md(string.Join(" → ", col.Claimants.Select(m => m.DisplayName ?? m.Name)))}"
+                          + (col.FriendlyName is { Length: > 0 } fn ? $" _({Md(fn)})_" : ""));
             foreach (var p in col.Pairs)
                 sb.AppendLine("  - " + Md(p.Rel switch
                 {

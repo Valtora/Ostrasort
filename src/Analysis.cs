@@ -25,6 +25,7 @@ public sealed class Collision
     public bool ResolvedByPatch { get; set; }                 // a fresh OstrasortPatch covers this pool
     public bool FfuMergedAtLoad { get; set; }                 // the FFU loader merges this at load - no action needed
     public bool AdditiveAtLoad { get; set; }                  // flat-packed simple-container type: the game merges its records key-by-key at load, never whole-object replace
+    public string? FriendlyName { get; set; }                 // loot pools: a readable description of the internal id (e.g. "OKLG embassy kiosk inventory")
     public string Key => $"{Type}/{ObjName}";
 }
 
