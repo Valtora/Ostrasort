@@ -8,3 +8,4 @@ publish/
 Thumbs.db
 desktop.ini
 
+.claude/settings.json
