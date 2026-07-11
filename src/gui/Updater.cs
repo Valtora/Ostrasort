@@ -15,6 +15,11 @@ namespace Ostrasort.Gui;
 /// never its filename (a download may land as "Ostrasort-v0.21.0.exe" or
 /// "Ostrasort (1).exe"). GUI-only, and it runs before the single-instance check
 /// so the mutex doesn't just focus the old window instead of replacing it.
+///
+/// <para>If the installed exe stays locked after the graceful close signal (for
+/// example a headless tap sharing the exe, which can't answer the signal), it
+/// asks the user to close it and retry rather than force-killing - matching
+/// Ostraplan, so a background writer is never yanked mid-write.</para>
 /// </summary>
 public static class Updater
 {
@@ -65,11 +70,13 @@ public static class Updater
     }
 
     /// <summary>
-    /// Closes the old installed instance (gracefully, force-killing only on
-    /// timeout), overwrites the installed exe with the running one, refreshes any
-    /// existing shortcuts, and relaunches the installed copy. Returns true when
-    /// the relaunch happened (caller must exit this process); false on failure
-    /// (caller falls through to running this downloaded copy in place).
+    /// Overwrites the installed exe with the running one, refreshes any existing
+    /// shortcuts, and relaunches the installed copy. It first signals a running
+    /// installed instance to close gracefully; if the exe stays locked it asks the
+    /// user to close it and retry rather than force-killing (which could yank a
+    /// headless tap mid-write). Returns true when the relaunch happened (caller
+    /// must exit this process); false on failure or cancel (caller falls through
+    /// to running this downloaded copy in place).
     /// </summary>
     private static bool Apply(PendingUpdate pu)
     {
@@ -77,20 +84,27 @@ public static class Updater
         {
             OpLog.Add($"Update: adopting install location (running v{pu.RunningVersion} over installed v{pu.InstalledVersion}).");
 
-            // Ask a running installed instance to close, then wait for it to let
-            // go of its own exe. No-op if nothing is running there.
+            // Ask a running installed instance to close gracefully (a headless tap
+            // that shares the exe won't answer the signal), and give it a few
+            // seconds before bothering the user.
             SingleInstance.SignalShutdownExisting();
             if (!WaitForReplaceable(pu.InstalledExe, TimeSpan.FromSeconds(5)))
             {
-                ForceKill(pu.InstalledExe);
-                if (!WaitForReplaceable(pu.InstalledExe, TimeSpan.FromSeconds(3)))
+                // Still held. Rather than force-killing (could discard a headless
+                // writer's work mid-write), ask the user to close it and retry.
+                while (!WaitForReplaceable(pu.InstalledExe, TimeSpan.FromSeconds(2)))
                 {
-                    OpLog.Add("Update: installed exe stayed locked - aborting the automatic update.");
-                    MessageBox.Show(
-                        "The installed copy is still in use and couldn't be replaced.\n\n" +
-                        "Close any running Ostrasort and run this download again, or just keep using it from here.",
-                        "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return false;
+                    if (!UpdateDialog.ShowConfirm(
+                            "Ostrasort is still open",
+                            "The installed copy of Ostrasort is currently running, so it can't be replaced.\n\n" +
+                            "Close it, then click Retry.",
+                            confirmLabel: "Retry",
+                            cancelLabel: "Just run this copy"))
+                    {
+                        OpLog.Add("Update: user declined to close the running installed copy - kept the downloaded copy.");
+                        return false;
+                    }
+                    SingleInstance.SignalShutdownExisting();   // re-nudge before each retry
                 }
             }
 
@@ -146,30 +160,6 @@ public static class Updater
             catch (UnauthorizedAccessException) { Thread.Sleep(150); }
         } while (DateTime.UtcNow < deadline);
         return false;
-    }
-
-    /// <summary>
-    /// Last resort: kill a stuck installed GUI instance. Only targets processes
-    /// whose image is the installed exe AND that own a main window - so a headless
-    /// Ostrasort (e.g. an Ostraplan ship-mod registration tapping the installed
-    /// exe, which has no window) is never killed mid-write.
-    /// </summary>
-    private static void ForceKill(string installedExe)
-    {
-        foreach (var p in Process.GetProcessesByName("Ostrasort"))
-        {
-            try
-            {
-                if (p.MainWindowHandle != IntPtr.Zero &&
-                    string.Equals(p.MainModule?.FileName, installedExe, StringComparison.OrdinalIgnoreCase))
-                {
-                    p.Kill();
-                    p.WaitForExit(3000);
-                }
-            }
-            catch { /* not ours to kill / already gone / access denied - move on */ }
-            finally { p.Dispose(); }
-        }
     }
 
     /// <summary>Overwrite the installed exe, retrying briefly through transient locks (AV scans just after unlock).</summary>
