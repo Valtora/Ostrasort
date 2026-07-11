@@ -99,7 +99,9 @@ it, a row of tabs:
 - **Patch** — state of the generated conflict patch, with *Rebuild from
   scratch* and *Delete patch* buttons.
 - **Warnings** — dead entries, unregistered mods, version lag, broken JSON,
-  image overrides, BepInEx problems.
+  image overrides, BepInEx problems, and any load errors the **game itself**
+  logged at the last launch, attributed to the mod responsible where Ostrasort
+  can pin them down (see the Logs tab for the rest).
 - **Logs** — a record of everything Ostrasort has done (applies, patches,
   restores, undo/redo), and a viewer for the game's own logs (Player.log and
   the BepInEx log) so you can see what happened after a launch. Copy or open

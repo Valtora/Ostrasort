@@ -103,6 +103,7 @@ public partial class MainWindow : Window
             _arrUndo.Clear();
             _arrRedo.Clear();
             _state = Engine.Analyze(_env, ChkTidy.IsChecked == true, _ignore);
+            LogCorrelation.Annotate(_state.Analysis, GameEnv.PlayerLogPath, _env.BepInExLogPath);   // attribute last-launch log issues
             RenderState(_state);
         }
         catch (Exception e)
@@ -308,10 +309,12 @@ public partial class MainWindow : Window
         if (m.RemoveIds.Count > 0) notes.Add($"removes {m.RemoveIds.Count} core entr{(m.RemoveIds.Count == 1 ? "y" : "ies")} (FFU removeIds)");
         if (m.GameVersionNote(_env.InstalledVersion) is { } versionNote) notes.Add(versionNote);
         if (m.JsonErrors.Count > 0) notes.Add($"{m.JsonErrors.Count} JSON problem(s)");
+        if (m.LogNotes.Count > 0) notes.Add($"{m.LogNotes.Count} game-log issue(s) last launch");
         var brush = m.Disabled || m.Ignored ? Dim
-            : notes.Any(n => n.StartsWith("NOT") || n.StartsWith("DEAD") || n.Contains("JSON")) ? Warn : Normal;
+            : notes.Any(n => n.StartsWith("NOT") || n.StartsWith("DEAD") || n.Contains("JSON") || n.Contains("game-log")) ? Warn : Normal;
         var name = m.Kind == EntryKind.Core ? "core (base game data)" : m.DisplayName ?? m.Name;
         var tooltip = m.Dir ?? m.Raw;
+        if (m.LogNotes.Count > 0) tooltip += "\n" + string.Join("\n", m.LogNotes.Select(n => "• " + n));
         if (m.Kind != EntryKind.Core && m.Dir is not null) tooltip += "\n(double-click to open the folder)";
         var draggable = m.Registered && m.Kind != EntryKind.Core;
         var (lastUpdated, updText, updBrush) = UpdateInfo(m);

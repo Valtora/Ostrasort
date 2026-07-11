@@ -61,6 +61,13 @@ Around those two jobs it works as a complete mod manager:
 - **Light / dark / system theming**, a **Logs** tab (Ostrasort's own log plus
   the game's `Player.log` and the BepInEx log), and an update checker that runs
   on launch and on demand (**Check for updates**).
+- **Game-log correlation** — on each rescan Ostrasort reads the game's own
+  `Player.log` / BepInEx log from the last launch, finds the load-time
+  error/warning lines, and attributes each to the mod responsible (code mods by
+  their BepInEx name, data mods by a JSON filename or a claimed object name it
+  can match to exactly one mod). Attributed issues show as a warning and on the
+  mod's row; anything it cannot pin to one mod is reported as an honest
+  un-attributed summary rather than a wrong guess.
 - **Markdown reports & one-click bug reports** — **Copy report** / **Save
   report…** produce a Markdown report of the whole analysis with each Workshop
   mod linked to its Steam page; **Report a bug** opens a pre-filled GitHub issue

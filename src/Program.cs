@@ -473,6 +473,9 @@ public static class Program
             state = Engine.Analyze(env, tidy);
         }
 
+        // attribute the game's last-launch log issues to the final mod set (report only)
+        LogCorrelation.Annotate(state.Analysis, GameEnv.PlayerLogPath, env.BepInExLogPath);
+
         foreach (var act in performed) OpLog.Add($"[cli] {act}");   // record CLI writes in the shared log
         if (json)
             Console.WriteLine(JsonReport.Build(env, state, Version, performed));   // nothing else on stdout

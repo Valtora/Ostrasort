@@ -52,8 +52,10 @@ public sealed class ModEntry
     public int CoreOverrides { get; set; }
     public Dictionary<(string Type, string Name), string[]?> Claims { get; } = new();
     public HashSet<string> ImagePaths { get; } = new(StringComparer.OrdinalIgnoreCase);   // relative under images\
+    public HashSet<string> DataFiles { get; } = new(StringComparer.OrdinalIgnoreCase);    // relative under data\ (forward-slashed) - for Player.log attribution
     public HashSet<string> PluginDlls { get; } = new(StringComparer.OrdinalIgnoreCase);   // basenames under BepInEx\plugins
     public List<string> JsonErrors { get; } = new();
+    public List<string> LogNotes { get; } = new();          // issues attributed to this mod from the game's Player.log / BepInEx log at the last launch
     /// <summary>Condition names this mod defines via conditions_simple (they land in the conditions namespace).</summary>
     public HashSet<string> SimpleConditionNames { get; } = new(StringComparer.Ordinal);
     /// <summary>Data files of this mod skipped by loading_order.json's aIgnorePatterns (rel path, pattern).</summary>
@@ -288,6 +290,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                          _ignore, (file, pat) => { if (ignoredFiles.Add(file)) mod.IgnoredFiles.Add((file, pat)); }))
             {
                 mod.Claims[(d.Type, d.Name)] = d.Loots;
+                mod.DataFiles.Add(d.RelPath.Replace('\\', '/'));   // for Player.log error attribution
                 mod.DataObjects++;
                 if (d.FromSimple) mod.SimpleConditionNames.Add(d.Name);
                 if (CoreIndex.Contains((d.Type, d.Name))) mod.CoreOverrides++;
