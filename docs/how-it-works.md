@@ -217,10 +217,13 @@ Merged objects are then **validated against the game's own JSON schemas**
 (`StreamingAssets\data\schemas`) and any that don't conform are flagged. This
 is a **best-effort** merge, not a guaranteed-correct one: two mods can change
 interdependent fields in ways no tool can reason about, so the result is
-always presented for you to verify in game. Objects with no base-game version
-(two mods adding the same brand-new object) are not auto-merged — there is no
-common ancestor to merge against — so those are reported and left to load
-order.
+always presented for you to verify in game. Objects with **no base-game
+version** (two mods adding the *same* brand-new object) have no common ancestor,
+so they degrade to a **two-way merge** against an empty base: a field only one
+mod sets is kept automatically, and a field both mods set differently is a
+conflict you resolve — the same resolver, the same schema validation. Because
+there is no vanilla base, only a source mod changing (not a game update) can
+make such a merge stale.
 
 The patch is wholly owned by Ostrasort: a marker file records exactly which
 objects it merged, their content hashes, **the hash of the base-game object

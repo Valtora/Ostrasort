@@ -90,16 +90,22 @@ public static class FieldDiff
             }
             if (versions.Count < 2) continue;
 
-            if (coreObj is null)
+            // no vanilla ancestor to 3-way merge against. With the FFU framework
+            // the game merges the versions field-by-field at load, so nothing is
+            // lost and no patch is needed. Otherwise fall through to a TWO-WAY
+            // merge (empty base): fields only one mod sets are kept, fields both
+            // set differently are the player's to resolve - strictly better than
+            // the game's last-loaded-wins whole-object replacement.
+            if (coreObj is null && ffuMerge)
             {
-                col.FfuMergedAtLoad = ffuMerge;
-                col.FieldNotes.Add(ffuMerge
-                    ? "no vanilla version to merge against — FFU merges the versions field-by-field at load (last loaded wins contested fields)"
-                    : "no vanilla version to merge against — only the last-loaded mod's version applies");
+                col.FfuMergedAtLoad = true;
+                col.FieldNotes.Add("no vanilla version to merge against — FFU merges the versions " +
+                                   "field-by-field at load (last loaded wins contested fields)");
                 continue;
             }
+            var modAdded = coreObj is null;
 
-            var plan = ObjectMerge.Build(col, coreObj, versions, ffuMerge);
+            var plan = ObjectMerge.Build(col, coreObj ?? new JsonObject(), versions, ffuMerge);
             if (plan is null)
             {
                 col.FieldNotes.Add("the mods' versions are identical — nothing is lost");
@@ -131,11 +137,16 @@ public static class FieldDiff
             }
 
             // merge beats last-wins when a field the last mod left at vanilla was
-            // changed by an earlier mod, or any field is genuinely contested
+            // changed by an earlier mod, or any field is genuinely contested.
+            // For a mod-added object (empty base) the same test holds: any field
+            // an earlier mod sets but the last one omits, or any disagreement.
             var lastId = versions[^1].Mod.Dir ?? versions[^1].Mod.Raw;
             col.ObjectMergeable = plan.Fields.Any(f =>
                 f.Contested || !f.Options.Any(o => o.SourceId == lastId));
 
+            if (modAdded)
+                col.FieldNotes.Add("no vanilla version to merge against — Ostrasort can two-way merge " +
+                                   "the mods' additions (fields only one mod sets are kept; disagreements are yours to resolve)");
             if (auto.Count > 0)
                 col.FieldNotes.Add("auto-merge: " + string.Join(", ",
                     auto.Select(f => $"{f.Token} (from {f.Options[0].SourceLabel})")));

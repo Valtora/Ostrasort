@@ -83,6 +83,38 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void ModAddedObject_NoCoreAncestor_TwoWayMerges()
+    {
+        // two mods each ADD the same new object (no vanilla version). Disjoint
+        // fields must two-way merge instead of the game dropping ModA's version.
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "condowners", "co.json"),
+            """[{"strName":"NewCO","strDesc":"from A","fMass":1}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "condowners", "co.json"),
+            """[{"strName":"NewCO","strDesc":"from A","nCount":5}]""");   // agrees on strDesc, adds nCount
+        File.WriteAllText(_env.LoadingOrderPath,
+            """[{"strName":"Mod Loading Order","aLoadOrder":["core","ModA","ModB"]}]""");
+
+        var state = Engine.Analyze(_env);
+        var col = state.Analysis.Collisions.Single(c => c.ObjName == "NewCO");
+        Assert.True(col.ObjectMergeable);
+
+        var plan = Patcher.PlanMerge(_env, state.Analysis);
+        Assert.Empty(plan.Unresolved);   // disjoint additions auto-merge
+        Patcher.Generate(_env, plan, state.Analysis, _env.InstalledVersion, "test");
+
+        var merged = File.ReadAllText(Path.Combine(_env.ModsDir, Patcher.FolderName,
+            "data", "condowners", "ostrasort_merged.json"));
+        Assert.Contains("\"fMass\": 1", merged);      // only ModA set it - kept
+        Assert.Contains("\"nCount\": 5", merged);     // only ModB set it - kept
+
+        // a mod-added merge has no core base, so a mod-side change makes it stale
+        // but a (non-existent) core change never can
+        state = Engine.Analyze(_env);
+        Assert.False(state.Patch.Stale);
+        Assert.Contains("condowners/NewCO", state.Patch.CoveredKeys);
+    }
+
+    [Fact]
     public void Remove_DeletesFolderAndDropsLoadOrderEntry()
     {
         var state = Engine.Analyze(_env);

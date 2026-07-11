@@ -17,10 +17,12 @@ namespace Ostrasort;
 public static class ObjectMerge
 {
     /// <summary>
-    /// Builds the field-merge plan for one collision. Requires a core base
-    /// (three-way) - collisions on mod-added objects with no vanilla ancestor
-    /// are left for the report, not auto-merged. Returns null if there is
-    /// nothing to merge (identical overrides).
+    /// Builds the field-merge plan for one collision. With a core object as
+    /// <paramref name="coreBase"/> this is a 3-way merge; callers pass an empty
+    /// object for a mod-added object with no vanilla ancestor, which degrades
+    /// cleanly to a two-way merge (every mod field reads as a change vs the
+    /// empty base, so fields only one mod sets auto-merge and disagreements are
+    /// contested). Returns null if there is nothing to merge (identical overrides).
     ///
     /// FFU semantics: an FFU-style mod ships partial objects (fragments) that
     /// the FFU loader merges field-by-field - a field ABSENT from its object is

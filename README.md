@@ -86,9 +86,11 @@ can **automatically merge**:
   presented as **best-effort** — verify them in game, since two mods can
   change interdependent fields in ways no tool can fully reason about.
 
-It does **not** yet merge objects that have no base-game version (two mods
-adding the *same new* object with no common ancestor) — those it reports and
-leaves to load order.
+Objects with no base-game version (two mods adding the *same new* object with
+no common ancestor) are **two-way merged** against an empty base: fields only
+one mod sets are kept, fields both set differently are yours to resolve. Only a
+source mod changing can make such a merge stale (there is no vanilla base for a
+game update to invalidate).
 
 **Steam Workshop, local, and FFU mods.** Ostrasort manages `loading_order.json`
 for core, local, Steam-Workshop, **and FFU** (Fight for Universe: Beyond Reach)

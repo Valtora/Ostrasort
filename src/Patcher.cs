@@ -275,14 +275,15 @@ public static class Patcher
         var objects = new List<ObjectPlan>();
         foreach (var c in MergeableObjects(a))
         {
+            // a mod-added object has no vanilla ancestor - two-way merge it
+            // against an empty base (fields only one mod sets are kept)
             var coreObj = FieldDiff.LoadObject(Path.Combine(env.CoreDataDir, c.Type), c.ObjName, a.IgnorePatterns);
-            if (coreObj is null) continue;
             var versions = c.Claimants.Where(m => m.Dir is not null)
                 .Select(m => (Mod: m, Obj: FieldDiff.LoadObject(Path.Combine(m.Dir!, "data", c.Type), c.ObjName, a.IgnorePatterns)))
                 .Where(x => x.Obj is not null)
                 .Select(x => (x.Mod, x.Obj!))
                 .ToList();
-            var plan = ObjectMerge.Build(c, coreObj, versions, a.Ffu is { FrameworkPresent: true });
+            var plan = ObjectMerge.Build(c, coreObj ?? new JsonObject(), versions, a.Ffu is { FrameworkPresent: true });
             if (plan is null) continue;
 
             prior.TryGetValue(c.Key, out var priorChoices);
