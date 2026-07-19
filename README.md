@@ -145,37 +145,42 @@ installs so it can diagnose them and offer the way out: a one-click, reversible
 
 ## Quick start
 
-**Windows only** (64-bit Windows 11). Nothing to install:
+**Windows only** (64-bit Windows 11). Two ways to get it, both per-user (no
+admin rights):
 
-1. **Download `Ostrasort.exe`** from the
-   [latest release](https://github.com/Valtora/Ostrasort/releases/latest).
-2. **Close Ostranauts** (Ostrasort won't write while the game is running).
-3. **Double-click `Ostrasort.exe`.** It opens straight to its window (no
-   console), finds your install automatically, and lists every mod in load
-   order. On first run it offers to **install itself** into
-   `%LOCALAPPDATA%\Programs\Ostrasort` and create Desktop / Start Menu shortcuts,
-   so you have one fixed place to keep and launch it (optional, dismissible, and
-   repeatable any time from the **Install / shortcuts** link).
-4. Read the highlighted tabs, **Apply the suggested order** and **Resolve
+1. **Download `Ostrasort-win-Setup.exe`** from the
+   [latest release](https://github.com/Valtora/Ostrasort/releases/latest) and run
+   it. It installs Ostrasort for your user and creates Desktop / Start Menu
+   shortcuts, then opens straight to its window. This is the recommended way,
+   because an installed copy keeps itself up to date (below).
+2. Prefer no install? Download **`Ostrasort-win-Portable.zip`**, unzip it
+   anywhere, and run `Ostrasort.exe` from the folder.
+
+Then:
+
+1. **Close Ostranauts** (Ostrasort won't write while the game is running).
+2. **Open Ostrasort.** It finds your install automatically and lists every mod
+   in load order (no console window).
+3. Read the highlighted tabs, **Apply the suggested order** and **Resolve
    conflicts** as needed, then launch the game. Save a **profile** if you want
    to come back to this setup, pick a **theme** to taste, and **Ctrl+Z** undoes
    anything.
 
-Ostrasort checks GitHub for a newer release on startup and whenever you use the
-**Check for updates** link. When a newer release exists it pops an update dialog
-(**Download Latest Version** opens the Releases page, **Not Now** dismisses) and
-reveals an **Update available** button at the top-right that stays as a
-persistent reminder. The check stays quiet when you're already up to date,
-offline, or rate-limited, always noting the outcome in the Logs tab.
+Ostrasort keeps itself current. On launch (and from the **Check for updates**
+link) it checks GitHub for a newer release, quietly downloads it in the
+background, and reveals a **Restart to update** button at the top-right. Click it
+and Ostrasort applies the update and reopens, nothing to download by hand. The
+check stays quiet when you're already up to date, offline, or rate-limited,
+always noting the outcome in the Logs tab. Ostrasort also runs as a **single
+instance** per Windows session, so a second launch just brings the existing
+window to the front rather than opening a rival that could fight it over
+`loading_order.json`.
 
-If you've installed Ostrasort (below), just download the new `Ostrasort.exe` and
-run it: it recognises it's newer than your installed copy, closes the running
-one, replaces the installed binary, refreshes your shortcuts, and restarts. No
-manual re-install. Ostrasort also runs as a **single instance** per Windows
-session, so a second launch just brings the existing window to the front rather
-than opening a rival that could fight it over `loading_order.json`.
+Your settings, profiles, backups and logs live in `%APPDATA%\Ostrasort`, so they
+survive updates and reinstalls. (Upgrading from a pre-0.23 build moves them there
+automatically on first run.)
 
-> Windows SmartScreen may warn on first run because the exe isn't
+> Windows SmartScreen may warn on first run because the installer isn't
 > code-signed — choose *More info → Run anyway*, or unblock it in the file's
 > Properties.
 

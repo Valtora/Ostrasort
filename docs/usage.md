@@ -1,35 +1,38 @@
 # Using Ostrasort
 
-**Windows only** (64-bit Windows 10/11). Download `Ostrasort.exe` from the
-[latest release](https://github.com/Valtora/Ostrasort/releases/latest) — a
-single self-contained file, nothing to install — and **double-click it**. It
-finds your Ostranauts install by itself via the Steam registry and
-`libraryfolders.vdf`, whatever drive it's on. (For an unusual install, point
-it manually with `--game <path>`.)
+**Windows only** (64-bit Windows 10/11). Two ways to get it, both per-user with
+no admin rights:
 
-On first run Windows SmartScreen may warn because the exe isn't code-signed —
-choose *More info → Run anyway*, or unblock it in the file's Properties.
+- **Installer (recommended).** Download `Ostrasort-win-Setup.exe` from the
+  [latest release](https://github.com/Valtora/Ostrasort/releases/latest) and run
+  it. It installs Ostrasort for your user, creates **Desktop** and **Start Menu**
+  shortcuts, and opens the window. An installed copy keeps itself up to date (see
+  below).
+- **Portable.** Download `Ostrasort-win-Portable.zip`, unzip it anywhere, and run
+  `Ostrasort.exe` from the folder. No install, and it still self-updates in place.
+
+Ostrasort finds your Ostranauts install by itself via the Steam registry and
+`libraryfolders.vdf`, whatever drive it's on. (For an unusual install, point it
+manually with `--game <path>`.)
+
+On first run Windows SmartScreen may warn because the installer isn't
+code-signed — choose *More info → Run anyway*, or unblock it in the file's
+Properties.
 
 Ostrasort opens straight to its window (no console window appears). It also
 checks GitHub for a newer release **each time it starts**, queried live, so a
 release published after your build is picked up on the next launch. When one
-exists, Ostrasort pops an update dialog with **Download Latest Version** (opens
-the Releases page) and **Not Now**, and reveals an **Update available: vX.Y.Z**
-button at the top-right that stays as a reminder after you dismiss the dialog.
-You can also run the check yourself any time with the **Check for updates** link
-(top-right), which reports the result either way. The check stays quiet when
-you're already up to date, offline, or rate-limited, but always notes the
-outcome in the Logs tab.
+exists Ostrasort quietly **downloads it in the background** and reveals a
+**Restart to update to vX.Y.Z** button at the top-right. You can also run the
+check yourself any time with the **Check for updates** link (top-right), which
+reports the result either way. The check stays quiet when you're already up to
+date, offline, or rate-limited, but always notes the outcome in the Logs tab.
 
-**Applying an update is one step.** Download the new `Ostrasort.exe` and run it.
-If you've installed Ostrasort (see below), the new build notices it's newer than
-your installed copy and offers to **Update and restart**: it closes the running
-copy, overwrites the installed binary, refreshes your Desktop and Start Menu
-shortcuts, and relaunches from the install location. The download can be named
-anything (`Ostrasort-v0.21.0.exe`, `Ostrasort (1).exe`), the version is read
-from the file itself. Choose **Just run this copy** to skip that and run the
-download in place instead. If you haven't installed Ostrasort, the new exe just
-runs, and the first-run install offer below still applies.
+**Applying an update is one click.** Click the **Restart to update** button (or
+run **Check for updates** and confirm): Ostrasort closes, applies the downloaded
+update, and reopens on the new version. Nothing to download or run by hand. The
+whole install/update mechanism is [Velopack](https://velopack.io); a portable
+copy updates the same way.
 
 Ostrasort runs as a **single instance** per Windows session. Two windows could
 both write `loading_order.json` and race each other, so a second launch simply
@@ -41,17 +44,14 @@ change, so nothing you didn't intend gets lost.
 > Close Ostranauts first — Ostrasort disables all writes while the game is
 > running.
 
-## Installing it (optional)
+## Where your data lives
 
-The exe runs fine from wherever you downloaded it, but on **first run**
-Ostrasort offers to install itself into `%LOCALAPPDATA%\Programs\Ostrasort` and
-create **Desktop** and **Start Menu** shortcuts, so you have one fixed home for
-it instead of hunting through your Downloads folder. It's entirely optional
-(dismiss with **Not now**), needs no admin rights, and writes nothing outside
-your user profile — to uninstall, just delete that folder and the shortcuts.
-You can install or refresh the shortcuts any time from the **Install /
-shortcuts** link (top-right). Keeping it in one place also means future updates
-land in a single known location.
+Your settings, saved profiles, load-order backups and logs are kept in
+`%APPDATA%\Ostrasort` (the roaming profile), separate from the app itself, so
+they survive updates, reinstalls, and even an uninstall. Upgrading from a
+pre-0.23 build moves this data there automatically the first time the new
+version runs. The installed app lives under `%LOCALAPPDATA%\Ostrasort`; to remove
+Ostrasort, uninstall it from **Apps & features** (or delete that folder).
 
 ## Typical workflow
 
@@ -72,7 +72,7 @@ land in a single known location.
 
 If something ever looks wrong, the **More…** menu has **Restore backup…**
 (the previous `loading_order.json` plus a rolling history of the last **3**
-writes, kept in `%LOCALAPPDATA%\Ostrasort\backups`), **Make backup now** (a
+writes, kept in `%APPDATA%\Ostrasort\backups`), **Make backup now** (a
 checkpoint on demand), and **Remove compatibility patch…** to take the
 generated patch mod out entirely.
 
@@ -196,8 +196,8 @@ order for you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
 - **Copy report / Save report** export the full analysis as plain text for
   sharing when helping someone debug their setup.
 - The window **remembers its size, position, and selected tab**, and when a
-  newer release is on GitHub an update dialog appears on launch alongside a
-  persistent **Update** button in the header.
+  newer release is on GitHub it is downloaded in the background and a
+  **Restart to update** button appears in the header.
 
 ### Undo / redo
 
@@ -236,7 +236,7 @@ and a rolling backup are kept, it's undoable with **Ctrl+Z**, and it's disabled
 while the game is running or the OstraAutoloader manages the install. After a
 switch, Ostrasort re-checks whether the new setup needs a conflict patch and
 lights up the **Patch** tab if so. Profiles are stored per install under
-`%LOCALAPPDATA%\Ostrasort\profiles`.
+`%APPDATA%\Ostrasort\profiles`.
 
 ## The conflict resolver
 

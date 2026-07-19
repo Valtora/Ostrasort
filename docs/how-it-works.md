@@ -257,7 +257,7 @@ puts a merged mod later, the patch is flagged instead of falsely claiming
 
 A profile is a saved copy of the `aLoadOrder` — each entry with its
 `|edit`/`|disabled` marker — under a name, stored per install in
-`%LOCALAPPDATA%\Ostrasort\profiles`. It captures **only the mod order**: not the
+`%APPDATA%\Ostrasort\profiles`. It captures **only the mod order**: not the
 generated `OstrasortPatch` (Ostrasort's own overlay, re-derived per setup), not
 `aIgnorePatterns`, and not the ignore list — all of which stay global to the
 install, so switching a profile only ever rewrites the order.
@@ -302,7 +302,7 @@ patch straight away.
   reloads instead of overwriting that change with a stale view.
 - **Rolling backups.** The `.bak` only survives until the next write, so every
   overwrite also snapshots the previous text into
-  `%LOCALAPPDATA%\Ostrasort\backups` (the newest **3** are kept). The GUI's
+  `%APPDATA%\Ostrasort\backups` (the newest **3** are kept). The GUI's
   *Restore backup…* button lists all of them.
 - **Workshop paths are written in the game's own on-disk case.** The Steam
   registry hands out a lowercase drive (`c:\program files…`), but Ostranauts
