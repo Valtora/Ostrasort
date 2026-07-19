@@ -151,9 +151,3 @@ The repo is public. To cut a release:
 Installed copies pick the update up on their next launch: `UpdateManager` reads
 `releases.win.json`, compares its own version against the newest release, and
 downloads it. A release whose `<Version>` didn't move will not be offered.
-
-## Roadmap
-
-Lives in [ROADMAP.md](../ROADMAP.md) at the repo root — planned features
-(mod profiles is the flagship, dark mode the most-requested), plus the
-explicitly-not-planned list.
