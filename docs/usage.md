@@ -58,46 +58,60 @@ land in a single known location.
 1. **Close Ostranauts.**
 2. **Double-click `Ostrasort.exe`.** It scans your install and lists every
    mod in load order.
-3. **Read the tabs.** *Warnings* and *Collisions* highlight anything that
-   needs attention; *Order changes* shows what a tidy-up would do and why.
-4. **Apply Suggested Fixes** (one button) if you're happy with it — the
-   old file is saved as `loading_order.json.bak` first.
-5. **Resolve shop/kiosk conflicts** if the *Patch* tab reports any (see
-   below).
+3. **Read the health card** at the top. Green means "Your mods are set up
+   correctly. Nothing to do." Amber lists the issues in plain language.
+4. **Fix automatically** (the button on the card) applies the suggested load
+   order and creates or refreshes the compatibility patch in one go. You are
+   only asked when a genuine decision is needed; every write keeps a backup
+   (`loading_order.json.bak`).
+5. **What went wrong?** appears on the card when the game itself reported
+   problems from a mod on its last launch — it names the mod and offers the
+   obvious next steps.
 6. **Undo anything** with Ctrl+Z.
 7. **Launch the game** (there's a button) and check the in-game MODS screen.
 
-If something ever looks wrong, **Restore backup…** offers the previous
-`loading_order.json` (`.bak`) plus a rolling history of the last **3** writes
-(kept in `%LOCALAPPDATA%\Ostrasort\backups`), and **Delete patch** removes the
-generated patch mod entirely. **Make backup** adds the current file to that
-history on demand — a handy checkpoint before hand-editing or experimenting.
+If something ever looks wrong, the **More…** menu has **Restore backup…**
+(the previous `loading_order.json` plus a rolling history of the last **3**
+writes, kept in `%LOCALAPPDATA%\Ostrasort\backups`), **Make backup now** (a
+checkpoint on demand), and **Remove compatibility patch…** to take the
+generated patch mod out entirely.
 
 ## The main window
 
-The table lists every mod in load order with its name, source
-(game/Workshop/local/generated), class, data-object counts, its own **Version**
-(`strModVersion`), Workshop ID, a **Last Updated** date, and any problems. Below
-it, a row of tabs:
+The **health card** at the top answers "am I OK": green when everything is
+fine, amber with a plain-language issue list otherwise, red when the game
+itself reported problems from a mod on its last launch. Its buttons — **Fix
+automatically**, **What went wrong?**, and **Show me** — are the fastest route
+through anything it reports.
 
-- **Collisions** — who claims the same objects and whether the order handles
+The table lists every mod in load order with a **status glyph** (✓ fine,
+! needs a look, ✕ problems, ⏸ disabled), an **On** checkbox that toggles the
+game's own enable/disable marker, its name, its own **Version**
+(`strModVersion`), a **Last Updated** date, and any problems in plain words.
+The diagnostic columns (source, class, data-object counts, Workshop ID) are
+hidden behind the **Technical columns** toggle. **Double-click any row** for
+the mod's detail panel: everything about that mod — status, file problems, the
+game-log lines attributed to it, and every conflict it participates in — with
+the actions right there. Below the table, a row of tabs:
+
+- **Conflicts** — who claims the same objects and whether the order handles
   it, including field-level analysis of non-shop overrides. It shows **only
-  collisions that need action**, so it reads clean when there is nothing to do.
-  Collisions the load order, FFU, or the game already handle losslessly (for
+  conflicts that need action**, so it reads clean when there is nothing to do.
+  Conflicts the load order, FFU, or the game already handle losslessly (for
   example two shops stocking the same items with different quantities) move to
-  the **Resolved / handled** tab instead of cluttering this one.
-  **Double-click any collision** (the `•` line) to open a read-only,
+  the **Handled automatically** tab instead of cluttering this one.
+  **Double-click any conflict** (the `•` line) to open a read-only,
   side-by-side view of the base game's version and each mod's version, with
   changed fields highlighted and disagreements flagged in red — *Copy JSON*
   puts every version on the clipboard.
-- **Resolved / handled** — every collision that needs no action: merged by the
-  generated patch, merged at load by FFU or the game, or handled losslessly by
-  the load order. Kept on its own tab so the Collisions tab stays focused on
-  real problems.
-- **Order changes** — the current order and the suggested order side by side,
-  applied with one button.
-- **Patch** — state of the generated conflict patch, with *Rebuild from
-  scratch* and *Delete patch* buttons.
+- **Handled automatically** — every conflict that needs no action: merged by
+  the generated patch, merged at load by FFU or the game, or handled
+  losslessly by the load order. Kept on its own tab so the Conflicts tab stays
+  focused on real problems.
+- **Load order** — the current order and the suggested order side by side.
+- **Compatibility patch** — state of the generated conflict patch, with
+  *Resolve conflicts & generate patch*, *Rebuild from scratch* and *Remove
+  patch* buttons.
 - **Warnings** — dead entries, unregistered mods, version lag, broken JSON,
   image overrides, BepInEx problems, and any load errors the **game itself**
   logged at the last launch, attributed to the mod responsible where Ostrasort
@@ -146,8 +160,9 @@ order for you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
   anything is applied (core-first is enforced; other issues warn and let you
   confirm).
 - **Filter** the table by typing in the filter box as your mod list grows.
-- **Right-click** a mod for *Open folder*, *Open Steam Workshop page*, and
-  *Copy name / Copy ID*; **double-click** a row to open its folder.
+- **Right-click** a mod for *Mod details…*, *Open folder*, *Open Steam
+  Workshop page*, and *Copy name / Copy ID*; **double-click** a row for the
+  detail panel (the folder is one click from there).
 - **Disable / Enable** (right-click a registered mod) toggles the game's own
   `|disabled` marker — the same thing the in-game MODS screen does. The entry
   stays in the list (dimmed) but the mod does not load, and it is excluded
@@ -155,9 +170,9 @@ order for you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
 - **Register mod (add to load order)** (right-click an unregistered mod) adds
   it to `loading_order.json` on its own — so the game loads it and the MODS
   screen lists it — without having to apply the whole suggested order. The
-  entry lands where *Apply Suggested Fixes* would put it (just before any FFU
-  block and the generated patch; local mods keep their `|edit` marker), any
-  *Ignore* preference on it is cleared, and it's undoable with Ctrl+Z.
+  entry lands where the suggestion would put it (just before any FFU block and
+  the generated patch; local mods keep their `|edit` marker), any *Ignore*
+  preference on it is cleared, and it's undoable with Ctrl+Z.
 - **Ignore (leave unregistered)** (right-click an unregistered local mod)
   stops the permanent warning and the "add it" suggestion for a folder you
   deliberately keep parked. *Stop ignoring* brings both back. The preference
@@ -170,8 +185,9 @@ order for you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
   page in the Steam client — subscriptions belong to Steam, so unsubscribing
   is its one-click button there; Steam then removes the files and Ostrasort's
   next rescan suggests pruning the dead entry.
-- **Organise Mods by Class** toggles a cosmetic core → infrastructure → code →
-  data grouping of the suggested order.
+- **Group suggested order by category** toggles a cosmetic core →
+  infrastructure → code → data grouping of the suggested order (it does not
+  regroup the table itself).
 - **Theme** (toolbar) switches between **Light**, **Dark**, and **System**
   (follow the Windows theme, the default); the choice is remembered, and
   System-mode tracks the OS live.
@@ -225,43 +241,43 @@ lights up the **Patch** tab if so. Profiles are stored per install under
 ## The conflict resolver
 
 When two mods change the same thing and the game would keep only one,
-**Resolve conflicts & generate patch** opens the resolver. Each conflict is a
-titled card (the object's friendly type and name, and which mods edit it), and
-every contested decision shows the choices **side by side** so you can compare
-them at a glance rather than reading raw JSON. It handles two kinds of unit:
+**Resolve conflicts & generate patch** (or **Fix automatically**) opens the
+resolver — a short guided wizard:
 
-**Shop pools** — every **contested item** (both mods stock it with different
-values) is a card of columns: each mod's entry (shown as a plain *count /
-weight*) plus **Stock from nobody** to drop it. Use **Take all from *<mod>***
-to claim a whole column at once. Items only one mod stocks carry over
-automatically; expand the **carried-over** list to reject unwanted strays
-(handy when a mod ships a stale copy of a whole kiosk and you only want its one
-new item).
+1. **Summary** — how many things conflict, how many merge automatically with
+   nothing lost, and how many need you to choose, listed with friendly names.
+2. **One decision per page** ("Decision 2 of 4"), each phrased as a question
+   with the choices **side by side**: the **Vanilla (unchanged)** baseline,
+   each mod's value, and — for array fields — the **Union of both**. Array
+   values are shown as a **diff against vanilla** (what each mod *adds* in
+   green, *removes* in red), so the actual disagreement is obvious. Every page
+   has a pre-selected **suggested** pick (the later-loaded mod's value, the
+   same outcome the game itself would produce), so *Continue* is never
+   blocked — and **Choose for me** accepts the suggestion for everything
+   remaining. Shop-pool items read as plain *stocks N (chance weight w)*, with
+   a *Don't stock this item* option to drop one.
+3. **Review** — every outcome listed, the automatically merged items available
+   as a collapsed list to review or revert, then **Create compatibility
+   patch**.
 
-**Objects** — for a conflicting game object, each **contested field** is a card
-with a plain-English label (the raw field name shown beneath it) and one column
-per choice: the **Vanilla (unchanged)** baseline, each mod's value, and — for
-array fields — the **Union of both**. Array values are shown as a **diff
-against vanilla** (what each mod *adds* in green, *removes* in red), so the
-actual disagreement is obvious. Fields only one mod changed merge
-automatically; expand the **auto-merged** list to review or revert any of them.
-
-The result is written as a `Mods\OstrasortPatch` mod that loads last, so no
-mod's changes are lost. Merged objects are validated against the game's
-schemas and flagged if they don't conform — they're best-effort, so verify
-them in game.
+The result is written as a `Mods\OstrasortPatch` mod that loads after
+everything it merges, so no mod's changes are lost. Merged objects are
+validated against the game's schemas and flagged if they don't conform —
+they're best-effort, so verify them in game. Picks accepted via *Choose for
+me* stay marked for review the next time the resolver opens.
 
 ### Managing the patch
 
 - **Your decisions are remembered** in the patch's marker file. When a merged
   mod updates, the patch is flagged **stale**; regenerating re-asks only the
   new or changed items.
-- **Rebuild patch from scratch** (Patch tab) discards every stored decision —
-  source picks *and* exclusions — and resolves everything again from a blank
-  slate.
-- **Delete patch** removes the generated mod and its load-order entry. You can
-  also **right-click the patch in the mod table → Remove generated patch**, the
-  same way you remove any other mod — both routes do the same guarded delete.
+- **Rebuild patch from scratch** (Compatibility patch tab) discards every
+  stored decision — source picks *and* exclusions — and resolves everything
+  again from a blank slate.
+- **Remove patch** (same tab, or the More… menu) removes the generated mod and
+  its load-order entry. You can also **right-click the patch in the mod table
+  → Remove generated patch**, the same way you remove any other mod — every
+  route does the same guarded delete.
 - Both are undoable. The `OstrasortPatch` folder is wholly owned by Ostrasort
   — don't edit it by hand; it's safe to delete.
 
@@ -348,8 +364,9 @@ Ostrasort.exe --profile-load <name>   switch to a saved profile: Replace by defa
                           reported), or add --merge to keep current mods it omits, appended
                           at the end. Mutually exclusive with --apply
 Ostrasort.exe --tidy      opt-in cosmetic grouping in the suggested order
-Ostrasort.exe --no-gui    like --headless but only for the resolver: contested items
-                          fall back to the later-loaded mod's entry, marked for review
+Ostrasort.exe --no-gui    never open a window: alone it acts like --report; with --patch,
+                          contested items fall back to the later-loaded mod's entry,
+                          marked for review
 Ostrasort.exe --game <p>  point at a non-standard install manually
 Ostrasort.exe --mods <p>  point at the mods folder that holds loading_order.json — for a
                           mods folder on a different disk from the game; default is the

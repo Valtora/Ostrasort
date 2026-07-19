@@ -21,9 +21,17 @@ Two jobs are the heart of it:
    them into a compatibility patch that keeps both — **shop/kiosk inventories**
    (per-item union) and **game objects** (field-by-field, with the base game
    as the common ancestor) — while **you** decide anything the mods genuinely
-   disagree on.
+   disagree on, through a short **guided wizard** (one plain-language question
+   per decision, a suggested pick pre-selected, and a *Choose for me* shortcut).
 
 Around those two jobs it works as a complete mod manager:
+
+- **A health card that answers "am I OK"** — green when everything is fine,
+  amber with a plain-language issue list and a one-click **Fix automatically**
+  (suggested order + compatibility patch in one go), red with **What went
+  wrong?** when the game itself reported problems from a mod on its last
+  launch — each problem matched to the responsible mod with the obvious next
+  steps (disable and relaunch to confirm, open its Workshop page).
 
 - **Profiles** — save the current load order as a named profile (a
   vanilla-plus run, an FFU stack, a single-mod test) and switch between setups
@@ -42,13 +50,15 @@ Around those two jobs it works as a complete mod manager:
   zip, routes a **BepInEx** bundle into the game's BepInEx tree and a data mod
   into the Mods folder, then registers each data mod — no unzipping by hand.
   Path-traversal safe, with an overwrite prompt when a mod is already installed.
-- **In-place mod management** — from the mod table, **enable / disable** a mod
-  (the game's own `|disabled` marker), **ignore** an unregistered folder you
-  keep parked, **remove** a mod (park it as `.disabled` or delete it), or
-  **unsubscribe** a Workshop item.
+- **In-place mod management** — every row has a status glyph and an **On**
+  checkbox; **double-click** opens the mod's detail panel (status, problems,
+  attributed game-log lines, and its conflicts, with the actions right there);
+  right-click to **enable / disable** (the game's own `|disabled` marker),
+  **ignore** an unregistered folder you keep parked, **remove** a mod (park it
+  as `.disabled` or delete it), or **unsubscribe** a Workshop item.
 - **Manual control** — drag rows to reorder by hand with live rule-violation
-  checks, or apply the suggested order in one click. **Organise Mods by Class**
-  optionally groups the list for readability.
+  checks, or apply the suggested order in one click. **Group suggested order
+  by category** optionally groups the suggestion for readability.
 - **Version & freshness** — the mod table shows each mod's own **Version**
   (`strModVersion` from its `mod_info.json`) and its **Last Updated** date (the
   real Steam Workshop publish time, folder date for local mods), and flags any

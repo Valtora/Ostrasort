@@ -73,12 +73,14 @@ with three or more mods on one pool, a partial overlap between the first and
 last claimant is still caught even when each adjacent pair looks clean.
 
 Not every collision is a problem. Outcomes that lose nothing (identical item
-sets, a correct-order superset, or an object type the game or FFU merges
-field-by-field at load) move to the **Resolved / handled** tab, alongside
-anything the generated patch merges. The **Collisions** tab (and its badge and
-the "needs attention" total) shows only collisions where something is actually
-lost or is fixable (partial-overlap loot, wrong-order drops, or a mergeable
-object override), so it reads clean when there is nothing to do.
+sets, identical overrides, a last-loaded version that already includes every
+change, a correct-order superset, or an object type the game or FFU merges
+field-by-field at load) move to the **Handled automatically** tab, alongside
+anything the generated patch merges. The **Conflicts** tab (and its badge, the
+"needs attention" total, and the headless exit code — all driven by the same
+predicate) shows only collisions where something is actually lost or is
+fixable (partial-overlap loot, wrong-order drops, or a mergeable object
+override), so it reads clean when there is nothing to do.
 
 **Every other object type** (condowners, interactions, conditions, …) gets
 **field-level analysis**: Ostrasort diffs each mod's version against the base
@@ -219,7 +221,12 @@ idea as a version-control merge:
   **vanilla** value.
 
 The game's Hungarian field prefixes make this reliable: `a*` fields are arrays
-(a union is offered), everything else is a scalar (pick one).
+(a union is offered), everything else is a scalar (pick one). The union is the
+union of the **mods'** entries only — an entry that exists in vanilla but was
+removed by every mod stays removed, honouring their shared intent. Headless
+runs (`--no-gui`/`--json`) auto-resolve a contested field to the
+**later-loaded mod's value** (the same outcome the game itself would produce),
+never to a computed union, and mark it for review in the GUI.
 
 Merged objects are then **validated against the game's own JSON schemas**
 (`StreamingAssets\data\schemas`) and any that don't conform are flagged. This
@@ -239,7 +246,12 @@ each merge overlaid**, and every decision you made. A later refresh only
 re-asks about things that genuinely changed — and if a **game update** changes
 the vanilla version of a merged object, the patch is flagged stale even though
 no mod changed, because the merge would keep overriding it with values built
-on the old vanilla base. See [usage.md](usage.md) for the resolver workflow.
+on the old vanilla base. Every generation **rebuilds the patch's `data\` tree
+from scratch**, so a conflict that disappeared (a mod uninstalled or updated)
+can never leave a ghost override behind; and the staleness inspection also
+verifies the patch actually **loads after every mod it merges** — if the order
+puts a merged mod later, the patch is flagged instead of falsely claiming
+"nothing lost". See [usage.md](usage.md) for the resolver workflow.
 
 ## Profiles
 
