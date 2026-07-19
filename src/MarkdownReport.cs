@@ -47,15 +47,7 @@ public static class MarkdownReport
         foreach (var (pos, m) in rows)
         {
             var cls = m.Kind == EntryKind.Core ? "core" : m.IsPatch ? "patch" : m.Class.ToString().ToLowerInvariant();
-            var notes = new List<string>();
-            if (m.Ignored) notes.Add("ignored (kept unregistered)");
-            else if (!m.Registered) notes.Add("NOT REGISTERED");
-            if (m.Dir is null && m.Kind != EntryKind.Core) notes.Add("DEAD ENTRY");
-            if (m.Disabled) notes.Add("DISABLED");
-            if (m.IsFfuPatch) notes.Add("FFU patch — remove after one use");
-            else if (m.IsFfu) notes.Add(m.FfuGroup == FfuLoadGroup.FFUCore ? "FFU core tier" : "FFU mod");
-            if (m.GameVersionNote(env.InstalledVersion) is { } vn) notes.Add(vn);
-            if (m.JsonErrors.Count > 0) notes.Add($"{m.JsonErrors.Count} JSON problem(s)");
+            var notes = m.NoteLines(env.InstalledVersion);
 
             var rawName = m.Kind == EntryKind.Core ? "core" : m.DisplayName ?? m.Name;
             var name = m.Kind == EntryKind.Workshop && m.WorkshopId is { } w
@@ -84,15 +76,7 @@ public static class MarkdownReport
             sb.AppendLine($"- **{Md(col.Key)}** — claimed by {Md(string.Join(" → ", col.Claimants.Select(m => m.DisplayName ?? m.Name)))}"
                           + (col.FriendlyName is { Length: > 0 } fn ? $" _({Md(fn)})_" : ""));
             foreach (var p in col.Pairs)
-                sb.AppendLine("  - " + Md(p.Rel switch
-                {
-                    Relation.SupersetOk => $"OK: {p.Later.DisplayName ?? p.Later.Name} is a superset (+{p.AddedByLater.Length} items)",
-                    Relation.Equal => "OK: identical item sets, quantities last-wins",
-                    Relation.SubsetViolation => $"WRONG ORDER: {p.LostFromEarlier.Length} item(s) dropped — superset must load last",
-                    Relation.Partial when col.ResolvedByPatch => "RESOLVED by the Ostrasort Patch",
-                    Relation.Partial => $"CONFLICT: {p.Later.DisplayName ?? p.Later.Name} drops {string.Join(", ", p.LostFromEarlier)}",
-                    _ => "last loaded replaces the object entirely",
-                }));
+                sb.AppendLine("  - " + Md(TextReport.PairText(col, p)));
             foreach (var n in col.FieldNotes) sb.AppendLine($"  - {Md(n)}");
         }
         sb.AppendLine();
@@ -102,12 +86,16 @@ public static class MarkdownReport
         sb.AppendLine(!s.Patch.Exists
             ? (a.HasUnresolvedConflicts ? "None generated — the conflicts above are unmerged." : "None needed.")
             : s.Patch.Stale ? $"**STALE:** {Md(string.Join("; ", s.Patch.StaleReasons))}"
-            : s.Patch.Obsolete ? "Installed but no longer needed — remove it."
-            : $"Fresh (v{s.Patch.ToolVersion ?? "?"}) covering {Md(string.Join(", ", s.Patch.CoveredKeys))}.");
+            : s.Patch.Obsolete ? "Installed but no longer needed — remove it." +
+              (s.Patch.UnneededKeys.Count > 0 ? $" (Resolved upstream: {Md(string.Join(", ", s.Patch.UnneededKeys))}.)" : "")
+            : $"Fresh (v{s.Patch.ToolVersion ?? "?"}) covering {Md(string.Join(", ", s.Patch.CoveredKeys))}."
+              + (s.Patch.ExcludedCount > 0 ? $" {s.Patch.ExcludedCount} item(s) excluded by you." : ""));
+        if (s.Patch.Exists && !s.Patch.Stale && !s.Patch.Obsolete && s.Patch.UnneededKeys.Count > 0)
+            sb.AppendLine($"No longer needed for {Md(string.Join(", ", s.Patch.UnneededKeys))} (resolved upstream).");
         sb.AppendLine();
 
         var jsonErrMods = a.AllMods.Where(m => m.JsonErrors.Count > 0).ToList();
-        sb.AppendLine($"## Warnings ({a.Warnings.Count})");
+        sb.AppendLine($"## Warnings ({a.Warnings.Count + jsonErrMods.Sum(m => m.JsonErrors.Count)})");
         sb.AppendLine();
         if (a.Warnings.Count == 0 && jsonErrMods.Count == 0) sb.AppendLine("None.");
         foreach (var w in a.Warnings) sb.AppendLine($"- {Md(w)}");

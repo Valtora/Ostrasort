@@ -48,8 +48,7 @@ public static class ModInstall
         public bool IsEmpty => Components.Count == 0;
     }
 
-    public sealed record Result(
-        IReadOnlyList<Component> Installed, IReadOnlyList<Component> Skipped, IReadOnlyList<string> Warnings);
+    public sealed record Result(IReadOnlyList<Component> Installed, IReadOnlyList<Component> Skipped);
 
     // The game loader tolerates comments (its own core data ships them); be at
     // least as lenient when reading a mod's mod_info.json for its strName.
@@ -162,7 +161,6 @@ public static class ModInstall
         var chosenSet = new HashSet<Component>(chosen);
         var installed = new List<Component>();
         var skipped = new List<Component>();
-        var warnings = new List<string>();
 
         using var zip = ZipFile.OpenRead(plan.ZipPath);
         foreach (var c in plan.Components)
@@ -175,7 +173,7 @@ public static class ModInstall
             installed.Add(c);
         }
 
-        return new Result(installed, skipped, warnings);
+        return new Result(installed, skipped);
     }
 
     /// <summary>

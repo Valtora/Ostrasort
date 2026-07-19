@@ -54,11 +54,11 @@ public static class Program
                 case "--patch": patch = true; break;
                 case "--fresh": fresh = true; break;
                 case "--profile-list": profileList = true; break;
-                case "--profile-save" when i + 1 < args.Length: profileSave = args[++i]; break;
-                case "--profile-load" when i + 1 < args.Length: profileLoad = args[++i]; break;
+                case "--profile-save" when HasValue(args, i): profileSave = args[++i]; break;
+                case "--profile-load" when HasValue(args, i): profileLoad = args[++i]; break;
                 case "--merge": merge = true; break;
                 case "--unpatch": unpatch = true; break;
-                case "--install-zip" when i + 1 < args.Length: installZip = args[++i]; break;
+                case "--install-zip" when HasValue(args, i): installZip = args[++i]; break;
                 case "--overwrite": break;                              // modifier for --install-zip (handled below)
                 case "--allow-rival-stack": allowRival = true; break;   // override the autoloader write-block (at your own risk)
                 case "--disable-autoloader": break;                     // park/delete the OstraAutoloader DLL(s) (handled below)
@@ -67,9 +67,15 @@ public static class Program
                 case "--gui": gui = true; break;
                 case "--no-gui": noGui = true; break;
                 case "--no-pause": break;   // vestigial (WinExe never pauses) - accepted for old scripts
-                case "--game" when i + 1 < args.Length: gameRoot = args[++i]; break;
-                case "--mods" when i + 1 < args.Length: modsDir = args[++i]; break;
-                case "--install" when i + 1 < args.Length: installName = args[++i]; break;
+                case "--game" when HasValue(args, i): gameRoot = args[++i]; break;
+                case "--mods" when HasValue(args, i): modsDir = args[++i]; break;
+                case "--install" when HasValue(args, i): installName = args[++i]; break;
+                // a value-taking flag whose value is missing (end of line, or the
+                // next token is another flag) must say so - falling through to
+                // "unknown argument" is wrong and cryptic
+                case "--profile-save" or "--profile-load" or "--install-zip" or "--game" or "--mods" or "--install":
+                    Console.Error.WriteLine($"{args[i]} needs a value (try --help)");
+                    return 1;
                 case "--version":
                     Console.WriteLine(Version);
                     return 0;
@@ -84,12 +90,15 @@ public static class Program
                                       Alone it acts like --report; combine with --apply/--patch/
                                       --unpatch for unattended runs (implies --no-gui)
                           --json      like --headless but the report is one machine-readable
-                                      JSON document on stdout (combines with --apply etc.);
+                                      JSON document on stdout (combines with --apply etc., and
+                                      with --profile-list; other stand-alone verbs print text);
                                       exit codes are unchanged (0 clean / 2 actionable / 1 error)
                           --apply     write the suggested load order (loading_order.json.bak kept)
-                          --patch     generate/refresh the "Ostrasort Patch" mod that merges shop
-                                      pools two mods both override (conflicts no load order can fix);
-                                      contested items open the resolver window unless headless
+                          --patch     generate/refresh the "Ostrasort Patch" mod that resolves
+                                      conflicts no load order can fix: shop/kiosk pools merge as a
+                                      per-item union, any other object merges field-by-field
+                                      (3-way against the base game); contested items open the
+                                      resolver window unless headless
                           --fresh     with --patch: discard all previously stored decisions
                                       (source picks AND exclusions) and rebuild from scratch
                           --unpatch   remove the generated patch mod and its load-order entry
@@ -143,6 +152,31 @@ public static class Program
         }
         if (patch && unpatch) { Console.Error.WriteLine("pick one of --patch / --unpatch"); return 1; }
         if (profileLoad is not null && apply) { Console.Error.WriteLine("pick one of --profile-load / --apply (both set the load order)"); return 1; }
+
+        // stand-alone verbs run and return without entering the report/apply
+        // pipeline - combining them would silently drop the other verb, so
+        // refuse the combination instead
+        var standalone = new List<string>();
+        if (installZip is not null) standalone.Add("--install-zip");
+        if (profileList) standalone.Add("--profile-list");
+        if (profileSave is not null) standalone.Add("--profile-save");
+        if (args.Contains("--normalize")) standalone.Add("--normalize");
+        if (args.Contains("--dump-collisions")) standalone.Add("--dump-collisions");
+        if (args.Contains("--disable-autoloader")) standalone.Add("--disable-autoloader");
+        if (args.Contains("--remove-ffu")) standalone.Add("--remove-ffu");
+        var pipelineVerbs = new List<string>();
+        if (report) pipelineVerbs.Add("--report");
+        if (apply) pipelineVerbs.Add("--apply");
+        if (patch) pipelineVerbs.Add("--patch");
+        if (unpatch) pipelineVerbs.Add("--unpatch");
+        if (profileLoad is not null) pipelineVerbs.Add("--profile-load");
+        if (standalone.Count > 1 || (standalone.Count == 1 && pipelineVerbs.Count > 0))
+        {
+            Console.Error.WriteLine(
+                $"{standalone[0]} runs alone and cannot be combined with " +
+                $"{string.Join(" / ", standalone.Skip(1).Concat(pipelineVerbs))} - run them as separate commands.");
+            return 1;
+        }
 
         // --install <name> selects a saved installation's directories; an explicit
         // --game / --mods still wins for that slot. An unknown name is a hard error.
@@ -311,8 +345,13 @@ public static class Program
                 Console.WriteLine("Nothing installed.");
                 return result.Skipped.Count > 0 ? 2 : 1;
             }
-            if (!canRegister)
+            if (!canRegister && result.Installed.Any(c => c.HasData))
+            {
+                // the data mod is on disk but will not load until registered -
+                // that is actionable, not success
                 Console.WriteLine("Not registered: OstraAutoloader manages the load order (override: --allow-rival-stack).");
+                return 2;
+            }
             return 0;
         }
 
@@ -393,8 +432,30 @@ public static class Program
         }
 
         // bare launch (or explicit --gui) = the app's face
-        if (gui || (!report && !apply && !patch && !unpatch && profileLoad is null))
-            return RunGui(gameRoot, modsDir, installName);
+        if (gui) return RunGui(gameRoot, modsDir, installName);
+        if (!report && !apply && !patch && !unpatch && profileLoad is null)
+        {
+            // --no-gui with no verb means "console, never a window" - act like
+            // --headless (a report) instead of opening the GUI it forbids
+            if (noGui) report = true;
+            else
+            {
+                // a modifier flag with nothing to modify silently opening the
+                // GUI looks like a hang in a redirected script - refuse instead
+                var lone = new (string Flag, bool Set)[]
+                {
+                    ("--tidy", tidy), ("--fresh", fresh), ("--merge", merge),
+                    ("--allow-rival-stack", allowRival),
+                    ("--overwrite", args.Contains("--overwrite")), ("--delete", args.Contains("--delete")),
+                }.Where(x => x.Set).Select(x => x.Flag).ToList();
+                if (lone.Count > 0)
+                {
+                    Console.Error.WriteLine($"{string.Join(", ", lone)}: modifier flag(s) with no action to modify (try --help)");
+                    return 1;
+                }
+                return RunGui(gameRoot, modsDir, installName);
+            }
+        }
 
         var env = GameEnv.Locate(gameRoot, modsDir);
         var state = Engine.Analyze(env, tidy);
@@ -518,10 +579,10 @@ public static class Program
     private static extern bool AttachConsole(int dwProcessId);
     private const int ATTACH_PARENT_PROCESS = -1;
 
-    /// <summary>
-    /// Ostrasort ships as a WinExe (GUI subsystem), so double-clicking it opens
-    /// the window with no console flashing up behind it. The console paths still
-    /// need to print, so when we were launched from a terminal - and stdout is
+    /// <summary>True when a value-taking flag at index i has a value token (not another flag) after it.</summary>
+    private static bool HasValue(string[] args, int i) =>
+        i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal);
+
     /// <summary>
     /// A hand-built merge plan covering every resolver rendering path, so the
     /// --smoke-gui self-test exercises the dialog even when the real install has
@@ -599,6 +660,10 @@ public static class Program
         return new MergePlan { Pools = new() { poolPlan }, Objects = new() { objPlan } };
     }
 
+    /// <summary>
+    /// Ostrasort ships as a WinExe (GUI subsystem), so double-clicking it opens
+    /// the window with no console flashing up behind it. The console paths still
+    /// need to print, so when we were launched from a terminal - and stdout is
     /// not already redirected to a pipe/file (automation, shell redirection) -
     /// attach to that terminal's console and point Console.Out/Error at it.
     /// A pure double-click has no parent console, so AttachConsole simply fails

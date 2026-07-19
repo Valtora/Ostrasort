@@ -43,7 +43,12 @@ public static class JsonReport
                 ["claimants"] = new JsonArray(c.Claimants.Select(m => (JsonNode)(m.DisplayName ?? m.Name)).ToArray()),
                 ["resolvedByPatch"] = c.ResolvedByPatch,
                 ["ffuMergedAtLoad"] = c.FfuMergedAtLoad,
+                ["additiveAtLoad"] = c.AdditiveAtLoad,
                 ["objectMergeable"] = c.ObjectMergeable,
+                ["nothingLost"] = c.NothingLost,
+                // the same predicate the GUI badge and the exit code use, so
+                // tooling never has to re-derive the needs-attention split
+                ["needsAttention"] = CollisionView.NeedsAttention(c),
                 ["pairs"] = pairs,
                 ["fieldNotes"] = new JsonArray(c.FieldNotes.Select(n => (JsonNode)n).ToArray()),
             });
@@ -132,6 +137,7 @@ public static class JsonReport
             ["ignored"] = m.Ignored,
             ["dir"] = m.Dir,
             ["workshopId"] = m.WorkshopId,
+            ["modVersion"] = m.ModVersion,
             ["gameVersion"] = m.GameVersion,
             ["gameVersionNote"] = m.GameVersionNote(env.InstalledVersion),
             ["dataObjects"] = m.DataObjects,
@@ -140,7 +146,10 @@ public static class JsonReport
             ["hasPlugins"] = m.HasPlugins,
             ["hasPatchers"] = m.HasPatchers,
             ["jsonErrors"] = new JsonArray(m.JsonErrors.Select(e => (JsonNode)e).ToArray()),
+            ["logNotes"] = new JsonArray(m.LogNotes.Select(n => (JsonNode)n).ToArray()),
         };
+        if (m.RemoveIds.Count > 0)
+            node["removeIds"] = new JsonArray(m.RemoveIds.Select(r => (JsonNode)$"{r.Type}/{r.Id}").ToArray());
         if (m.IsFfu)
             node["ffu"] = new JsonObject
             {

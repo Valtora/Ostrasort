@@ -31,15 +31,7 @@ public static class TextReport
         foreach (var (pos, m) in rows)
         {
             var cls = m.Kind == EntryKind.Core ? "core" : m.IsPatch ? "patch" : m.Class.ToString().ToLowerInvariant();
-            var notes = new List<string>();
-            if (m.Ignored) notes.Add("ignored (kept unregistered)");
-            else if (!m.Registered) notes.Add("NOT REGISTERED");
-            if (m.Dir is null && m.Kind != EntryKind.Core) notes.Add("DEAD ENTRY");
-            if (m.Disabled) notes.Add("DISABLED");
-            if (m.IsFfuPatch) notes.Add("FFU patch - remove after one use");
-            else if (m.IsFfu) notes.Add(m.FfuGroup == FfuLoadGroup.FFUCore ? "FFU core tier" : "FFU mod");
-            if (m.GameVersionNote(env.InstalledVersion) is { } versionNote) notes.Add(versionNote);
-            if (m.JsonErrors.Count > 0) notes.Add($"{m.JsonErrors.Count} JSON problem(s)");
+            var notes = m.NoteLines(env.InstalledVersion);
             var name = m.Kind == EntryKind.Core ? "core" : m.DisplayName ?? m.Name;
             var id = m.WorkshopId is { } w ? $" [{w}]" : "";
             sb.AppendLine($"  {pos,3}  {name}{id}  ({cls}{(m.DataObjects > 0 ? $", {m.DataObjects} objs/{m.CoreOverrides} ovr" : "")})" +
@@ -54,15 +46,7 @@ public static class TextReport
             sb.AppendLine($"  {col.Key} - claimed by {string.Join(" THEN ", col.Claimants.Select(m => m.DisplayName ?? m.Name))}");
             if (col.FriendlyName is { Length: > 0 } fn) sb.AppendLine($"    ({fn})");
             foreach (var p in col.Pairs)
-                sb.AppendLine("    " + p.Rel switch
-                {
-                    Relation.SupersetOk => $"OK: {p.Later.DisplayName ?? p.Later.Name} is a superset (+{p.AddedByLater.Length} items)",
-                    Relation.Equal => "OK: identical item sets, quantities last-wins",
-                    Relation.SubsetViolation => $"WRONG ORDER: {p.LostFromEarlier.Length} item(s) dropped - superset must load last",
-                    Relation.Partial when col.ResolvedByPatch => "RESOLVED by the Ostrasort Patch",
-                    Relation.Partial => $"CONFLICT: {p.Later.DisplayName ?? p.Later.Name} drops {string.Join(", ", p.LostFromEarlier)}",
-                    _ => "last loaded replaces the object entirely",
-                });
+                sb.AppendLine("    " + PairText(col, p));
             foreach (var n in col.FieldNotes) sb.AppendLine($"    {n}");
         }
         sb.AppendLine();
@@ -71,14 +55,20 @@ public static class TextReport
         sb.AppendLine("  " + (!s.Patch.Exists
             ? (a.HasUnresolvedConflicts ? "none generated - conflicts above are unmerged" : "none needed")
             : s.Patch.Stale ? $"STALE: {string.Join("; ", s.Patch.StaleReasons)}"
-            : s.Patch.Obsolete ? "installed but no longer needed - remove it"
-            : $"fresh (v{s.Patch.ToolVersion ?? "?"}) covering {string.Join(", ", s.Patch.CoveredKeys)}"));
+            : s.Patch.Obsolete ? "installed but no longer needed - remove it" +
+              (s.Patch.UnneededKeys.Count > 0 ? $" (resolved upstream: {string.Join(", ", s.Patch.UnneededKeys)})" : "")
+            : $"fresh (v{s.Patch.ToolVersion ?? "?"}) covering {string.Join(", ", s.Patch.CoveredKeys)}" +
+              (s.Patch.ExcludedCount > 0 ? $"; {s.Patch.ExcludedCount} item(s) excluded by you" : "")));
+        if (s.Patch.Exists && !s.Patch.Stale && !s.Patch.Obsolete && s.Patch.UnneededKeys.Count > 0)
+            sb.AppendLine($"  no longer needed for {string.Join(", ", s.Patch.UnneededKeys)} (resolved upstream)");
         sb.AppendLine();
 
-        sb.AppendLine($"WARNINGS ({a.Warnings.Count})");
-        if (a.Warnings.Count == 0) sb.AppendLine("  none");
+        var jsonErrMods = a.AllMods.Where(m => m.JsonErrors.Count > 0).ToList();
+        var warnTotal = a.Warnings.Count + jsonErrMods.Sum(m => m.JsonErrors.Count);
+        sb.AppendLine($"WARNINGS ({warnTotal})");
+        if (warnTotal == 0) sb.AppendLine("  none");
         foreach (var w in a.Warnings) sb.AppendLine($"  ! {w}");
-        foreach (var m in a.AllMods.Where(m => m.JsonErrors.Count > 0))
+        foreach (var m in jsonErrMods)
             foreach (var e in m.JsonErrors) sb.AppendLine($"  ! {m.DisplayName ?? m.Name}: {e}");
         sb.AppendLine();
 
@@ -94,4 +84,24 @@ public static class TextReport
         }
         return sb.ToString();
     }
+
+    /// <summary>
+    /// One pair's outcome, honouring the collision-level classification the
+    /// console/GUI view uses - a benign merged-at-load collision must never
+    /// read as "last loaded replaces the object entirely" in an exported report.
+    /// </summary>
+    internal static string PairText(Collision col, PairRelation p) => p.Rel switch
+    {
+        Relation.SupersetOk => $"OK: {p.Later.DisplayName ?? p.Later.Name} is a superset (+{p.AddedByLater.Length} items)",
+        Relation.Equal => "OK: identical item sets, quantities last-wins",
+        Relation.SubsetViolation => $"WRONG ORDER: {p.LostFromEarlier.Length} item(s) dropped - superset must load last",
+        Relation.Partial when col.ResolvedByPatch => "RESOLVED by the Ostrasort Patch",
+        Relation.Partial => $"CONFLICT: {p.Later.DisplayName ?? p.Later.Name} drops {string.Join(", ", p.LostFromEarlier)}",
+        _ when col.ResolvedByPatch => "RESOLVED by the Ostrasort Patch (field merge)",
+        _ when col.FfuMergedAtLoad => "merged by FFU at load - nothing lost",
+        _ when col.AdditiveAtLoad => "merged entry-by-entry at load - nothing lost",
+        _ when col.ObjectMergeable => "mergeable field-by-field - resolvable with the Ostrasort Patch",
+        _ when col.NothingLost => "nothing lost (identical versions, or the last-loaded includes every change)",
+        _ => "last loaded replaces the object entirely",
+    };
 }

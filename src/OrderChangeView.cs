@@ -73,10 +73,13 @@ public static class OrderChangeView
         var b = raw.Split('|')[0];   // strip |edit / |disabled markers
         var suffix = raw.Contains("|disabled", StringComparison.Ordinal) ? " (disabled)" : "";
 
-        if (b.Length > 2 && b[1] == ':')   // absolute path -> workshop item
+        if (b.Length > 2 && b[1] == ':')   // absolute path: workshop item OR a plugins-dir data mod
         {
-            var id = Path.GetFileName(b.TrimEnd('\\', '/'));
-            var m = a.AllMods.FirstOrDefault(x => x.Kind == EntryKind.Workshop && x.Name == id);
+            var trimmed = b.TrimEnd('\\', '/');
+            var id = Path.GetFileName(trimmed);
+            var m = a.AllMods.FirstOrDefault(x => x.Kind is EntryKind.Workshop or EntryKind.PluginDir
+                        && x.Dir is not null && string.Equals(x.Dir.TrimEnd('\\', '/'), trimmed, StringComparison.OrdinalIgnoreCase))
+                ?? a.AllMods.FirstOrDefault(x => x.Kind == EntryKind.Workshop && x.Name == id);
             return (m?.DisplayName is { Length: > 0 } d ? d : id) + suffix;
         }
         var lm = a.AllMods.FirstOrDefault(x => x.Kind == EntryKind.Local &&
