@@ -6,8 +6,7 @@ A load-order and conflict manager for **Ostranauts** (Blue Bottle Games).
 Run it before you launch the game — it reads your whole mod setup, gets it into
 a working state, and keeps it that way.
 
-<img width="2556" height="1376" alt="1" src="https://github.com/user-attachments/assets/d3b4cd05-e7f6-4087-acf8-2ab7e0febe06" />
-
+<img width="2560" height="1380" alt="Screenshot 2026-07-19 162715" src="https://github.com/user-attachments/assets/9659e490-5edf-4222-889e-dcb324fa96fe" />
 
 Two jobs are the heart of it:
 
