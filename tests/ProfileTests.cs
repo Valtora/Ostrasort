@@ -72,6 +72,30 @@ public class ProfileTests : IDisposable
     }
 
     [Fact]
+    public void Store_TwoNamesSanitizingToTheSameFilename_BothSurvive()
+    {
+        // "a:b" and "a?b" both sanitize to "a_b.json" - saving the second must
+        // not silently destroy the first
+        ProfileStore.Save(Lo, Named("a:b", "core", "ModA|edit"));
+        ProfileStore.Save(Lo, Named("a?b", "core", "ModB|edit"));
+
+        Assert.True(ProfileStore.Exists(Lo, "a:b"));
+        Assert.True(ProfileStore.Exists(Lo, "a?b"));
+        Assert.Equal(new[] { "core", "ModA|edit" }, ProfileStore.Load(Lo, "a:b")!.Raws);
+        Assert.Equal(new[] { "core", "ModB|edit" }, ProfileStore.Load(Lo, "a?b")!.Raws);
+    }
+
+    [Fact]
+    public void Store_CaseOnlyRename_Works()
+    {
+        ProfileStore.Save(Lo, Named("ffu", "core", "ModA|edit"));
+        ProfileStore.Rename(Lo, "ffu", "FFU");
+        var loaded = ProfileStore.Load(Lo, "FFU")!;
+        Assert.Equal("FFU", loaded.Name);
+        Assert.Single(ProfileStore.List(Lo));
+    }
+
+    [Fact]
     public void Store_IsPerInstall()
     {
         ProfileStore.Save(Lo, Named("A", "core", "ModA|edit"));

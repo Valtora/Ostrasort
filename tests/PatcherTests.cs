@@ -246,6 +246,22 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void UndoRestore_RefusesForeignPatchFolder_WithoutTouchingTheLoadOrder()
+    {
+        var snap = UndoOps.Capture(_env, "test");
+        // now corrupt the world: a foreign folder squats on the patch name and
+        // the load order changes
+        Directory.CreateDirectory(Path.Combine(_env.ModsDir, Patcher.FolderName));
+        File.WriteAllText(_env.LoadingOrderPath,
+            """[{"strName":"Mod Loading Order","aLoadOrder":["core","ModA"]}]""");
+        var before = File.ReadAllText(_env.LoadingOrderPath);
+
+        // validation must run BEFORE any write - a refusal leaves the order file untouched
+        Assert.Throws<InvalidOperationException>(() => UndoOps.Restore(_env, snap));
+        Assert.Equal(before, File.ReadAllText(_env.LoadingOrderPath));
+    }
+
+    [Fact]
     public void Remove_RefusesAFolderItDidNotGenerate()
     {
         // a folder named like the patch but WITHOUT the marker must not be deleted

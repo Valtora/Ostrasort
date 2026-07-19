@@ -62,11 +62,23 @@ public static class SingleInstance
             var i = WaitHandle.WaitAny(handles);
             switch (i)
             {
-                case 0: OnActivate?.Invoke(); break;
-                case 1: OnShutdown?.Invoke(); return;   // shutting down - stop listening
+                case 0: WaitForHandler(() => OnActivate)?.Invoke(); break;
+                case 1: WaitForHandler(() => OnShutdown)?.Invoke(); return;   // shutting down - stop listening
                 default: return;                        // _stop (Release)
             }
         }
+    }
+
+    /// <summary>
+    /// A second launch can signal in the milliseconds between TryAcquire (in
+    /// GuiHost, before the window exists) and MainWindow assigning the handler -
+    /// wait briefly for it instead of dropping the signal into a null delegate,
+    /// which would leave the second launch exited and the first un-focused.
+    /// </summary>
+    private static Action? WaitForHandler(Func<Action?> get)
+    {
+        for (var i = 0; i < 100 && get() is null; i++) Thread.Sleep(50);
+        return get();
     }
 
     /// <summary>Ask an already-running primary to come to front. No-op if none is running.</summary>

@@ -16,7 +16,13 @@ public partial class PromptDialog : Window
         Loaded += (_, _) => TxtInput.Focus();
     }
 
-    private void Ok_Click(object sender, RoutedEventArgs e) => DialogResult = true;
+    private void Ok_Click(object sender, RoutedEventArgs e)
+    {
+        // an empty name would read as Cancel to the caller - keep the dialog
+        // open instead of silently doing nothing
+        if (Value.Length == 0) { TxtInput.Focus(); return; }
+        DialogResult = true;
+    }
 
     public static string? Ask(Window owner, string prompt, string initial = "")
     {

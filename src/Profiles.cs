@@ -98,13 +98,20 @@ public static class ProfileStore
     {
         var dir = DirFor(loPath);
         Directory.CreateDirectory(dir);
-        var target = PathForName(dir, profile.Name);
 
-        // keep one file per name: if a differently-cased/sanitized file already
-        // holds this name, drop it so the name never ends up duplicated
-        var existing = FindFile(loPath, profile.Name);
-        if (existing is not null && !string.Equals(existing, target, StringComparison.OrdinalIgnoreCase))
-            try { File.Delete(existing); } catch { }
+        // one file per (case-insensitive) name: reuse the file that already
+        // holds this name; otherwise never clobber a file holding a DIFFERENT
+        // profile whose name merely sanitizes to the same filename
+        // ("a:b" and "a?b" both sanitize to "a_b")
+        var target = FindFile(loPath, profile.Name);
+        if (target is null)
+        {
+            target = PathForName(dir, profile.Name);
+            var n = 1;
+            while (File.Exists(target) &&
+                   !string.Equals(TryRead(target)?.Name, profile.Name, StringComparison.OrdinalIgnoreCase))
+                target = Path.Combine(dir, SafeName(profile.Name) + "-" + (++n) + ".json");
+        }
 
         var node = new JsonObject
         {
@@ -118,7 +125,9 @@ public static class ProfileStore
                 ["displayName"] = e.DisplayName,
             }).ToArray()),
         };
-        File.WriteAllText(target, node.ToJsonString(Indented) + "\n");
+        // atomic: a crash mid-write must not corrupt the profile (TryRead would
+        // then silently drop it from every listing)
+        AtomicFile.WriteAllText(target, node.ToJsonString(Indented) + "\n");
     }
 
     public static void Delete(string loPath, string name)

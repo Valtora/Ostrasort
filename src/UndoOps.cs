@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 
 namespace Ostrasort;
 
@@ -31,23 +30,17 @@ public static class UndoOps
     /// <summary>Puts the install back exactly as the snapshot recorded it.</summary>
     public static void Restore(GameEnv env, OpSnapshot snap)
     {
-        // same paranoia as every other loading_order write
-        if (!snap.LoadingOrderText.TrimStart().StartsWith('['))
-            throw new InvalidOperationException("refusing to restore: the snapshot is not a top-level JSON array.");
-        using (var doc = JsonDocument.Parse(snap.LoadingOrderText)) { }   // strict parse or throw
-
-        if (File.Exists(env.LoadingOrderPath))
-            Backups.Snapshot(env.LoadingOrderPath, File.ReadAllText(env.LoadingOrderPath));
-        AtomicFile.WriteAllText(env.LoadingOrderPath, snap.LoadingOrderText);
+        // EVERY validation runs before ANY write, so a refusal leaves the
+        // install untouched instead of half-restored.
+        var parsed = LoadOrderFile.Parse(env.LoadingOrderPath, snap.LoadingOrderText);
 
         var dir = Path.Combine(env.ModsDir, Patcher.FolderName);
+        if (Directory.Exists(dir) && !File.Exists(Path.Combine(dir, Patcher.MarkerFile)))
+            throw new InvalidOperationException(
+                $"'{dir}' has no {Patcher.MarkerFile} - refusing to touch a folder Ostrasort did not generate.");
+
         if (Directory.Exists(dir))
-        {
-            if (!File.Exists(Path.Combine(dir, Patcher.MarkerFile)))
-                throw new InvalidOperationException(
-                    $"'{dir}' has no {Patcher.MarkerFile} - refusing to touch a folder Ostrasort did not generate.");
             Directory.Delete(dir, recursive: true);
-        }
         if (snap.PatchFiles is { } files)
             foreach (var (rel, bytes) in files)
             {
@@ -55,5 +48,12 @@ public static class UndoOps
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.WriteAllBytes(path, bytes);
             }
+
+        // route through Write so a restore gets the same guarantees as any
+        // other order change: the cross-process write lock, a .bak + rolling
+        // backup of what is on disk right now, path-case canonicalisation and
+        // dedupe (an old snapshot may predate a canonicalisation fix), and an
+        // atomic replace
+        parsed.Write(parsed.Order);
     }
 }

@@ -109,6 +109,10 @@ public partial class MainWindow : Window
         catch (Exception e)
         {
             MessageBox.Show(this, e.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            // everything on screen is now the PREVIOUS scan - say so instead of
+            // letting a stale table masquerade as current
+            RunStatus.Text = "Scan FAILED — showing the last successful scan. Fix the problem, then Rescan.  ";
+            RunStatus.Foreground = Bad;
         }
         finally
         {
@@ -202,7 +206,10 @@ public partial class MainWindow : Window
     private void RenderFfuBanner(EngineState s)
     {
         var ctx = s.Analysis.Ffu;
-        if (ctx is null || _ffuBannerDismissed)
+        // dismissal silences only the informational banner - the alarm state
+        // (writes disabled) must always be able to reappear, or its "Disable
+        // OstraAutoloader" escape hatch is unreachable for the session
+        if (ctx is null || (_ffuBannerDismissed && !ctx.AutoloaderActive))
         {
             FfuBanner.Visibility = Visibility.Collapsed;
             return;
@@ -482,7 +489,7 @@ public partial class MainWindow : Window
     private void CopyLog_Click(object sender, RoutedEventArgs e)
     {
         if (ListLogs.ItemsSource is IEnumerable<LineVm> vms)
-            Clipboard.SetText(string.Join(Environment.NewLine, vms.Select(v => v.Text)));
+            TrySetClipboard(string.Join(Environment.NewLine, vms.Select(v => v.Text)));
     }
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
@@ -631,7 +638,7 @@ public partial class MainWindow : Window
     private void ModsGrid_PreviewMouseMove(object sender, MouseEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed || _dragRow is null) return;
-        if (!string.IsNullOrEmpty(TxtFilter.Text)) return;            // no reordering a filtered view
+        if (!string.IsNullOrWhiteSpace(TxtFilter.Text)) return;       // no reordering a filtered view (ApplyFilter trims too)
         if (!_dragRow.Draggable) return;
         var delta = e.GetPosition(null) - _dragStart;
         if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance &&
@@ -675,10 +682,19 @@ public partial class MainWindow : Window
 
     private void ApplyArrangement(List<string> raws)
     {
-        var byRaw = _rows.Where(r => r.M.Registered).ToDictionary(r => r.M.Raw, r => r);
+        // aLoadOrder can carry duplicate entries (the game re-appends
+        // subscriptions; Analysis keeps the first and warns) - consume matching
+        // rows in sequence instead of keying a dictionary, which throws on them
+        var pool = _rows.Where(r => r.M.Registered)
+            .GroupBy(r => r.M.Raw, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => new Queue<ModRow>(g), StringComparer.Ordinal);
         var unregistered = _rows.Where(r => !r.M.Registered).ToList();
+        var arranged = new List<ModRow>();
+        foreach (var raw in raws)
+            if (pool.TryGetValue(raw, out var q) && q.Count > 0) arranged.Add(q.Dequeue());
+        arranged.AddRange(pool.Values.SelectMany(q => q));   // never drop a row the snapshot missed
         _rows = new System.Collections.ObjectModel.ObservableCollection<ModRow>(
-            raws.Where(byRaw.ContainsKey).Select(r => byRaw[r]).Concat(unregistered));
+            arranged.Concat(unregistered));
         ModsGrid.ItemsSource = _rows;
         ApplyFilter();
         Renumber();
@@ -710,6 +726,22 @@ public partial class MainWindow : Window
         MessageBox.Show(this, "Ostranauts is running — close it first. Nothing was written.",
             "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
         Rescan();
+        return false;
+    }
+
+    /// <summary>
+    /// Blocks writes while OstraAutoloader owns the load order. The action-bar
+    /// buttons are disabled in that state, but keyboard shortcuts, double-clicks
+    /// and context menus reach their handlers directly - every write path must
+    /// gate here itself, not trust the buttons.
+    /// </summary>
+    private bool GateRival()
+    {
+        if (_state?.Analysis.Ffu is not { AutoloaderActive: true }) return true;
+        MessageBox.Show(this,
+            "OstraAutoloader manages this install — it regenerates loading_order.json on every launch, " +
+            "so Ostrasort is analysis-only here (see the banner). Nothing was written.",
+            "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
         return false;
     }
 
@@ -761,13 +793,19 @@ public partial class MainWindow : Window
             ApplyArrangement(_arrUndo.Pop());
             return;
         }
-        if (_undo.Count == 0 || !GateRunning()) return;
+        // GateRival too: Ctrl+Z reaches here even while the buttons are disabled
+        if (_undo.Count == 0 || !GateRunning() || !GateRival()) return;
         _busy = true;
         try
         {
-            var snap = _undo.Pop();
-            _redo.Push(UndoOps.Capture(_env, snap.Label));
+            // peek, restore, THEN pop - a failed restore must keep the snapshot
+            // so the next Ctrl+Z retries it instead of silently undoing the
+            // operation before it
+            var snap = _undo.Peek();
+            var back = UndoOps.Capture(_env, snap.Label);
             UndoOps.Restore(_env, snap);
+            _undo.Pop();
+            _redo.Push(back);
             OpLog.Add($"Undid: {snap.Label}.");
             Rescan();
             RunStatus.Text = $"Undid: {snap.Label}.  ";
@@ -788,13 +826,15 @@ public partial class MainWindow : Window
             ApplyArrangement(_arrRedo.Pop());
             return;
         }
-        if (_redo.Count == 0 || !GateRunning()) return;
+        if (_redo.Count == 0 || !GateRunning() || !GateRival()) return;
         _busy = true;
         try
         {
-            var snap = _redo.Pop();
-            _undo.Push(UndoOps.Capture(_env, snap.Label));
+            var snap = _redo.Peek();
+            var back = UndoOps.Capture(_env, snap.Label);
             UndoOps.Restore(_env, snap);
+            _redo.Pop();
+            _undo.Push(back);
             OpLog.Add($"Redid: {snap.Label}.");
             Rescan();
             RunStatus.Text = $"Redid: {snap.Label}.  ";
@@ -856,7 +896,7 @@ public partial class MainWindow : Window
 
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || !GateRunning() || !ConfirmLoadOrderCurrent()) return;
+        if (_state is null || !GateRunning() || !GateRival() || !ConfirmLoadOrderCurrent()) return;
         _busy = true;
         try
         {
@@ -911,7 +951,7 @@ public partial class MainWindow : Window
 
     private void GeneratePatch(bool fresh)
     {
-        if (_state is null || !GateRunning()) return;
+        if (_state is null || !GateRunning() || !GateRival()) return;
         _busy = true;
         try
         {
@@ -957,7 +997,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void RemovePatch()
     {
-        if (_state is null || !GateRunning()) return;
+        if (_state is null || !GateRunning() || !GateRival()) return;
         if (MessageBox.Show(this, "Remove the generated Ostrasort Patch (folder + load-order entry)?\n\n" +
                 "It is safe to remove - regenerate it any time with “Resolve conflicts & generate patch”.",
                 "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
@@ -1027,7 +1067,7 @@ public partial class MainWindow : Window
 
     private void RestoreSwapBak()
     {
-        if (!GateRunning()) return;
+        if (!GateRunning() || !GateRival()) return;
         var live = _env.LoadingOrderPath;
         var bak = live + ".bak";
         if (!File.Exists(bak)) return;
@@ -1063,7 +1103,7 @@ public partial class MainWindow : Window
 
     private void RestoreFromBackup(string backupPath)
     {
-        if (!GateRunning()) return;
+        if (!GateRunning() || !GateRival()) return;
         _busy = true;
         try
         {
@@ -1224,10 +1264,22 @@ public partial class MainWindow : Window
 
     // ------------------------------------------------------- report export ---
 
+    /// <summary>Clipboard access can fail (another app holds it locked) - warn instead of crashing.</summary>
+    private bool TrySetClipboard(string text)
+    {
+        try { Clipboard.SetText(text); return true; }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "Could not access the clipboard: " + ex.Message,
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+    }
+
     private void CopyReport_Click(object sender, RoutedEventArgs e)
     {
         if (_state is null) return;
-        Clipboard.SetText(MarkdownReport.Build(_env, _state, Program.Version));
+        if (!TrySetClipboard(MarkdownReport.Build(_env, _state, Program.Version))) return;
         RunStatus.Text = "Report copied to the clipboard as Markdown.  ";
         RunStatus.Foreground = Good;
     }
@@ -1241,7 +1293,12 @@ public partial class MainWindow : Window
             Filter = "Markdown (*.md)|*.md|All files (*.*)|*.*",
         };
         if (dlg.ShowDialog(this) != true) return;
-        File.WriteAllText(dlg.FileName, MarkdownReport.Build(_env, _state, Program.Version));
+        try { File.WriteAllText(dlg.FileName, MarkdownReport.Build(_env, _state, Program.Version)); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "Could not save the report: " + ex.Message,
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     // ---------------------------------------------------------- context menu ---
@@ -1306,7 +1363,7 @@ public partial class MainWindow : Window
     /// <summary>Adds/removes the game's own |disabled marker on the selected entry (guarded write, undoable).</summary>
     private void ToggleDisabled(bool disable)
     {
-        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning()) return;
+        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning() || !GateRival()) return;
         var m = row.M;
         var name = m.DisplayName ?? m.Name;
         _busy = true;
@@ -1335,7 +1392,7 @@ public partial class MainWindow : Window
     /// <summary>Registers the selected unregistered mod into loading_order.json in its suggested slot (guarded write, undoable).</summary>
     private void MenuRegister_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning()) return;
+        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning() || !GateRival()) return;
         var m = row.M;
         var name = m.DisplayName ?? m.Name;
         _busy = true;
@@ -1366,7 +1423,7 @@ public partial class MainWindow : Window
     /// <summary>Park a local/plugins-dir mod as *.disabled or delete it, and drop its load-order entry.</summary>
     private void MenuDeleteMod_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning()) return;
+        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning() || !GateRival()) return;
         var m = row.M;
         // the generated patch is Ostrasort's own - it has no park option and its
         // own guarded removal (validates the marker, drops the entry, regenerable)
@@ -1447,12 +1504,12 @@ public partial class MainWindow : Window
 
     private void MenuCopyName_Click(object sender, RoutedEventArgs e)
     {
-        if (ModsGrid.SelectedItem is ModRow row) Clipboard.SetText(row.Name);
+        if (ModsGrid.SelectedItem is ModRow row) TrySetClipboard(row.Name);
     }
 
     private void MenuCopyId_Click(object sender, RoutedEventArgs e)
     {
-        if (ModsGrid.SelectedItem is ModRow { M.WorkshopId: { } id }) Clipboard.SetText(id);
+        if (ModsGrid.SelectedItem is ModRow { M.WorkshopId: { } id }) TrySetClipboard(id);
     }
 
     // --------------------------------------------------------------- profiles ---
@@ -1533,12 +1590,17 @@ public partial class MainWindow : Window
 
     private void ProfileSwitch_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || ListProfiles.SelectedItem is not ProfileRow row || !GateRunning() || !ConfirmLoadOrderCurrent()) return;
-        var dlg = new ProfileSwitchDialog(_env, _state.Analysis, row.Profile) { Owner = this };
-        if (dlg.ShowDialog() != true || dlg.Result is not { } plan) return;
+        if (_state is null || ListProfiles.SelectedItem is not ProfileRow row || !GateRunning() || !GateRival()) return;
+        // _busy BEFORE the modal: the activation rescan firing behind an open
+        // dialog would refresh _state to match the disk and let the stale-file
+        // guard below pass on a plan computed from the pre-dialog analysis
         _busy = true;
         try
         {
+            var dlg = new ProfileSwitchDialog(_env, _state.Analysis, row.Profile) { Owner = this };
+            if (dlg.ShowDialog() != true || dlg.Result is not { } plan) return;
+            // check AFTER the modal - the file may have changed while it was open
+            if (!ConfirmLoadOrderCurrent()) return;
             CaptureOp($"switch to profile '{row.Name}'");
             LoadOrderFile.Read(_env.LoadingOrderPath).Write(plan.NewOrder);
             OpLog.Add($"Switched to profile '{row.Name}' ({plan.Mode.ToString().ToLowerInvariant()}, {plan.NewOrder.Count} entries).");
@@ -1560,7 +1622,10 @@ public partial class MainWindow : Window
         if (ListProfiles.SelectedItem is not ProfileRow row) return;
         var name = PromptDialog.Ask(this, "New name for this profile:", row.Name);
         if (name is null || string.Equals(name, row.Name, StringComparison.Ordinal)) return;
-        if (ProfileStore.Exists(_env.LoadingOrderPath, name))
+        // a case-only rename ("ffu" -> "FFU") matches itself in the
+        // case-insensitive Exists check - that is not a clash
+        var caseOnly = string.Equals(name, row.Name, StringComparison.OrdinalIgnoreCase);
+        if (!caseOnly && ProfileStore.Exists(_env.LoadingOrderPath, name))
         {
             MessageBox.Show(this, $"A profile named “{name}” already exists.", "Ostrasort",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -1663,6 +1728,7 @@ public partial class MainWindow : Window
 
     private const string ReleasesUrl = "https://github.com/Valtora/Ostrasort/releases";
     private string _updateUrl = ReleasesUrl;
+    private bool _updateCheckBusy;   // rapid manual clicks must not stack result dialogs
 
     private void CheckUpdate_Click(object sender, RoutedEventArgs e) => _ = CheckForUpdateAsync(manual: true);
 
@@ -1677,6 +1743,14 @@ public partial class MainWindow : Window
     /// The manual run additionally reports when you are already up to date.
     /// </summary>
     private async Task CheckForUpdateAsync(bool manual = false)
+    {
+        if (_updateCheckBusy) return;
+        _updateCheckBusy = true;
+        try { await CheckForUpdateCoreAsync(manual); }
+        finally { _updateCheckBusy = false; }
+    }
+
+    private async Task CheckForUpdateCoreAsync(bool manual)
     {
         string tag, latestUrl;
         try
@@ -1704,25 +1778,37 @@ public partial class MainWindow : Window
 
         await Dispatcher.InvokeAsync(() =>
         {
-            if (Updater.Parse(tag) > Updater.Parse(Program.Version))
+            // this continuation runs on a fire-and-forget task: an escaped
+            // exception (e.g. no browser handler for Process.Start) would fault
+            // it silently, so catch and surface it here
+            try
             {
-                _updateUrl = latestUrl;
-                BtnUpdate.Content = $"⬆  Update available: {tag}";
-                BtnUpdate.Visibility = Visibility.Visible;
-                OpLog.Add($"A newer release is available: {tag} (you are on v{Program.Version}).");
-                // A newer release always raises the modal (every launch), not only on the manual
-                // check - the toolbar button stays as the persistent affordance after "Not Now".
-                // "Download Latest Version" opens the release page.
-                if (UpdateDialog.Show(this, "Update available",
-                        $"{tag} is available to download.\nYou're on v{Program.Version}."))
-                    Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
+                if (Updater.Parse(tag) > Updater.Parse(Program.Version))
+                {
+                    _updateUrl = latestUrl;
+                    BtnUpdate.Content = $"⬆  Update available: {tag}";
+                    BtnUpdate.Visibility = Visibility.Visible;
+                    OpLog.Add($"A newer release is available: {tag} (you are on v{Program.Version}).");
+                    // A newer release always raises the modal (every launch), not only on the manual
+                    // check - the toolbar button stays as the persistent affordance after "Not Now".
+                    // "Download Latest Version" opens the release page.
+                    if (UpdateDialog.Show(this, "Update available",
+                            $"{tag} is available to download.\nYou're on v{Program.Version}."))
+                        Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
+                }
+                else
+                {
+                    OpLog.Add($"Update check: up to date (v{Program.Version}; latest release is {tag}).");
+                    if (manual)
+                        MessageBox.Show(this, $"You're on the latest version (v{Program.Version}).",
+                            "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                OpLog.Add($"Update check: up to date (v{Program.Version}; latest release is {tag}).");
+                OpLog.Add($"Update check UI failed: {ex.Message}");
                 if (manual)
-                    MessageBox.Show(this, $"You're on the latest version (v{Program.Version}).",
-                        "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         });
     }
@@ -1896,6 +1982,7 @@ public partial class MainWindow : Window
         if (toFetch.Count == 0) return;
 
         _wsCts?.Cancel();
+        _wsCts?.Dispose();
         var cts = new System.Threading.CancellationTokenSource();
         _wsCts = cts;
 
@@ -1903,6 +1990,10 @@ public partial class MainWindow : Window
         try
         {
             fetched = await FetchWorkshopUpdateTimesAsync(toFetch, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;   // a rescan superseded this fetch - not a failure worth logging
         }
         catch (Exception ex)
         {

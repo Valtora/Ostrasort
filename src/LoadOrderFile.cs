@@ -33,8 +33,15 @@ public sealed class LoadOrderFile
         if (!File.Exists(path))
             throw new FileNotFoundException(
                 $"loading_order.json not found at '{path}'. Launch the game once so it generates one.", path);
+        return Parse(path, File.ReadAllText(path));
+    }
 
-        var raw = File.ReadAllText(path);
+    /// <summary>
+    /// Parses raw loading_order.json text (the same validation Read applies).
+    /// Lets a restore path route snapshot TEXT through Write's full ritual.
+    /// </summary>
+    public static LoadOrderFile Parse(string path, string raw)
+    {
         if (!raw.TrimStart().StartsWith('['))
             throw new InvalidDataException(
                 "loading_order.json is NOT a top-level JSON array - the game may already have " +
@@ -103,8 +110,16 @@ public sealed class LoadOrderFile
                     $"Round-trip check failed: {count} entries serialized, expected {newOrder.Count}.");
         }
 
-        File.WriteAllText(Path + ".bak", RawText);   // original text, before this write
-        Backups.Snapshot(Path, RawText);             // rolling history (the .bak only survives one write)
+        // back up what is on disk NOW, not the text captured at Read: if another
+        // process wrote between our Read and this Write (Read happens outside
+        // the lock), the intermediate version must survive in the backups even
+        // though this write replaces it
+        var previous = RawText;
+        try { if (File.Exists(Path)) previous = File.ReadAllText(Path); }
+        catch (IOException) { } catch (UnauthorizedAccessException) { }
+
+        File.WriteAllText(Path + ".bak", previous);  // the text this write replaces
+        Backups.Snapshot(Path, previous);            // rolling history (the .bak only survives one write)
         AtomicFile.WriteAllText(Path, json);         // never leave a truncated live file
     }
 

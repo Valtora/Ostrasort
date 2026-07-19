@@ -170,17 +170,59 @@ public static class ModInstall
             if (!chosenSet.Contains(c)) continue;
             if (c.Exists && !overwrite) { skipped.Add(c); continue; }
 
-            if (c.Kind == ComponentKind.LocalMod && c.Exists && overwrite && Directory.Exists(c.TargetDir))
-                FileSystemUtil.RobustDeleteDirectory(c.TargetDir);   // clean replace, not a merge
-
-            ExtractComponent(zip, c);
+            if (c.Kind == ComponentKind.LocalMod) InstallLocalMod(zip, c);
+            else ExtractComponent(zip, c, c.TargetDir);   // BepInEx bundle: merge over the game tree
             installed.Add(c);
         }
 
         return new Result(installed, skipped, warnings);
     }
 
-    private static void ExtractComponent(ZipArchive zip, Component c)
+    /// <summary>
+    /// Transactional local-mod install: extract into a staging sibling first,
+    /// then swap it in. A failed extraction (disk full, locked file, zip
+    /// truncated after Inspect) can never destroy an existing install, and a
+    /// failed FIRST install leaves no half-written folder behind that a retry
+    /// would misread as "already installed".
+    /// </summary>
+    private static void InstallLocalMod(ZipArchive zip, Component c)
+    {
+        var staging = c.TargetDir + ".ostrasort-tmp";
+        var backup = c.TargetDir + ".ostrasort-old";
+        if (Directory.Exists(staging)) FileSystemUtil.RobustDeleteDirectory(staging);
+        try
+        {
+            ExtractComponent(zip, c, staging);
+        }
+        catch
+        {
+            try { if (Directory.Exists(staging)) FileSystemUtil.RobustDeleteDirectory(staging); }
+            catch { /* best-effort cleanup - the real error is more useful */ }
+            throw;
+        }
+
+        if (Directory.Exists(backup)) FileSystemUtil.RobustDeleteDirectory(backup);
+        var hadExisting = Directory.Exists(c.TargetDir);
+        if (hadExisting) Directory.Move(c.TargetDir, backup);
+        try
+        {
+            Directory.Move(staging, c.TargetDir);
+        }
+        catch
+        {
+            // put the original back so a failed swap changes nothing
+            try { if (hadExisting && !Directory.Exists(c.TargetDir)) Directory.Move(backup, c.TargetDir); }
+            catch { /* the backup folder still holds the original */ }
+            throw;
+        }
+        if (hadExisting)
+        {
+            try { FileSystemUtil.RobustDeleteDirectory(backup); }
+            catch { /* stale backup folder is cosmetic; the install itself succeeded */ }
+        }
+    }
+
+    private static void ExtractComponent(ZipArchive zip, Component c, string targetDir)
     {
         foreach (var entry in zip.Entries)
         {
@@ -195,7 +237,7 @@ public static class ModInstall
             // (handled by the sibling bundle component), not inside Mods\<Name>\
             if (c.Kind == ComponentKind.LocalMod && rel.StartsWith("BepInEx/", StringComparison.OrdinalIgnoreCase)) continue;
 
-            var dest = SafeCombine(c.TargetDir, rel);
+            var dest = SafeCombine(targetDir, rel);
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             entry.ExtractToFile(dest, overwrite: true);
         }
@@ -229,12 +271,13 @@ public static class ModInstall
                 dir.Equals(r, StringComparison.OrdinalIgnoreCase) ||
                 dir.StartsWith(r + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
             if (!underInstall) continue;
-            try
-            {
-                var r = ModRegistration.Register(env, m, state.Analysis);
-                if (!r.AlreadyRegistered) registered.Add(r.Entry);
-            }
-            catch (InvalidOperationException) { /* not a registerable kind (core/patch) - skip */ }
+            // pre-check the unregisterable kinds instead of catching Register's
+            // InvalidOperationException: that catch also swallowed real
+            // loading_order.json write refusals, silently leaving the mod
+            // installed-but-invisible with a success exit code
+            if (m.Kind == EntryKind.Core || m.IsPatch) continue;
+            var r = ModRegistration.Register(env, m, state.Analysis);
+            if (!r.AlreadyRegistered) registered.Add(r.Entry);
         }
         return registered;
     }
