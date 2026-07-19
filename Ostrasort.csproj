@@ -8,7 +8,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <AssemblyName>Ostrasort</AssemblyName>
     <RootNamespace>Ostrasort</RootNamespace>
-    <Version>0.22.0</Version>
+    <Version>0.23.0</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>app.ico</ApplicationIcon>
@@ -26,6 +26,12 @@
   <ItemGroup>
     <Resource Include="app.ico" />
     <Resource Include="Ostrasort-logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Installer + in-app auto-update framework (Setup.exe, portable, GitHub-hosted
+         delta updates). Velopack owns install/shortcuts/update; see VeloUpdate.cs. -->
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 
 </Project>

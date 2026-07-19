@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Ostrasort" Height="760" Width="1120" MinHeight="560" MinWidth="860"
         Icon="/app.ico" WindowStartupLocation="CenterScreen"
-        Activated="Window_Activated" Closing="Window_Closing" ContentRendered="Window_ContentRendered"
+        Activated="Window_Activated" Closing="Window_Closing"
         PreviewKeyDown="Window_PreviewKeyDown"
         AllowDrop="True" PreviewDragOver="Window_DragOver" PreviewDrop="Window_Drop">
     <Window.Resources>
@@ -64,15 +64,12 @@
                         BorderBrush="{DynamicResource UpdateBtnBorderBrush}"
                         Foreground="{DynamicResource UpdateBtnFgBrush}"
                         Click="Update_Click"
-                        ToolTip="A newer Ostrasort release is available on GitHub — click to open the Releases page and download it."/>
+                        ToolTip="A newer Ostrasort release has been downloaded. Click to restart and finish updating."/>
                 <TextBlock HorizontalAlignment="Right" Margin="0,5,0,0" FontSize="11">
                     <Hyperlink Click="CheckUpdate_Click" ToolTip="Check GitHub for a newer release now and report the result.">Check for updates</Hyperlink>
                 </TextBlock>
                 <TextBlock HorizontalAlignment="Right" Margin="0,3,0,0" FontSize="11">
                     <Hyperlink Click="ReportBug_Click" ToolTip="Open a pre-filled bug report on GitHub in your browser.">Report a bug</Hyperlink>
-                </TextBlock>
-                <TextBlock x:Name="TxtInstallLink" HorizontalAlignment="Right" Margin="0,3,0,0" FontSize="11">
-                    <Hyperlink Click="Install_Click" ToolTip="Copy Ostrasort.exe to a fixed per-user folder (%LOCALAPPDATA%\Programs\Ostrasort) and create Desktop / Start Menu shortcuts.">Install / shortcuts</Hyperlink>
                 </TextBlock>
             </StackPanel>
             <StackPanel Orientation="Vertical">

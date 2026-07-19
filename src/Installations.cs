@@ -35,9 +35,7 @@ public sealed class InstallationStore
     public string? Active { get; set; }
     public List<Installation> Items { get; set; } = new();
 
-    private static string PathFor() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Ostrasort", "installations.json");
+    private static string PathFor() => AppPaths.File("installations.json");
 
     public static InstallationStore Load()
     {

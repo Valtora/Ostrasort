@@ -25,8 +25,7 @@ public static class CoreIndexCache
     public sealed record LootRef(string Pool, string Friendly);
     public sealed record Snapshot(List<Entry> Entries, int ProblemFiles, List<LootRef> LootRefs);
 
-    private static string Dir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Ostrasort");
+    private static string Dir => AppPaths.DataDir;
 
     private static string PathFor(string coreDataDir)
     {

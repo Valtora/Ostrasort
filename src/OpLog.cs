@@ -14,8 +14,7 @@ public static class OpLog
     private static readonly List<string> Mem = new();
     private static bool _loaded;
 
-    private static string Dir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Ostrasort");
+    private static string Dir => AppPaths.DataDir;
     private static string LogPath => Path.Combine(Dir, "ostrasort.log");
 
     /// <summary>Records one operation with a timestamp (in-memory + on disk).</summary>

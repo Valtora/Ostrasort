@@ -16,9 +16,7 @@ public sealed class IgnoreList
     private readonly string _path;
     private readonly HashSet<string> _keys = new(StringComparer.OrdinalIgnoreCase);
 
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Ostrasort", "ignored.json");
+    public static string DefaultPath => AppPaths.File("ignored.json");
 
     public IgnoreList(string path)
     {

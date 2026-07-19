@@ -15,9 +15,7 @@ public static class Backups
 {
     public const int Keep = 3;
 
-    private static string DirFor(string loPath) => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Ostrasort", "backups",
+    private static string DirFor(string loPath) => AppPaths.File("backups",
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(loPath.ToLowerInvariant())))[..12]);
 
     /// <summary>Stores the text being replaced; prunes to the newest <see cref="Keep"/>.</summary>

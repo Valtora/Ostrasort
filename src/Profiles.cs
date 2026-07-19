@@ -68,9 +68,7 @@ public static class ProfileStore
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
     /// <summary>The profiles folder for a given loading_order.json (public so tests can clean up).</summary>
-    public static string DirFor(string loPath) => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Ostrasort", "profiles",
+    public static string DirFor(string loPath) => AppPaths.File("profiles",
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(loPath.ToLowerInvariant())))[..12]);
 
     /// <summary>All saved profiles for this install, sorted by name (unreadable files are skipped).</summary>

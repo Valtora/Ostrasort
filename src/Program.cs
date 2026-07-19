@@ -25,6 +25,12 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // MUST be the first thing that runs: handles Velopack's install / update /
+        // uninstall hooks (passed as special args) and exits for those; for a
+        // normal launch it returns immediately and we carry on. Safe for the
+        // headless/CLI paths too - it no-ops on ordinary arguments.
+        Velopack.VelopackApp.Build().Run();
+
         AttachConsoleIfLaunchedFromTerminal(args);   // before any Console access
         try { return Run(args); }
         catch (Exception e)
@@ -36,6 +42,8 @@ public static class Program
 
     private static int Run(string[] args)
     {
+        AppPaths.MigrateLegacyData();   // one-time move of pre-0.23 data to roaming AppData (no-op after the first run)
+
         bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false;
         string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null, installZip = null;
         for (var i = 0; i < args.Length; i++)
@@ -214,7 +222,7 @@ public static class Program
                             new[] { @"C:\Mods\Self Test Mod" }),
                     },
                     new[] { "self-test warning" }));
-            _ = new Gui.InstallDialog(alreadyInstalled: false);
+            _ = new Gui.UpdateDialog("self-test", "self-test");
             _ = new Gui.PromptDialog("self-test");
             _ = new Gui.InstallationsDialog(new InstallationStore(), "self-test");
             _ = new Gui.ProfileSwitchDialog(smokeEnv, smokeState.Analysis,

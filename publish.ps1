@@ -1,42 +1,66 @@
-# Builds the end-user release artifact: ONE self-contained Ostrasort.exe
-# (no .NET install needed on the target machine). Output: publish\Ostrasort.exe
+# Builds the end-user release artifacts with Velopack: an installer
+# (Ostrasort-win-Setup.exe), a portable zip (Ostrasort-win-Portable.zip), the
+# update package (*-full.nupkg) and the update manifest (releases.win.json).
+# Output: publish\releases\. Upload the whole folder with `vpk upload github`
+# (see docs\development.md).
+#
+# Close the running app first: it locks its own exe and the publish will fail.
 $ErrorActionPreference = 'Stop'
-$out = Join-Path $PSScriptRoot 'publish'
+$root     = $PSScriptRoot
+$rawDir   = Join-Path $root 'publish\raw'          # plain self-contained publish (what Velopack packs)
+$relDir   = Join-Path $root 'publish\releases'     # the release artifacts
+$csproj   = Join-Path $root 'Ostrasort.csproj'
+$icon     = Join-Path $root 'app.ico'
 
-# IncludeNativeLibrariesForSelfExtract is REQUIRED for WPF: WPF's native DLLs
-# (PresentationNative, wpfgfx, D3DCompiler) cannot be loaded from the bundle
-# in memory, so without this the app dies at first window with a
-# DllNotFoundException deep in HwndSubclass. This flag extracts native libs to
-# a temp folder on first run so LoadLibrary finds them.
-dotnet publish (Join-Path $PSScriptRoot 'Ostrasort.csproj') -c Release -r win-x64 `
+# vpk (the Velopack CLI) is a global dotnet tool. Install it once with:
+#   dotnet tool install -g vpk
+if (-not (Get-Command vpk -ErrorAction SilentlyContinue)) {
+    throw "vpk (the Velopack CLI) is not installed. Run:  dotnet tool install -g vpk"
+}
+
+# 1) Plain self-contained publish to a directory. NOT single-file: Velopack does
+#    its own bundling, and a normal layout keeps the WPF native DLLs
+#    (PresentationNative, wpfgfx, D3DCompiler) beside the exe so they load
+#    without the single-file self-extract dance the old build needed.
+if (Test-Path $rawDir) { Remove-Item $rawDir -Recurse -Force }
+dotnet publish $csproj -c Release -r win-x64 `
     --self-contained true `
-    -p:PublishSingleFile=true `
-    -p:IncludeNativeLibrariesForSelfExtract=true `
-    -p:EnableCompressionInSingleFile=true `
     -p:DebugType=None `
-    -o $out --nologo
+    -o $rawDir --nologo
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
-$exe = Get-Item (Join-Path $out 'Ostrasort.exe')
+$rawExe = Join-Path $rawDir 'Ostrasort.exe'
+if (-not (Test-Path $rawExe)) { throw "Publish did not produce $rawExe." }
 
-# Smoke-test the PUBLISHED single-file exe (not just bin\Release): construct the
-# WPF windows the way a real launch does. This is what catches single-file-only
-# native-load failures that a bin\Release smoke test cannot.
-& $exe.FullName --smoke-gui --no-pause | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "Published exe failed its GUI smoke test (exit $LASTEXITCODE) - single-file WPF is broken, do NOT ship this build." }
+# 2) Smoke-test the PUBLISHED exe (not bin\Release): construct every WPF window
+#    the way a real launch does, so a native-load or theming regression fails the
+#    build here instead of on a user's machine.
+$smoke = Start-Process -FilePath $rawExe -ArgumentList '--smoke-gui','--no-pause' -Wait -PassThru -NoNewWindow
+if ($smoke.ExitCode -ne 0) { throw "Published exe failed its GUI smoke test (exit $($smoke.ExitCode)). Do NOT ship this build." }
 
-# Name the validated artifact with its version (Ostrasort-vX.Y.Z.exe), replacing
-# any previously-built versioned exe so publish\ holds just the current release.
-$ver = ($exe.VersionInfo.ProductVersion -split '\+')[0]
-Get-ChildItem $out -Filter 'Ostrasort-v*.exe' -ErrorAction SilentlyContinue | Remove-Item -Force
-$named = Join-Path $out "Ostrasort-v$ver.exe"
-Move-Item $exe.FullName $named -Force
-$exe = Get-Item $named
+# 3) Version from the built exe (the single source of truth: csproj <Version>).
+$ver = ((Get-Item $rawExe).VersionInfo.ProductVersion -split '\+')[0]
+if (-not $ver) { throw "Could not read a version from $rawExe." }
 
-"`n{0}`n  v{1}   {2:N1} MB   single-file, self-contained win-x64   (GUI smoke passed)" -f
-    $exe.FullName, $exe.VersionInfo.ProductVersion, ($exe.Length / 1MB)
+# 4) Pack with Velopack. Produces installer + portable + update package + manifest
+#    in $relDir. --channel defaults to 'win', so the manifest is releases.win.json
+#    (exactly what the in-app UpdateManager reads on Windows).
+if (Test-Path $relDir) { Remove-Item $relDir -Recurse -Force }
+vpk pack `
+    --packId Ostrasort `
+    --packVersion $ver `
+    --packDir $rawDir `
+    --mainExe Ostrasort.exe `
+    --packTitle Ostrasort `
+    --packAuthors Valtora `
+    --icon $icon `
+    --outputDir $relDir
+if ($LASTEXITCODE -ne 0) { throw "vpk pack failed with exit code $LASTEXITCODE." }
 
-# Launch the freshly-built exe so the release can be eyeballed immediately.
-# Start-Process is non-blocking, so the GUI opens and this script returns.
-Start-Process -FilePath $exe.FullName
+"`nRelease artifacts (v$ver)  ->  $relDir" | Write-Output
+Get-ChildItem $relDir | Sort-Object Name | ForEach-Object {
+    "  {0,-34} {1,8:N1} KB" -f $_.Name, ($_.Length / 1KB)
+}
+"`nGUI smoke passed. Publish with:" | Write-Output
+"  vpk upload github --repoUrl https://github.com/Valtora/Ostrasort --publish --releaseName v$ver --tag v$ver --token (gh auth token)" | Write-Output
 exit 0

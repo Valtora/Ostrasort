@@ -32,15 +32,13 @@ public static class GuiHost
             e.SetObserved();
         };
 
-        ThemeManager.Apply(GuiSettings.Load().Theme);   // app-level, before the first window loads (and before the adopt prompt)
+        ThemeManager.Apply(GuiSettings.Load().Theme);   // app-level, before the first window loads
 
-        // Self-adopting updater: if this is a newer build the user downloaded and
-        // ran from outside the install location, offer to replace the installed
-        // copy and restart from it. MUST run before the single-instance check -
-        // otherwise the mutex would just focus the old window instead of letting
-        // the new binary take over. On "Just run this copy" we fall through.
-        if (Updater.Detect() is { } pending && Updater.PromptAndApply(pending))
-            return 0;   // handed off to the relaunched installed copy
+        // Once running as the Velopack-managed install, tidy away the old
+        // pre-0.23 self-install (%LOCALAPPDATA%\Programs\Ostrasort) and its stale
+        // shortcuts so a dead duplicate can't be launched. No-op for a dev or
+        // portable copy, and once-only.
+        LegacyInstall.Cleanup();
 
         // Single instance per session: two windows could both write
         // loading_order.json. A second launch signals the first to come forward

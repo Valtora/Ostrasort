@@ -67,6 +67,12 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, long> _wsUpdated = new();
     private System.Threading.CancellationTokenSource? _wsCts;
 
+    // Velopack self-update: null for a copy Velopack doesn't manage (dev build).
+    // A downloaded, ready-to-apply update is parked in _pendingUpdate until the
+    // user clicks the toolbar button to restart into it.
+    private readonly VeloUpdate? _updater = VeloUpdate.Create();
+    private Velopack.UpdateInfo? _pendingUpdate;
+
     // undo/redo: disk-level operation snapshots + in-memory drag arrangements
     private readonly Stack<OpSnapshot> _undo = new();
     private readonly Stack<OpSnapshot> _redo = new();
@@ -83,12 +89,9 @@ public partial class MainWindow : Window
         RestoreWindowState();
         CmbTheme.SelectedIndex = _settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
-        // Single-instance signals fire on a background thread - marshal to the UI.
-        // Activate = a second launch asks us to come forward; Shutdown = the
-        // updater asks us to close so it can replace the exe (Close() runs the
-        // usual Window_Closing save path, then the app exits).
+        // Single-instance signal fires on a background thread - marshal to the UI.
+        // Activate = a second launch asks us to come forward.
         SingleInstance.OnActivate = () => Dispatcher.Invoke(BringToFront);
-        SingleInstance.OnShutdown = () => Dispatcher.Invoke(Close);
         Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
         ChkTechCols.IsChecked = _settings.TechColumns;
@@ -2003,146 +2006,104 @@ public partial class MainWindow : Window
 
     // ---------------------------------------------------------- update check ---
 
-    private const string ReleasesUrl = "https://github.com/Valtora/Ostrasort/releases";
-    private string _updateUrl = ReleasesUrl;
     private bool _updateCheckBusy;   // rapid manual clicks must not stack result dialogs
 
     private void CheckUpdate_Click(object sender, RoutedEventArgs e) => _ = CheckForUpdateAsync(manual: true);
 
     /// <summary>
-    /// Compares this build against the latest GitHub release. Runs on EVERY
-    /// launch (queried live each time, so a release published after this build
-    /// is picked up on the next start - there is no cached "latest" to go
-    /// stale) and on demand from the "Check for updates" link. A newer release
-    /// surfaces the Update button, writes a Logs-tab line, and raises a modal
-    /// (UpdateDialog) offering to Download Latest Version or dismiss with Not
-    /// Now - shown on every launch while behind, not only on the manual check.
-    /// The manual run additionally reports when you are already up to date.
+    /// Velopack self-update. Runs on every launch and from the "Check for updates"
+    /// link. When a newer release exists it is downloaded in the background and
+    /// the toolbar button flips to "Restart to update" - the swap only happens
+    /// when the user clicks it (see <see cref="PromptRestartAndApply"/>). A launch
+    /// check never pops a modal; a manual check offers the restart right away and
+    /// reports when already up to date. Managed copies only: a dev build (where
+    /// <see cref="_updater"/> is null) never has the affordance, and every network
+    /// failure stays quiet unless the user asked.
     /// </summary>
     private async Task CheckForUpdateAsync(bool manual = false)
     {
+        if (_updater is null)
+        {
+            if (manual)
+                MessageBox.Show(this,
+                    "Automatic updates are delivered to the installed and portable releases.\n\n" +
+                    "This copy isn't managed by the installer, so it won't update itself.",
+                    "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (_updateCheckBusy) return;
         _updateCheckBusy = true;
-        try { await CheckForUpdateCoreAsync(manual); }
-        finally { _updateCheckBusy = false; }
-    }
-
-    private async Task CheckForUpdateCoreAsync(bool manual)
-    {
-        string tag, latestUrl;
         try
         {
-            var json = await Http.GetStringAsync(
-                "https://api.github.com/repos/Valtora/Ostrasort/releases/latest").ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
-            tag = doc.RootElement.GetProperty("tag_name").GetString() ?? "";
-            latestUrl = (doc.RootElement.TryGetProperty("html_url", out var u) ? u.GetString() : null) ?? ReleasesUrl;
-        }
-        catch (Exception ex)
-        {
-            // Marshal back to the dispatcher: the continuation can resume off the
-            // UI thread, and OpLog aside, MessageBox must run on the UI thread.
-            await Dispatcher.InvokeAsync(() =>
+            if (_pendingUpdate is not null)   // already downloaded earlier this session
+            {
+                if (manual) PromptRestartAndApply();
+                return;
+            }
+
+            Velopack.UpdateInfo? info;
+            try
+            {
+                // CheckAndDownloadAsync awaits with ConfigureAwait(false) inside, but
+                // this method was invoked on the UI thread and does not, so the
+                // continuation below is back on the dispatcher for the UI touches.
+                info = await _updater.CheckAndDownloadAsync();
+            }
+            catch (Exception ex)
             {
                 OpLog.Add($"Update check failed: {ex.Message}");
                 if (manual)
                     MessageBox.Show(this, "Couldn't check for updates.\n\n" + ex.Message +
-                        "\n\nYou may be offline, or GitHub may be rate-limiting — its anonymous API allows about 60 checks an hour per network.",
+                        "\n\nYou may be offline, or GitHub may be rate-limiting (its anonymous API allows about 60 checks an hour per network).",
                         "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
-            });
-            return;
-        }
-
-        await Dispatcher.InvokeAsync(() =>
-        {
-            // this continuation runs on a fire-and-forget task: an escaped
-            // exception (e.g. no browser handler for Process.Start) would fault
-            // it silently, so catch and surface it here
-            try
-            {
-                if (Updater.Parse(tag) > Updater.Parse(Program.Version))
-                {
-                    _updateUrl = latestUrl;
-                    BtnUpdate.Content = $"⬆  Update available: {tag}";
-                    BtnUpdate.Visibility = Visibility.Visible;
-                    OpLog.Add($"A newer release is available: {tag} (you are on v{Program.Version}).");
-                    // A newer release always raises the modal (every launch), not only on the manual
-                    // check - the toolbar button stays as the persistent affordance after "Not Now".
-                    // "Download Latest Version" opens the release page.
-                    if (UpdateDialog.Show(this, "Update available",
-                            $"{tag} is available to download.\nYou're on v{Program.Version}."))
-                        Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
-                }
-                else
-                {
-                    OpLog.Add($"Update check: up to date (v{Program.Version}; latest release is {tag}).");
-                    if (manual)
-                        MessageBox.Show(this, $"You're on the latest version (v{Program.Version}).",
-                            "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
+                return;
             }
-            catch (Exception ex)
+
+            if (info is null)
             {
-                OpLog.Add($"Update check UI failed: {ex.Message}");
+                OpLog.Add($"Update check: up to date (v{Program.Version}).");
                 if (manual)
-                    MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(this, $"You're on the latest version (v{Program.Version}).",
+                        "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
             }
-        });
+
+            // Downloaded and ready. Surface the restart affordance; a launch check
+            // leaves it at that (no modal), a manual check offers the restart now.
+            _pendingUpdate = info;
+            var ver = VeloUpdate.VersionOf(info);
+            BtnUpdate.Content = $"⬆  Restart to update to v{ver}";
+            BtnUpdate.ToolTip = $"Ostrasort v{ver} has been downloaded. Click to restart and finish updating.";
+            BtnUpdate.Visibility = Visibility.Visible;
+            OpLog.Add($"Update v{ver} downloaded and ready (you are on v{Program.Version}). Restart to apply.");
+            if (manual) PromptRestartAndApply();
+        }
+        finally { _updateCheckBusy = false; }
     }
 
-    private void Update_Click(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
+    private void Update_Click(object sender, RoutedEventArgs e) => PromptRestartAndApply();
 
-    // ---------------------------------------------------- self-install ---
-
-    /// <summary>
-    /// One-time, dismissible first-run offer to install the exe to a fixed
-    /// per-user location + shortcuts. Fires on first render (never during
-    /// --smoke-gui, which constructs the window without showing it) and only
-    /// when running from somewhere other than the install location.
-    /// </summary>
-    private void Window_ContentRendered(object? sender, EventArgs e)
+    /// <summary>Confirms, then applies the downloaded update and restarts (does not return on success).</summary>
+    private void PromptRestartAndApply()
     {
-        if (_settings.InstallPromptDismissed || !SelfInstall.CanOfferInstall()) return;
-        _settings.InstallPromptDismissed = true;   // ask once, never nag - the link stays for later
-        _settings.Save();
-        RunInstall(alreadyInstalled: false);
-    }
-
-    private void Install_Click(object sender, RoutedEventArgs e) =>
-        RunInstall(SelfInstall.IsInstalled());
-
-    /// <summary>Shows the install prompt and performs the chosen install + shortcut creation.</summary>
-    private void RunInstall(bool alreadyInstalled)
-    {
-        var choice = InstallDialog.Show(this, alreadyInstalled);
-        if (choice is not { } c) return;
+        if (_updater is null || _pendingUpdate is null) return;
+        var ver = VeloUpdate.VersionOf(_pendingUpdate);
+        if (!UpdateDialog.ShowConfirm(
+                "Restart to finish updating",
+                $"Ostrasort v{ver} has been downloaded.\n\nOstrasort will close, apply the update, and reopen.",
+                confirmLabel: "Restart now",
+                cancelLabel: "Later"))
+            return;
         try
         {
-            var result = SelfInstall.Install(c.Desktop, c.StartMenu);
-            OpLog.Add(result.Copied
-                ? $"Installed Ostrasort to {result.ExePath}."
-                : $"Ostrasort already installed at {result.ExePath}.");
-            foreach (var s in result.Shortcuts) OpLog.Add($"Created shortcut: {s}");
-
-            var shortcutNote = result.Shortcuts.Count > 0
-                ? $" {result.Shortcuts.Count} shortcut(s) created."
-                : " No shortcuts requested.";
-            RunStatus.Text = (result.Copied
-                ? "Installed to %LOCALAPPDATA%\\Programs\\Ostrasort."
-                : "Shortcuts refreshed.") + shortcutNote + "  ";
-            RunStatus.Foreground = Good;
-            MessageBox.Show(this,
-                (result.Copied ? $"Ostrasort was installed to:\n{result.ExePath}\n\n" : $"Using the installed copy at:\n{result.ExePath}\n\n") +
-                (result.Shortcuts.Count > 0
-                    ? "Shortcuts created:\n" + string.Join("\n", result.Shortcuts)
-                    : "No shortcuts were created.") +
-                "\n\nLaunch Ostrasort from the shortcut or that folder from now on so updates land in one place.",
-                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+            OpLog.Add($"Applying update v{ver} and restarting.");
+            _updater.ApplyAndRestart(_pendingUpdate);   // closes this process and relaunches into the new build
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Install failed:\n\n" + ex.Message,
+            OpLog.Add($"Update failed to apply: {ex.Message}");
+            MessageBox.Show(this, "Ostrasort couldn't apply the update:\n\n" + ex.Message +
+                "\n\nYou can keep using this version, or download the latest release manually.",
                 "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
