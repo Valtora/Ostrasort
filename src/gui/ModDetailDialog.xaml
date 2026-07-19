@@ -1,0 +1,26 @@
+<Window x:Class="Ostrasort.Gui.ModDetailDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mod details" Height="620" Width="720" MinHeight="420" MinWidth="520"
+        Icon="/app.ico" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <DockPanel Margin="14">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="TxtStatusGlyph" FontSize="16" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtTitle" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock x:Name="TxtSubtitle" TextWrapping="Wrap" Margin="0,2,0,0"
+                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button x:Name="BtnToggle" Padding="14,6" Margin="0,0,8,0" Click="Toggle_Click"/>
+            <Button x:Name="BtnRegister" Content="Add to load order" Padding="14,6" Margin="0,0,8,0" Click="Register_Click"
+                    ToolTip="Register this mod in loading_order.json so the game loads it."/>
+            <Button x:Name="BtnRemove" Content="Remove…" Padding="14,6" Margin="0,0,8,0" Click="Remove_Click"/>
+            <Button Content="Close" Padding="16,6" IsDefault="True" IsCancel="True"/>
+        </StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Body" Margin="0,0,6,0"/>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

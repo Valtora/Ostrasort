@@ -466,7 +466,7 @@ public partial class MainWindow : Window
         var name = m.Kind == EntryKind.Core ? "core (base game data)" : m.DisplayName ?? m.Name;
         var tooltip = m.Dir ?? m.Raw;
         if (m.LogNotes.Count > 0) tooltip += "\n" + string.Join("\n", m.LogNotes.Select(n => "• " + n));
-        if (m.Kind != EntryKind.Core && m.Dir is not null) tooltip += "\n(double-click to open the folder)";
+        tooltip += "\n(double-click for details)";
         var draggable = m.Registered && m.Kind != EntryKind.Core;
         var (lastUpdated, updText, updBrush) = UpdateInfo(m);
         var version = m.Kind == EntryKind.Core ? "-" : m.ModVersion ?? "-";
@@ -1586,7 +1586,12 @@ public partial class MainWindow : Window
     /// <summary>Registers the selected unregistered mod into loading_order.json in its suggested slot (guarded write, undoable).</summary>
     private void MenuRegister_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning() || !GateRival()) return;
+        if (ModsGrid.SelectedItem is ModRow row) RegisterRow(row);
+    }
+
+    private void RegisterRow(ModRow row)
+    {
+        if (_state is null || !GateRunning() || !GateRival()) return;
         var m = row.M;
         var name = m.DisplayName ?? m.Name;
         _busy = true;
@@ -1617,7 +1622,12 @@ public partial class MainWindow : Window
     /// <summary>Park a local/plugins-dir mod as *.disabled or delete it, and drop its load-order entry.</summary>
     private void MenuDeleteMod_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning() || !GateRival()) return;
+        if (ModsGrid.SelectedItem is ModRow row) RemoveRow(row);
+    }
+
+    private void RemoveRow(ModRow row)
+    {
+        if (_state is null || !GateRunning() || !GateRival()) return;
         var m = row.M;
         // the generated patch is Ostrasort's own - it has no park option and its
         // own guarded removal (validates the marker, drops the entry, regenerable)
@@ -1868,7 +1878,41 @@ public partial class MainWindow : Window
 
     private void ModsGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (ModsGrid.SelectedItem is ModRow { Dir: not null } row) OpenFolder(row.Dir);
+        if (ModsGrid.SelectedItem is ModRow row) ShowModDetails(row);
+    }
+
+    private void MenuDetails_Click(object sender, RoutedEventArgs e)
+    {
+        if (ModsGrid.SelectedItem is ModRow row) ShowModDetails(row);
+    }
+
+    /// <summary>
+    /// The per-mod detail panel: everything about one mod (status, problems,
+    /// attributed log lines, its conflicts) with the actions in one place. The
+    /// chosen action runs here, after the dialog closes, through the same
+    /// gates and undo capture as the context-menu equivalents.
+    /// </summary>
+    private void ShowModDetails(ModRow row)
+    {
+        if (_state is null) return;
+        _busy = true;   // no activation rescan behind the modal
+        ModDetailAction action;
+        try
+        {
+            var dlg = new ModDetailDialog(_env, _state.Analysis, row.M,
+                row.StatusGlyph, row.StatusBrush, CanToggleRow(row.M)) { Owner = this };
+            if (dlg.ShowDialog() != true) return;
+            action = dlg.Action;
+        }
+        finally { _busy = false; }
+
+        switch (action)
+        {
+            case ModDetailAction.Enable: ToggleDisabled(row, disable: false); break;
+            case ModDetailAction.Disable: ToggleDisabled(row, disable: true); break;
+            case ModDetailAction.Register: RegisterRow(row); break;
+            case ModDetailAction.Remove: RemoveRow(row); break;
+        }
     }
 
     /// <summary>Rescan when the window regains focus (e.g. after closing the game) - debounced and never over a manual arrangement.</summary>

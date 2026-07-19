@@ -237,6 +237,8 @@
             </DataGrid.RowStyle>
             <DataGrid.ContextMenu>
                 <ContextMenu Opened="RowMenu_Opened">
+                    <MenuItem x:Name="MenuDetails" Header="Mod details…" FontWeight="SemiBold" Click="MenuDetails_Click"
+                              ToolTip="Everything about this mod in one place: status, problems, game-log issues, and its conflicts (also on double-click)."/>
                     <MenuItem x:Name="MenuOpenFolder" Header="Open folder" Click="MenuOpenFolder_Click"/>
                     <MenuItem x:Name="MenuOpenWorkshop" Header="Open Steam Workshop page" Click="MenuOpenWorkshop_Click"/>
                     <Separator/>
