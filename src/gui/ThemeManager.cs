@@ -49,6 +49,19 @@ public static class ThemeManager
     public static Brush BannerAlarmBg     => Dark ? DAlarmBg : LAlarmBg;
     public static Brush BannerAlarmBorder => Dark ? DAlarmBd : LAlarmBd;
 
+    // health-card "all good" background / border
+    private static readonly Brush LGoodBg = Frozen(0xEC, 0xF7, 0xEE), LGoodBd = Frozen(0x67, 0xA8, 0x6E);
+    private static readonly Brush DGoodBg = Frozen(0x1C, 0x30, 0x22), DGoodBd = Frozen(0x3E, 0x8E, 0x54);
+    public static Brush BannerGoodBg      => Dark ? DGoodBg : LGoodBg;
+    public static Brush BannerGoodBorder  => Dark ? DGoodBd : LGoodBd;
+
+    // the "update available" button - amber accent in both palettes
+    private static readonly Brush LUpdBg = Frozen(0xFF, 0xF4, 0xCE), LUpdFg = Frozen(0x8A, 0x6D, 0x00);
+    private static readonly Brush DUpdBg = Frozen(0x3A, 0x32, 0x10), DUpdFg = Frozen(0xE0, 0xA6, 0x4B);
+    public static Brush UpdateBtnBg     => Dark ? DUpdBg : LUpdBg;
+    public static Brush UpdateBtnBorder => Dark ? DInfoBd : LInfoBd;
+    public static Brush UpdateBtnFg     => Dark ? DUpdFg : LUpdFg;
+
     // chrome accents referenced by DynamicResource in XAML
     private static readonly Brush LGrid = Frozen(0xEE, 0xEE, 0xEE), DGrid = Frozen(0x3A, 0x3A, 0x3A);
     private static readonly Brush LBorder = Frozen(0xDD, 0xDD, 0xDD), DBorder = Frozen(0x45, 0x45, 0x45);
@@ -89,6 +102,11 @@ public static class ThemeManager
         r["TabBgBrush"] = TabBg;
         r["TabSelectedBgBrush"] = TabSelected;
         r["TabHoverBgBrush"] = TabHover;
+        r["BannerInfoBgBrush"] = BannerInfoBg;
+        r["BannerInfoBorderBrush"] = BannerInfoBorder;
+        r["UpdateBtnBgBrush"] = UpdateBtnBg;
+        r["UpdateBtnBorderBrush"] = UpdateBtnBorder;
+        r["UpdateBtnFgBrush"] = UpdateBtnFg;
     }
 
     /// <summary>The Windows "apps" theme: AppsUseLightTheme = 0 means dark. Defaults to light if unreadable.</summary>

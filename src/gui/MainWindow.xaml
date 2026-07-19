@@ -60,7 +60,9 @@
                        ToolTip="Ostrasort"/>
                 <Button x:Name="BtnUpdate" Margin="0,6,0,0" HorizontalAlignment="Right"
                         Visibility="Collapsed" Padding="10,3" Cursor="Hand" FontWeight="SemiBold"
-                        Background="#FFF4CE" BorderBrush="#D9A400" Foreground="#8A6D00"
+                        Background="{DynamicResource UpdateBtnBgBrush}"
+                        BorderBrush="{DynamicResource UpdateBtnBorderBrush}"
+                        Foreground="{DynamicResource UpdateBtnFgBrush}"
                         Click="Update_Click"
                         ToolTip="A newer Ostrasort release is available on GitHub — click to open the Releases page and download it."/>
                 <TextBlock HorizontalAlignment="Right" Margin="0,5,0,0" FontSize="11">
@@ -163,36 +165,56 @@
             </StackPanel>
         </DockPanel>
 
-        <!-- FFU / OstraAutoloader banner (collapsed on plain Workshop installs) -->
-        <Border Grid.Row="2" x:Name="FfuBanner" Visibility="Collapsed" CornerRadius="4"
-                BorderThickness="1" Padding="10,7" Margin="0,0,0,8"
-                Background="#FFF8E7" BorderBrush="#D9A400">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Top" Margin="12,0,0,0">
-                    <Hyperlink Click="FfuBannerDismiss_Click">dismiss</Hyperlink>
-                </TextBlock>
-                <StackPanel>
-                    <TextBlock x:Name="TxtFfuBannerTitle" FontWeight="SemiBold" Margin="0,0,0,3"/>
-                    <ItemsControl x:Name="ListFfuBanner">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,1,0,1" FontSize="12.5"/>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <StackPanel Orientation="Horizontal" Margin="0,7,0,1">
-                        <Button x:Name="BtnDisableAutoloader" Content="Disable OstraAutoloader…"
-                                Visibility="Collapsed" Padding="12,4" Margin="0,0,8,0"
-                                Click="DisableAutoloader_Click"
-                                ToolTip="Park the autoloader DLL(s) as .disabled (reversible) or delete them, so Ostrasort can manage the load order. r2modman users should disable the mod in their profile instead."/>
-                        <Button x:Name="BtnRemoveFfu" Content="Remove FFU…"
-                                Visibility="Collapsed" Padding="12,4"
-                                Click="RemoveFfu_Click"
-                                ToolTip="Park the FFU MonoMod DLLs and Minor Fixes Plus as .disabled (reversible) or delete them, and unregister them from the load order."/>
+        <!-- banners: setup health + FFU/OstraAutoloader (collapsed when not relevant) -->
+        <StackPanel Grid.Row="2">
+            <Border x:Name="HealthBanner" Visibility="Collapsed" CornerRadius="4"
+                    BorderThickness="1" Padding="12,9" Margin="0,0,0,8">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                        <Button x:Name="BtnHealthFix" Content="Fix automatically" Padding="14,6" FontWeight="SemiBold"
+                                Visibility="Collapsed" Click="HealthFix_Click"
+                                ToolTip="Apply the suggested load order and create or refresh the compatibility patch in one go. You are only asked when a genuine decision is needed, and every write keeps a backup."/>
+                        <Button x:Name="BtnHealthShow" Content="Show me" Padding="14,6" Margin="8,0,0,0"
+                                Visibility="Collapsed" Click="HealthShow_Click"
+                                ToolTip="Open the tab that explains these issues."/>
                     </StackPanel>
-                </StackPanel>
-            </DockPanel>
-        </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtHealthTitle" FontWeight="SemiBold" FontSize="14"/>
+                        <TextBlock x:Name="TxtHealthDetail" TextWrapping="Wrap" FontSize="12.5" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <Border x:Name="FfuBanner" Visibility="Collapsed" CornerRadius="4"
+                    BorderThickness="1" Padding="10,7" Margin="0,0,0,8"
+                    Background="{DynamicResource BannerInfoBgBrush}"
+                    BorderBrush="{DynamicResource BannerInfoBorderBrush}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" VerticalAlignment="Top" Margin="12,0,0,0">
+                        <Hyperlink Click="FfuBannerDismiss_Click">dismiss</Hyperlink>
+                    </TextBlock>
+                    <StackPanel>
+                        <TextBlock x:Name="TxtFfuBannerTitle" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                        <ItemsControl x:Name="ListFfuBanner">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,1,0,1" FontSize="12.5"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Margin="0,7,0,1">
+                            <Button x:Name="BtnDisableAutoloader" Content="Disable OstraAutoloader…"
+                                    Visibility="Collapsed" Padding="12,4" Margin="0,0,8,0"
+                                    Click="DisableAutoloader_Click"
+                                    ToolTip="Park the autoloader DLL(s) as .disabled (reversible) or delete them, so Ostrasort can manage the load order. r2modman users should disable the mod in their profile instead."/>
+                            <Button x:Name="BtnRemoveFfu" Content="Remove FFU…"
+                                    Visibility="Collapsed" Padding="12,4"
+                                    Click="RemoveFfu_Click"
+                                    ToolTip="Park the FFU MonoMod DLLs and Minor Fixes Plus as .disabled (reversible) or delete them, and unregister them from the load order."/>
+                        </StackPanel>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </StackPanel>
 
         <!-- mod table -->
         <DataGrid Grid.Row="3" x:Name="ModsGrid" AutoGenerateColumns="False" IsReadOnly="True"
@@ -319,12 +341,15 @@
             <TabItem x:Name="TabPatch" Header="Patch">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8,2,8,8">
-                        <Button x:Name="BtnPatchFresh" Content="Rebuild patch from scratch…" Padding="10,4"
+                        <Button x:Name="BtnPatchGenerate" Content="Resolve conflicts &amp; generate patch" Padding="10,4"
+                                Click="Patch_Click"
+                                ToolTip="Merge the conflicts no load order can fix into a small generated mod that loads after everything it merges. You decide any contested values; every decision is remembered."/>
+                        <Button x:Name="BtnPatchFresh" Content="Rebuild patch from scratch…" Padding="10,4" Margin="8,0,0,0"
                                 Click="PatchFresh_Click"
                                 ToolTip="Discard every stored decision (source picks AND exclusions) and resolve all conflicts again from a blank slate."/>
-                        <Button x:Name="BtnPatchDelete" Content="Delete patch" Padding="10,4" Margin="8,0,0,0"
+                        <Button x:Name="BtnPatchDelete" Content="Remove patch" Padding="10,4" Margin="8,0,0,0"
                                 Click="Unpatch_Click"
-                                ToolTip="Remove the generated patch mod and its load-order entry (same as the Remove patch button)."/>
+                                ToolTip="Remove the generated patch mod and its load-order entry. Safe: it can be regenerated any time."/>
                     </StackPanel>
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <ItemsControl x:Name="ListPatch" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
@@ -368,17 +393,16 @@
             </TabItem>
         </TabControl>
 
-        <!-- action bar -->
+        <!-- action bar: status + a manual-arrangement bar when one is pending,
+             one primary action, and everything occasional behind More -->
         <DockPanel Grid.Row="6" Margin="0,10,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Button x:Name="BtnRescan" Content="Rescan" Padding="14,6" Margin="8,0,0,0" Click="Rescan_Click"/>
-                <Button x:Name="BtnMakeBackup" Content="Make backup" Padding="14,6" Margin="8,0,0,0" Click="MakeBackup_Click"
-                        ToolTip="Snapshot the current loading_order.json into the rolling backup history now — restore it later with Restore backup…"/>
-                <Button x:Name="BtnRestoreBak" Content="Restore backup…" Padding="14,6" Margin="8,0,0,0" Click="RestoreBak_Click"/>
+                <Button x:Name="BtnApplyManual" Content="Apply manual order" Padding="14,6" Margin="8,0,0,0"
+                        Visibility="Collapsed" FontWeight="SemiBold" Click="Apply_Click"
+                        ToolTip="Write the row arrangement you dragged into loading_order.json (a backup is kept)."/>
                 <Button x:Name="BtnLaunch" Content="Launch game" Padding="14,6" Margin="8,0,0,0" Click="Launch_Click"/>
-                <Button x:Name="BtnApply" Content="Apply Suggested Fixes" Padding="14,6" Margin="8,0,0,0" Click="Apply_Click"/>
-                <Button x:Name="BtnPatch" Content="Resolve conflicts &amp; generate patch" Padding="14,6" Margin="8,0,0,0" Click="Patch_Click"/>
-                <Button x:Name="BtnUnpatch" Content="Remove patch" Padding="14,6" Margin="8,0,0,0" Click="Unpatch_Click"/>
+                <Button x:Name="BtnMore" Content="More…" Padding="14,6" Margin="8,0,0,0" Click="More_Click"
+                        ToolTip="Rescan, backups, and removing the compatibility patch."/>
             </StackPanel>
             <TextBlock VerticalAlignment="Center">
                 <Run x:Name="RunStatus" FontWeight="SemiBold"/>

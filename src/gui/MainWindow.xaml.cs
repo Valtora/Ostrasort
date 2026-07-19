@@ -193,9 +193,158 @@ public partial class MainWindow : Window
 
         RenderFfuBanner(s);
         RenderTabs(s);
+        RenderHealth(s);
         RenderProfiles();
         UpdateActionBar(s);
         RenderLogs();
+    }
+
+    // -------------------------------------------------------- health summary ---
+
+    /// <summary>
+    /// The card that answers "am I OK, and what do I press": one plain-language
+    /// verdict at the top of the window, with a Fix automatically button that
+    /// chains the suggested order and the compatibility patch.
+    /// </summary>
+    private void RenderHealth(EngineState s)
+    {
+        var a = s.Analysis;
+        var attention = a.Collisions.Count(CollisionView.NeedsAttention);
+        var logMods = a.AllMods.Where(m => m.LogNotes.Count > 0).ToList();
+        var warnCount = a.Warnings.Count + a.AllMods.Sum(m => m.JsonErrors.Count);
+        var fixable = a.OrderChanged || Patcher.HasWork(a) || s.Patch.Stale || s.Patch.Obsolete;
+
+        var issues = new List<string>();
+        if (attention > 0)
+            issues.Add(attention == 1 ? "1 mod conflict needs your attention"
+                                      : $"{attention} mod conflicts need your attention");
+        if (a.OrderChanged) issues.Add("the load order can be improved");
+        if (s.Patch.Stale) issues.Add("the compatibility patch is out of date");
+        else if (s.Patch.Obsolete) issues.Add("the compatibility patch is no longer needed");
+        if (logMods.Count > 0)
+            issues.Add("Ostranauts reported problems from " +
+                       string.Join(", ", logMods.Take(3).Select(m => m.DisplayName ?? m.Name)) +
+                       (logMods.Count > 3 ? $" (and {logMods.Count - 3} more)" : "") + " on its last launch");
+        if (warnCount > 0)
+            issues.Add(warnCount == 1 ? "1 warning (see the Warnings tab)" : $"{warnCount} warnings (see the Warnings tab)");
+
+        if (issues.Count == 0)
+        {
+            HealthBanner.Background = ThemeManager.BannerGoodBg;
+            HealthBanner.BorderBrush = ThemeManager.BannerGoodBorder;
+            TxtHealthTitle.Text = "Your mods are set up correctly. Nothing to do.";
+            TxtHealthTitle.Foreground = Good;
+            var active = a.Registered.Count(m => m.Kind != EntryKind.Core && !m.Disabled);
+            TxtHealthDetail.Text = active == 1 ? "1 mod active." : $"{active} mods active.";
+            TxtHealthDetail.Foreground = Dim;
+            BtnHealthFix.Visibility = Visibility.Collapsed;
+            BtnHealthShow.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            var severe = logMods.Count > 0;
+            HealthBanner.Background = severe ? ThemeManager.BannerAlarmBg : ThemeManager.BannerInfoBg;
+            HealthBanner.BorderBrush = severe ? ThemeManager.BannerAlarmBorder : ThemeManager.BannerInfoBorder;
+            TxtHealthTitle.Text = (issues.Count == 1 ? "1 issue found" : $"{issues.Count} issues found")
+                                  + (fixable ? " (Ostrasort can fix part of this automatically)." : ".");
+            TxtHealthTitle.Foreground = severe ? Bad : Warn;
+            TxtHealthDetail.Text = string.Join(" ", issues.Select(i => Capitalize(i) + "."));
+            TxtHealthDetail.Foreground = Normal;
+            BtnHealthFix.Visibility = fixable ? Visibility.Visible : Visibility.Collapsed;
+            BtnHealthShow.Visibility = Visibility.Visible;
+        }
+        HealthBanner.Visibility = Visibility.Visible;
+
+        static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+    }
+
+    /// <summary>
+    /// One-click repair: apply the suggested order (when it changed), then
+    /// create/refresh the compatibility patch (opening the resolver only when a
+    /// genuine decision is contested). Each step keeps its own backups and undo
+    /// snapshot, so Ctrl+Z steps back through them individually.
+    /// </summary>
+    private void HealthFix_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null || !GateRunning() || !GateRival()) return;
+        if (_manualDirty)
+        {
+            MessageBox.Show(this, "You have an unapplied manual arrangement. Apply or reset it first.",
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_state.Analysis.OrderChanged)
+        {
+            if (!ConfirmLoadOrderCurrent()) return;
+            _busy = true;
+            try
+            {
+                CaptureOp("apply suggested fixes");
+                LoadOrderFile.Read(_env.LoadingOrderPath).Write(_state.Analysis.SuggestedOrder);
+                OpLog.Add($"Applied suggested load order ({_state.Analysis.SuggestedOrder.Count} entries).");
+                Rescan();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+            finally { _busy = false; }
+        }
+
+        if (_state is not null && Patcher.HasWork(_state.Analysis))
+        {
+            GeneratePatch(fresh: false);
+            return;   // GeneratePatch sets its own status line
+        }
+
+        RunStatus.Text = "Fixed. The load order now satisfies every rule (a backup was kept).  ";
+        RunStatus.Foreground = Good;
+    }
+
+    /// <summary>Open the tab that explains the current issues, most pressing first.</summary>
+    private void HealthShow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null) return;
+        var a = _state.Analysis;
+        Tabs.SelectedItem =
+            a.Collisions.Any(CollisionView.NeedsAttention) ? TabCollisions
+            : a.OrderChanged ? TabOrder
+            : _state.Patch.Stale || _state.Patch.Obsolete ? TabPatch
+            : TabWarnings;
+    }
+
+    /// <summary>The More menu: rescan, backups, and patch removal - the occasional actions.</summary>
+    private void More_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null) return;
+        var running = GameEnv.IsGameRunning();
+        var rival = _state.Analysis.Ffu is { AutoloaderActive: true };
+        var bak = _env.LoadingOrderPath + ".bak";
+        var backupCount = (File.Exists(bak) ? 1 : 0) + Backups.List(_env.LoadingOrderPath).Count;
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = BtnMore,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Top,
+        };
+        MenuItem Item(string header, RoutedEventHandler handler, bool enabled = true, string? tip = null)
+        {
+            var it = new MenuItem { Header = header, IsEnabled = enabled, ToolTip = tip };
+            it.Click += handler;
+            return it;
+        }
+        menu.Items.Add(Item("Rescan", Rescan_Click,
+            tip: "Re-read the install now (this also happens automatically when the window regains focus)."));
+        menu.Items.Add(Item("Make backup now", MakeBackup_Click,
+            tip: "Snapshot the current loading_order.json into the rolling backup history."));
+        menu.Items.Add(Item("Restore backup…", RestoreBak_Click, backupCount > 0 && !running && !rival,
+            "Restore loading_order.json from the .bak or a rolling backup."));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Remove compatibility patch…", Unpatch_Click, _state.Patch.Exists && !running && !rival,
+            "Delete the generated patch mod and its load-order entry. Safe: it can be regenerated any time."));
+        menu.IsOpen = true;
     }
 
     /// <summary>
@@ -520,20 +669,14 @@ public partial class MainWindow : Window
         // OstraAutoloader regenerates loading_order.json every launch - while it
         // is installed every write is futile, so the GUI is analysis-only
         var rivalLock = a.Ffu is { AutoloaderActive: true };
-        var bak = _env.LoadingOrderPath + ".bak";
 
-        BtnApply.IsEnabled = (_manualDirty || a.OrderChanged) && !running && !rivalLock;
-        BtnApply.Content = _manualDirty ? "Apply manual order" : "Apply Suggested Fixes";
-        BtnPatch.IsEnabled = Patcher.HasWork(a) && !running && !rivalLock;
-        BtnPatch.Content = s.Patch.Stale ? "Refresh patch (decisions kept)" : "Resolve conflicts & generate patch";
-        BtnUnpatch.IsEnabled = s.Patch.Exists && !running && !rivalLock;
-        BtnPatchFresh.IsEnabled = BtnPatch.IsEnabled;
-        BtnPatchDelete.IsEnabled = BtnUnpatch.IsEnabled;
-        var backupCount = (File.Exists(bak) ? 1 : 0) + Backups.List(_env.LoadingOrderPath).Count;
-        BtnRestoreBak.IsEnabled = backupCount > 0 && !running && !rivalLock;
-        BtnRestoreBak.ToolTip = backupCount > 0
-            ? $"Restore loading_order.json from the .bak or one of the {Backups.Keep} rolling backups ({backupCount} restore point(s) available)"
-            : "No backups exist yet - one is kept on every write";
+        BtnHealthFix.IsEnabled = !running && !rivalLock && !_manualDirty;
+        BtnApplyManual.Visibility = _manualDirty ? Visibility.Visible : Visibility.Collapsed;
+        BtnApplyManual.IsEnabled = _manualDirty && !running && !rivalLock;
+        BtnPatchGenerate.IsEnabled = Patcher.HasWork(a) && !running && !rivalLock;
+        BtnPatchGenerate.Content = s.Patch.Stale ? "Refresh patch (decisions kept)" : "Resolve conflicts & generate patch";
+        BtnPatchFresh.IsEnabled = BtnPatchGenerate.IsEnabled;
+        BtnPatchDelete.IsEnabled = s.Patch.Exists && !running && !rivalLock;
         BtnLaunch.IsEnabled = !running;
         LinkReset.IsEnabled = _manualDirty;
 
@@ -876,46 +1019,40 @@ public partial class MainWindow : Window
         for (var i = 0; i < _rows.Count; i++) _rows[i] = BuildRow(_rows[i].Pos, _rows[i].M);
         RenderTabs(_state);
         RenderFfuBanner(_state);
+        RenderHealth(_state);
         RenderLogs();
         RenderProfiles();
         UpdateActionBar(_state);
     }
 
+    /// <summary>Writes a pending manual (drag) arrangement. The suggested order goes through HealthFix_Click.</summary>
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || !GateRunning() || !GateRival() || !ConfirmLoadOrderCurrent()) return;
+        if (_state is null || !_manualDirty || !GateRunning() || !GateRival() || !ConfirmLoadOrderCurrent()) return;
         _busy = true;
         try
         {
-            List<string> newOrder;
-            if (_manualDirty)
+            var ordered = RegisteredEntriesInVisualOrder();
+            var issues = Analysis.ValidateOrder(ordered);
+            if (issues.Any(i => i.StartsWith("BLOCK:")))
             {
-                var ordered = RegisteredEntriesInVisualOrder();
-                var issues = Analysis.ValidateOrder(ordered);
-                if (issues.Any(i => i.StartsWith("BLOCK:")))
-                {
-                    MessageBox.Show(this, string.Join("\n", issues), "Ostrasort",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-                if (issues.Count > 0 && MessageBox.Show(this,
-                        "This arrangement has rule warnings:\n\n" + string.Join("\n", issues) +
-                        "\n\nApply it anyway?", "Ostrasort",
-                        MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
-                    return;
-                newOrder = ordered.Select(m => m.Raw).ToList();
+                MessageBox.Show(this, string.Join("\n", issues), "Ostrasort",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
             }
-            else
-            {
-                newOrder = _state.Analysis.SuggestedOrder;
-            }
+            if (issues.Count > 0 && MessageBox.Show(this,
+                    "This arrangement has rule warnings:\n\n" + string.Join("\n", issues) +
+                    "\n\nApply it anyway?", "Ostrasort",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return;
+            var newOrder = ordered.Select(m => m.Raw).ToList();
 
-            CaptureOp(_manualDirty ? "apply manual order" : "apply suggested fixes");
+            CaptureOp("apply manual order");
             LoadOrderFile.Read(_env.LoadingOrderPath).Write(newOrder);
-            OpLog.Add($"Applied {(_manualDirty ? "manual" : "suggested")} load order ({newOrder.Count} entries).");
+            OpLog.Add($"Applied manual load order ({newOrder.Count} entries).");
             Rescan();
-            MessageBox.Show(this, "Load order applied. The previous file was saved as loading_order.json.bak.",
-                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+            RunStatus.Text = "Manual order applied. The previous file was kept as loading_order.json.bak.  ";
+            RunStatus.Foreground = Good;
         }
         catch (Exception ex)
         {
@@ -960,13 +1097,17 @@ public partial class MainWindow : Window
             OpLog.Add($"Generated Ostrasort Patch: {string.Join("; ", result.Merged)}.");
             foreach (var w in result.SchemaWarnings) OpLog.Add($"  patch schema warning: {w}");
             Rescan();
-            var msg = "Patch generated and registered after everything it merges.";
             if (result.SchemaWarnings.Count > 0)
-                msg += "\n\nSome merged objects did not fully match the game's schemas (best-effort — " +
-                       "verify in game). See the Patch tab for details:\n• " +
-                       string.Join("\n• ", result.SchemaWarnings.Take(6));
-            MessageBox.Show(this, msg, "Ostrasort", MessageBoxButton.OK,
-                result.SchemaWarnings.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+                MessageBox.Show(this,
+                    "Patch generated, but some merged objects did not fully match the game's schemas " +
+                    "(best-effort, verify in game). See the Patch tab for details:\n• " +
+                    string.Join("\n• ", result.SchemaWarnings.Take(6)),
+                    "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            else
+            {
+                RunStatus.Text = "Conflicts merged. The patch loads after everything it merges, so nothing is lost.  ";
+                RunStatus.Foreground = Good;
+            }
         }
         catch (Exception ex)
         {
@@ -1031,7 +1172,7 @@ public partial class MainWindow : Window
     private void RestoreBak_Click(object sender, RoutedEventArgs e)
     {
         var bak = _env.LoadingOrderPath + ".bak";
-        var menu = new ContextMenu { PlacementTarget = BtnRestoreBak };
+        var menu = new ContextMenu { PlacementTarget = BtnMore };
         if (File.Exists(bak))
         {
             var item = new MenuItem
