@@ -86,6 +86,62 @@ public class LogCorrelationTests
     }
 
     [Fact]
+    public void RuntimeException_FarFromLoadContext_IsNotPinnedOnTheLastLoadedFile()
+    {
+        // the "Loading json:" context must expire once ordinary lines resume -
+        // a gameplay exception hours later is not the last-loaded mod's fault
+        var a = With(Mod("Ship Mod", dataFiles: new[] { "ships/x.json" }));
+        var issues = Collect(a,
+            "#Info# Loading json: ships/x.json from byte array",
+            "Unloading 5 unused Assets",                                   // normal log flow resumes
+            "NullReferenceException: Object reference not set");           // unrelated, much later
+        var issue = Assert.Single(issues);
+        Assert.Null(issue.Mod);
+        Assert.Empty(issue.Candidates);
+    }
+
+    [Fact]
+    public void LoadingContext_DoesNotLeakAcrossLogFiles()
+    {
+        var a = With(Mod("Ship Mod", dataFiles: new[] { "ships/x.json" }));
+        var issues = LogCorrelation.Collect(a, new IReadOnlyList<string>[]
+        {
+            new[] { "#Info# Loading json: ships/x.json from byte array" },   // Player.log ends mid-load
+            new[] { "Some stray Exception in the BepInEx log" },             // different file entirely
+        });
+        var issue = Assert.Single(issues);
+        Assert.Null(issue.Mod);
+    }
+
+    [Fact]
+    public void PatchOwnFileError_IsNotBlamedOnAnInnocentSourceMod()
+    {
+        // the generated patch ships loot/loot.json; so does exactly one source
+        // mod. The error must not be uniquely pinned on the source mod - the
+        // patch is a candidate too.
+        var patchDir = Path.Combine(Path.GetTempPath(), "OstraPatchIdx_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(patchDir);
+        File.WriteAllText(Path.Combine(patchDir, Patcher.MarkerFile), "{}");
+        try
+        {
+            var patch = new ModEntry
+            {
+                Raw = Patcher.FolderName, Kind = EntryKind.Local, Name = Patcher.FolderName,
+                Dir = patchDir, DisplayName = "Ostrasort Patch",
+            };
+            patch.DataFiles.Add("loot/loot.json");
+            var src = Mod("ModA", dataFiles: new[] { "loot/loot.json" });
+            var a = With(src, patch);
+            Assert.True(patch.IsPatch);   // fixture sanity
+
+            var issue = Assert.Single(Collect(a, "#Error# bad entry in loot/loot.json"));
+            Assert.Null(issue.Mod);                       // ambiguous, not pinned on ModA
+            Assert.Equal(2, issue.Candidates.Count);
+        }
+        finally { Directory.Delete(patchDir, recursive: true); }
+    }
+
+    [Fact]
     public void Annotate_AddsAttributedWarningAndPerModNote()
     {
         var mod = Mod("Evil Mod", dataFiles: new[] { "condowners/evil.json" });

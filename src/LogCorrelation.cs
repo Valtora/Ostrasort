@@ -38,18 +38,20 @@ public static class LogCorrelation
     /// <summary>Reads each existing log file and records attributed issues as warnings + per-mod notes.</summary>
     public static void Annotate(Analysis a, params string[] logPaths)
     {
-        var lines = new List<string>();
+        // each log is scanned separately so a "Loading json:" context from one
+        // file can never leak into the next one's lines
+        var files = new List<IReadOnlyList<string>>();
         foreach (var path in logPaths)
         {
             try
             {
-                if (File.Exists(path)) lines.AddRange(File.ReadLines(path));
+                if (File.Exists(path)) files.Add(File.ReadLines(path).ToList());
             }
             catch { /* an unreadable log is not fatal - just no correlation */ }
         }
-        if (lines.Count == 0) return;
+        if (files.Count == 0) return;
 
-        var issues = Collect(a, lines);
+        var issues = Collect(a, files);
         if (issues.Count == 0) return;
 
         // attributed: one grouped note per responsible mod
@@ -75,7 +77,11 @@ public static class LogCorrelation
     }
 
     /// <summary>Parses raw log lines into attributed issues (no I/O - the testable core).</summary>
-    public static List<LogIssue> Collect(Analysis a, IEnumerable<string> lines)
+    public static List<LogIssue> Collect(Analysis a, IEnumerable<string> lines) =>
+        Collect(a, new[] { (IReadOnlyList<string>)lines.ToList() });
+
+    /// <summary>Multi-file overload: one shared dedupe set, but per-file loading context.</summary>
+    public static List<LogIssue> Collect(Analysis a, IEnumerable<IReadOnlyList<string>> files)
     {
         var byName = BuildNameIndex(a);
         var (byPath, byBase) = BuildFileIndex(a);
@@ -83,6 +89,17 @@ public static class LogCorrelation
 
         var issues = new List<LogIssue>();
         var seen = new HashSet<string>(StringComparer.Ordinal);   // dedupe identical repeated lines
+        foreach (var file in files)
+            CollectFile(file, byName, byPath, byBase, byStrName, issues, seen);
+        return issues;
+    }
+
+    private static void CollectFile(IReadOnlyList<string> lines,
+        Dictionary<string, ModEntry> byName,
+        Dictionary<string, List<ModEntry>> byPath, Dictionary<string, List<ModEntry>> byBase,
+        Dictionary<string, List<ModEntry>> byStrName,
+        List<LogIssue> issues, HashSet<string> seen)
+    {
         string? loadingContext = null;
 
         foreach (var raw in lines)
@@ -90,7 +107,10 @@ public static class LogCorrelation
             // cheap pre-filter: track the file being loaded, skip non-issue lines fast
             var lj = LoadingJson.Match(raw);
             if (lj.Success) { loadingContext = lj.Groups[1].Value; continue; }
-            if (!LooksLikeIssue(raw)) continue;
+            if (!LooksLikeIssue(raw)) { loadingContext = null; continue; }
+            // ^ any ordinary line ends the "just loaded this file" window: the
+            // context may carry across a load error's immediate follow-up lines,
+            // but never to an unrelated exception logged later in the session
 
             var line = raw.Trim();
 
@@ -116,15 +136,19 @@ public static class LogCorrelation
             var mod2 = owners.Count == 1 ? owners[0] : null;
             issues.Add(new LogIssue(sev, line, mod2, owners));
         }
-        return issues;
     }
 
     // ------------------------------------------------------------- indexes ---
 
+    // NB: the generated patch is indexed like any other mod. Excluding it made
+    // its own load errors structurally unattributable - and worse, when exactly
+    // one SOURCE mod shipped a same-named file, the patch's error was uniquely
+    // (and wrongly) pinned on that innocent mod. Including it either attributes
+    // the patch cleanly or honestly widens the candidate list.
     private static Dictionary<string, ModEntry> BuildNameIndex(Analysis a)
     {
         var map = new Dictionary<string, ModEntry>(StringComparer.Ordinal);
-        foreach (var m in a.AllMods.Where(m => !m.IsPatch))
+        foreach (var m in a.AllMods)
         {
             if (m.DisplayName is { Length: > 0 } d) map.TryAdd(Norm(d), m);
             map.TryAdd(Norm(m.Name), m);
@@ -136,7 +160,7 @@ public static class LogCorrelation
     {
         var byPath = new Dictionary<string, List<ModEntry>>(StringComparer.OrdinalIgnoreCase);
         var byBase = new Dictionary<string, List<ModEntry>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var m in a.AllMods.Where(m => !m.IsPatch))
+        foreach (var m in a.AllMods)
             foreach (var f in m.DataFiles)
             {
                 Add(byPath, f, m);
@@ -149,7 +173,7 @@ public static class LogCorrelation
     private static Dictionary<string, List<ModEntry>> BuildStrNameIndex(Analysis a)
     {
         var map = new Dictionary<string, List<ModEntry>>(StringComparer.Ordinal);
-        foreach (var m in a.AllMods.Where(m => !m.IsPatch))
+        foreach (var m in a.AllMods)
             foreach (var (_, name) in m.Claims.Keys)
                 if (name.Length >= 4) Add(map, name, m);
         return map;
