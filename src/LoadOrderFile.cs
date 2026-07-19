@@ -51,8 +51,10 @@ public sealed class LoadOrderFile
         if (root is not JsonArray arr || arr.Count == 0 || arr[0]?["aLoadOrder"] is not JsonArray orderArr)
             throw new InvalidDataException("loading_order.json has no [0].aLoadOrder array.");
 
-        var order = orderArr.Select(n => n?.GetValue<string>()
-            ?? throw new InvalidDataException("null entry inside aLoadOrder")).ToList();
+        var order = orderArr.Select(n => n is not null && n.GetValueKind() == JsonValueKind.String
+            ? n.GetValue<string>()
+            : throw new InvalidDataException(
+                "aLoadOrder contains a non-string entry - the file was hand-edited or damaged; inspect it manually.")).ToList();
 
         var patterns = new List<string>();
         if (arr[0]?["aIgnorePatterns"] is JsonArray patArr)

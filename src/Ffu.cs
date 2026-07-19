@@ -380,10 +380,15 @@ public static class FfuAnalysis
                            "remove it from the load order after the next game launch" +
                            (p.FfuPatchTarget is null ? " (Ostrasort could not identify which mod it patches)" : ""));
 
-        // declared dependencies that are not installed at all
+        // declared dependencies that are not installed - or installed but
+        // disabled ("mods" is filtered to enabled entries, so distinguish the
+        // two rather than calling a disabled dep "not installed")
+        var allInstalled = a.AllMods.Where(m => m.Kind != EntryKind.Core && m.Dir is not null).ToList();
         foreach (var m in mods.Where(m => m.Meta is { Dependencies.Count: > 0 }))
             foreach (var dep in m.Meta!.Dependencies.Keys.Where(d => FindByStrName(mods, d) is null))
-                a.Warnings.Add($"'{m.DisplayName ?? m.Name}' requires '{dep}' (Autoload.Meta.toml) but no such mod is installed");
+                a.Warnings.Add(FindByStrName(allInstalled, dep) is not null
+                    ? $"'{m.DisplayName ?? m.Name}' requires '{dep}' (Autoload.Meta.toml) but that mod is DISABLED - it will not load"
+                    : $"'{m.DisplayName ?? m.Name}' requires '{dep}' (Autoload.Meta.toml) but no such mod is installed");
 
         foreach (var m in mods.Where(m => m.Meta is { Problems.Count: > 0 }))
             foreach (var p in m.Meta!.Problems)

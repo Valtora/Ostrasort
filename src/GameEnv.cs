@@ -72,8 +72,10 @@ public sealed class GameEnv
         // names a specific install's own folders (e.g. a test fixture). The game
         // stores strPathMods as the path to loading_order.json (a FILE), so accept
         // either a folder or a file whose parent folder is the real Mods dir.
+        // same location scheme as PlayerLogPath (SpecialFolder, not the
+        // USERPROFILE env var, which can be unset and would silently no-op)
         var settings = Path.Combine(
-            Environment.GetEnvironmentVariable("USERPROFILE") ?? "",
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             @"AppData\LocalLow\Blue Bottle Games\Ostranauts\settings.json");
         if (gameRootOverride is null && modsDirOverride is null && File.Exists(settings))
         {
@@ -188,6 +190,12 @@ public sealed class GameEnv
         return m.Success ? m.Value : null;
     }
 
-    public static bool IsGameRunning() =>
-        System.Diagnostics.Process.GetProcessesByName("Ostranauts").Length > 0;
+    public static bool IsGameRunning()
+    {
+        // GetProcessesByName returns live Process objects - dispose them, or
+        // every GUI poll while the game runs leaks a handle for the session
+        var procs = System.Diagnostics.Process.GetProcessesByName("Ostranauts");
+        foreach (var p in procs) p.Dispose();
+        return procs.Length > 0;
+    }
 }

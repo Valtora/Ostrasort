@@ -38,6 +38,7 @@ public static class CoreIndexCache
     private static (long Count, long Bytes, long MaxTicks) Fingerprint(string coreDataDir)
     {
         long count = 0, bytes = 0, maxTicks = 0;
+        if (!Directory.Exists(coreDataDir)) return (count, bytes, maxTicks);
         foreach (var f in Directory.EnumerateFiles(coreDataDir, "*.json", SearchOption.AllDirectories))
         {
             var fi = new FileInfo(f);
@@ -48,6 +49,16 @@ public static class CoreIndexCache
         }
         return (count, bytes, maxTicks);
     }
+
+    /// <summary>
+    /// The current cheap fingerprint of the core data folder. Callers rebuilding
+    /// the index take it BEFORE the slow parse and pass it to
+    /// <see cref="Save"/> - recomputing it after the parse could stamp NEW
+    /// fingerprint values onto OLD entries if a game update landed mid-scan,
+    /// poisoning the cache until the next update.
+    /// </summary>
+    public static (long Count, long Bytes, long MaxTicks) FingerprintOf(string coreDataDir) =>
+        Fingerprint(coreDataDir);
 
     /// <summary>The cached index, or null when absent/stale/unreadable (rebuild and Save).</summary>
     public static Snapshot? TryLoad(string coreDataDir)
@@ -82,12 +93,12 @@ public static class CoreIndexCache
         catch { return null; }   // any cache problem = cache miss, never an error
     }
 
-    public static void Save(string coreDataDir, Snapshot snap)
+    public static void Save(string coreDataDir, Snapshot snap, (long Count, long Bytes, long MaxTicks)? fingerprint = null)
     {
         try
         {
             Directory.CreateDirectory(Dir);
-            var (count, bytes, maxTicks) = Fingerprint(coreDataDir);
+            var (count, bytes, maxTicks) = fingerprint ?? Fingerprint(coreDataDir);
             var entries = new JsonArray();
             foreach (var e in snap.Entries)
                 entries.Add(new JsonArray(e.Type, e.Name, e.RelPath));

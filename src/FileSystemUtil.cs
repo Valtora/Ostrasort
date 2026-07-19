@@ -22,10 +22,12 @@ public static class FileSystemUtil
     /// </summary>
     public static void RobustDeleteDirectory(string dir)
     {
-        ClearReadOnly(dir);
         var husk = dir + ".deleting-" + Guid.NewGuid().ToString("N")[..8];
         try
         {
+            ClearReadOnly(dir);   // inside the try: an attribute-walk failure
+                                  // (ACLs, vanished folder) must get the same
+                                  // "Nothing was changed" wording, not a raw throw
             Directory.Move(dir, husk);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)

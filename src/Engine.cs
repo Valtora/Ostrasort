@@ -63,7 +63,7 @@ public static class Engine
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // a duplicated entry must not self-collide
         var mods = a.AllMods.Where(m => m.Dir is not null && !m.IsPatch && !m.Disabled && m.ImagePaths.Count > 0)
-            .Where(m => seen.Add(m.Kind == EntryKind.Local ? $"local:{m.Name}" : m.Raw.Length > 0 ? m.Raw : m.Dir!))
+            .Where(m => seen.Add(Analysis.IdentityOf(m)))
             .ToList();
         var byPath = new Dictionary<string, List<ModEntry>>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in mods)
@@ -157,6 +157,8 @@ public static class Engine
             {
                 var name = Path.GetFileName(dir);
                 if (name.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)) continue;   // parked by Remove FFU
+                if (name.EndsWith(".ostrasort-tmp", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".ostrasort-old", StringComparison.OrdinalIgnoreCase)) continue;   // install staging leftovers
                 if (localNames.Contains(name)) continue;
                 if (!File.Exists(Path.Combine(dir, "mod_info.json"))) continue;   // not a mod folder
                 var entry = new ModEntry
@@ -194,14 +196,28 @@ public static class Engine
         var pluginsRoot = Path.Combine(env.BepInExDir, "plugins");
         if (Directory.Exists(pluginsRoot))
         {
+            List<string> infoFiles;
+            try { infoFiles = Directory.EnumerateFiles(pluginsRoot, "mod_info.json", SearchOption.AllDirectories).ToList(); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                a.Warnings.Add($"could not scan BepInEx\\plugins for data mods: {e.Message}");
+                infoFiles = new();
+            }
+            // GetFullPath normalises separators, so an entry written with forward
+            // slashes still matches the enumerated on-disk folder
             var registeredDirs = a.Registered.Where(m => m.Kind == EntryKind.PluginDir && m.Dir is not null)
-                .Select(m => Path.TrimEndingDirectorySeparator(m.Dir!))
+                .Select(m => Path.TrimEndingDirectorySeparator(Path.GetFullPath(m.Dir!)))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var info in Directory.EnumerateFiles(pluginsRoot, "mod_info.json", SearchOption.AllDirectories))
+            foreach (var info in infoFiles)
             {
                 var dir = Path.GetDirectoryName(info)!;
-                if (dir.Contains(".disabled", StringComparison.OrdinalIgnoreCase)) continue;   // parked by Remove FFU
                 var rel = Path.GetRelativePath(pluginsRoot, dir);
+                // parked by Remove FFU: match the ".disabled" suffix on a PATH
+                // SEGMENT under the plugins root, not anywhere in the absolute
+                // path (an install path merely containing that substring would
+                // otherwise hide every plugins-dir mod)
+                if (rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                       .Any(seg => seg.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase))) continue;
                 if (rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0]
                        .Equals("Workshop", StringComparison.OrdinalIgnoreCase)) continue;   // bridge-managed copies
                 if (!Directory.Exists(Path.Combine(dir, "data"))) continue;                 // no data payload to load

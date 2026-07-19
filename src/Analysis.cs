@@ -119,9 +119,12 @@ public sealed class Analysis
         return new PairRelation(earlier, later, rel, lost, added);
     }
 
-    /// <summary>Partial-overlap loot conflicts not (freshly) covered by the generated patch.</summary>
-    public bool HasUnresolvedConflicts =>
-        Collisions.Any(c => !c.ResolvedByPatch && c.Pairs.Any(p => p.Rel == Relation.Partial));
+    /// <summary>
+    /// Any collision still needing the user's eyes - the same predicate the GUI
+    /// badge uses (<see cref="CollisionView.NeedsAttention"/>), so headless exit
+    /// codes and the window can never disagree about whether action is needed.
+    /// </summary>
+    public bool HasUnresolvedConflicts => Collisions.Any(CollisionView.NeedsAttention);
 
     // ------------------------------------------------------------- sorting ---
 
@@ -202,22 +205,11 @@ public sealed class Analysis
             }
         }
 
-        // rule 3: clean subset/superset loot collisions load subset-first.
-        // A SubsetViolation means the pair is reversed: the earlier claimant is
-        // the superset. Move it to just after the later (subset) claimant.
-        foreach (var col in Collisions)
-            foreach (var pair in col.Pairs.Where(p => p.Rel == Relation.SubsetViolation))
-            {
-                int from = work.IndexOf(pair.Earlier), to = work.IndexOf(pair.Later);
-                if (from < 0 || to < 0 || from > to) continue;
-                work.RemoveAt(from);
-                work.Insert(work.IndexOf(pair.Later) + 1, pair.Earlier);
-                Changes.Add(new Change("move", pair.Earlier.Raw,
-                    $"its {col.Key} pool is a superset of {pair.Later.Label}'s and must load after it"));
-            }
-
-        // rule 4: register what exists but is invisible to the MODS screen
-        // (unless the user chose to leave it unregistered - the ignore list)
+        // rule 3: register what exists but is invisible to the MODS screen
+        // (unless the user chose to leave it unregistered - the ignore list).
+        // Runs BEFORE the subset-first rule so a collision involving a
+        // not-yet-registered mod is order-corrected in the SAME suggestion,
+        // not only on the next analyze-apply cycle.
         foreach (var m in UnregisteredLocal.Where(m => !m.Ignored))
         {
             work.Add(m);
@@ -234,6 +226,20 @@ public sealed class Analysis
             Changes.Add(new Change("add", m.Dir!,
                 "subscribed Workshop item not in aLoadOrder (the game will add it on next launch anyway)"));
         }
+
+        // rule 4: clean subset/superset loot collisions load subset-first.
+        // A SubsetViolation means the pair is reversed: the earlier claimant is
+        // the superset. Move it to just after the later (subset) claimant.
+        foreach (var col in Collisions)
+            foreach (var pair in col.Pairs.Where(p => p.Rel == Relation.SubsetViolation))
+            {
+                int from = work.IndexOf(pair.Earlier), to = work.IndexOf(pair.Later);
+                if (from < 0 || to < 0 || from > to) continue;
+                work.RemoveAt(from);
+                work.Insert(work.IndexOf(pair.Later) + 1, pair.Earlier);
+                Changes.Add(new Change("move", pair.Earlier.Raw,
+                    $"its {col.Key} pool is a superset of {pair.Later.Label}'s and must load after it"));
+            }
 
         // rule 5 (FFU): FFU-dependent mods form a block AFTER every non-FFU mod:
         // the FFU core tier (Minor Fixes Plus) first, then FFU mods dependency-
@@ -269,6 +275,18 @@ public sealed class Analysis
         }
 
         SuggestedOrder = work.Select(SuggestedRaw).ToList();
+
+        // a hand-edited/corrupted file may have lost its core entry entirely -
+        // never suggest (and so never write) a coreless order; ValidateOrder
+        // BLOCKs the same thing on the manual-arrange path
+        if (!SuggestedOrder.Any(e => e.Split('|')[0] == "core"))
+        {
+            SuggestedOrder.Insert(0, "core");
+            Changes.Add(new Change("add", "core", "the core entry was missing - core must load first"));
+            Warnings.Add("aLoadOrder has no 'core' entry - the file was hand-edited or damaged; " +
+                         "the suggestion restores it (the game loads core first regardless)");
+        }
+
         OrderChanged = !SuggestedOrder.SequenceEqual(Registered.Select(m => m.Raw));
     }
 
@@ -321,7 +339,7 @@ public sealed class Analysis
         return ordered;
     }
 
-    private static string IdentityOf(ModEntry m) =>
+    internal static string IdentityOf(ModEntry m) =>
         m.Kind == EntryKind.Local ? $"local:{m.Name}"
         : m.Raw.Length > 0 ? m.Raw
         : m.Dir ?? m.Name;   // unregistered entries all share Raw "" - identify by folder
@@ -398,7 +416,7 @@ public sealed class Analysis
             }
 
         var patchIdx = order.FindIndex(m => m.IsPatch);
-        if (patchIdx >= 0 && order.Skip(patchIdx + 1).Any(m => !m.IsFfu))
+        if (patchIdx >= 0 && order.Skip(patchIdx + 1).Any(m => !m.IsFfu && !m.Disabled))
             issues.Add(firstFfu >= 0
                 ? "the generated Ostrasort Patch must close the non-FFU block (only FFU mods after it) or the pools it merges get overridden again."
                 : "the generated Ostrasort Patch must load last or the pools it merges get overridden again.");

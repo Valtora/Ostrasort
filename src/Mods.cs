@@ -98,8 +98,11 @@ public sealed class ModEntry
 
         if (path.Length > 2 && path[1] == ':')   // absolute path: Workshop subscription or a BepInEx\plugins data mod
         {
-            var underBepInEx = path.StartsWith(env.BepInExDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                            || path.StartsWith(env.BepInExDir + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            // normalise separators on BOTH sides: an entry written with forward
+            // slashes (another tool's style) must still classify as PluginDir
+            var normPath = path.Replace('/', '\\');
+            var normBep = env.BepInExDir.Replace('/', '\\');
+            var underBepInEx = normPath.StartsWith(normBep + '\\', StringComparison.OrdinalIgnoreCase);
             return new ModEntry
             {
                 Raw = raw,
@@ -229,6 +232,10 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         var snap = useCoreCache ? CoreIndexCache.TryLoad(env.CoreDataDir) : null;
         if (snap is null)
         {
+            // fingerprint BEFORE the slow parse: if a game update lands mid-scan
+            // the stale entries get the OLD fingerprint and self-invalidate on
+            // the next load, instead of masquerading as current
+            var fingerprint = useCoreCache ? CoreIndexCache.FingerprintOf(env.CoreDataDir) : default;
             var entries = new List<CoreIndexCache.Entry>();
             var lootRefs = new List<CoreIndexCache.LootRef>();
             var problems = 0;
@@ -242,7 +249,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                         lootRefs.Add(new CoreIndexCache.LootRef(pool, friendly));
             }
             snap = new CoreIndexCache.Snapshot(entries, problems, lootRefs);
-            if (useCoreCache) CoreIndexCache.Save(env.CoreDataDir, snap);
+            if (useCoreCache) CoreIndexCache.Save(env.CoreDataDir, snap, fingerprint);
         }
         CoreProblemFiles = snap.ProblemFiles;
         LootNames = new LootPoolNames(snap.LootRefs);
@@ -387,6 +394,12 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         {
             mod.JsonErrors.Add($"mod_info.json: {e.Message}");
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // an unreadable file (offline cloud placeholder, AV lock, ACLs) is
+            // this mod's problem, not a reason to kill the whole scan
+            mod.JsonErrors.Add($"mod_info.json: unreadable - {e.Message}");
+        }
     }
 
     /// <summary>One data object found in a mod: its claim plus the FFU elastic-API markers it carries.</summary>
@@ -422,10 +435,22 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         if (!Directory.Exists(dataDir)) yield break;
         foreach (var typeDir in Directory.EnumerateDirectories(dataDir))
         {
-            var type = Path.GetFileName(typeDir);
+            // lower-cased so a mod shipping data\Loot\ (fine on Windows' FS)
+            // still matches core's ("loot", name) claims and gets loot analysis
+            var type = Path.GetFileName(typeDir).ToLowerInvariant();
             if (type.Equals("schemas", StringComparison.OrdinalIgnoreCase)) continue;
 
-            foreach (var file in Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories))
+            // materialise the walk so an access-denied subfolder surfaces here
+            // as one per-folder note instead of aborting the whole scan
+            List<string> files;
+            try { files = Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories).ToList(); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                onError($"{Relative(dataDir, typeDir)}: folder unreadable - {e.Message}");
+                continue;
+            }
+
+            foreach (var file in files)
             {
                 var relPath = Relative(dataDir, file);
                 if (IsIgnored(file, ignorePatterns, out var pattern))
@@ -435,7 +460,14 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 }
 
                 JsonDocument doc;
-                var text = File.ReadAllText(file);
+                string text;
+                try { text = File.ReadAllText(file); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    // offline cloud placeholder / AV lock / ACLs: flag the file, keep scanning
+                    onError($"{relPath}: unreadable - {e.Message}");
+                    continue;
+                }
                 try
                 {
                     doc = JsonDocument.Parse(text);   // strict
@@ -497,7 +529,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                                 (poolRefs ??= new()).Add(pool);
 
                         string[]? loots = null;
-                        if (wantLoot && type == "loot" &&
+                        if (wantLoot && type.Equals("loot", StringComparison.OrdinalIgnoreCase) &&
                             obj.TryGetProperty("aLoots", out var lootsEl) && lootsEl.ValueKind == JsonValueKind.Array)
                         {
                             var entries = lootsEl.EnumerateArray()

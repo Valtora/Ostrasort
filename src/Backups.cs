@@ -27,9 +27,11 @@ public static class Backups
         {
             var dir = DirFor(loPath);
             Directory.CreateDirectory(dir);
-            // the trailing sequence keeps same-millisecond snapshots in write
-            // order under the ordinal filename sort List/prune rely on
-            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff");
+            // UTC so a DST fall-back / clock change can never make a newer
+            // snapshot sort as older (prune would then delete the freshest
+            // restore point); the trailing sequence keeps same-millisecond
+            // snapshots in write order under the ordinal filename sort
+            var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
             string path;
             var n = 0;
             do { path = Path.Combine(dir, $"loading_order-{stamp}-{n++:D2}.json"); }

@@ -54,6 +54,66 @@ public class AnalysisTests
     }
 
     [Fact]
+    public void Suggestion_SubsetRule_CoversUnregisteredMods()
+    {
+        // registered S stocks a superset of unregistered T's pool. T is
+        // appended by the register rule; the subset-first rule must then move S
+        // after T in the SAME suggestion, or the first apply writes an order
+        // that silently drops S's extra items.
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var s = Registered("Super", EntryKind.Local, "Super");
+        s.Claims[("loot", "Pool")] = new[] { "a=1x1", "b=1x1", "c=1x1", "d=1x1" };
+        var t = new ModEntry { Raw = "", Kind = EntryKind.Local, Name = "Sub", Dir = "Sub", Registered = false, EditMarker = true };
+        t.Claims[("loot", "Pool")] = new[] { "a=1x1", "b=1x1" };
+
+        var a = WithOrder(core, s);
+        a.UnregisteredLocal.Add(t);
+        a.FindCollisions();
+        a.BuildSuggestion();
+
+        var si = a.SuggestedOrder.IndexOf("Super");
+        var ti = a.SuggestedOrder.IndexOf("Sub|edit");
+        Assert.True(ti >= 0 && si > ti, $"expected the superset after the subset, got [{string.Join(", ", a.SuggestedOrder)}]");
+    }
+
+    [Fact]
+    public void Suggestion_RestoresAMissingCoreEntry()
+    {
+        var data = Registered("Data", EntryKind.Local, "Data");
+        var a = WithOrder(data);   // hand-edited file lost its core entry
+
+        a.BuildSuggestion();
+
+        Assert.Equal("core", a.SuggestedOrder[0]);
+        Assert.Contains(a.Warnings, w => w.Contains("no 'core' entry"));
+    }
+
+    [Fact]
+    public void HasUnresolvedConflicts_MatchesNeedsAttention_ForMergeableObjects()
+    {
+        // a mergeable non-loot conflict needs attention even with no patch on
+        // disk - headless exit codes must agree with the GUI badge
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var m1 = Registered("A", EntryKind.Local, "A");
+        m1.Claims[("condowners", "Thing")] = null;
+        var m2 = Registered("B", EntryKind.Local, "B");
+        m2.Claims[("condowners", "Thing")] = null;
+        var a = WithOrder(core, m1, m2);
+
+        a.FindCollisions();
+        var col = Assert.Single(a.Collisions);
+        col.ObjectMergeable = true;   // as FieldDiff.Annotate would set it
+
+        Assert.True(CollisionView.NeedsAttention(col));
+        Assert.True(a.HasUnresolvedConflicts);
+
+        col.ObjectMergeable = false;
+        col.NothingLost = true;       // lossless case: neither should flag it
+        Assert.False(CollisionView.NeedsAttention(col));
+        Assert.False(a.HasUnresolvedConflicts);
+    }
+
+    [Fact]
     public void ValidateOrder_BlocksWhenCoreNotFirst()
     {
         var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
