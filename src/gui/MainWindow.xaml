@@ -142,9 +142,12 @@
                     <ComboBoxItem Content="Light"/>
                     <ComboBoxItem Content="Dark"/>
                 </ComboBox>
-                <CheckBox x:Name="ChkTidy" Content="Organise Mods by Class" VerticalAlignment="Center"
+                <CheckBox x:Name="ChkTidy" Content="Group suggested order by category" VerticalAlignment="Center"
                           Margin="0,0,18,0" Checked="Tidy_Changed" Unchecked="Tidy_Changed"
-                          ToolTip="Group the suggestion: core, infrastructure, code, shells, additive data, overrides, patch. Cosmetic and opt-in."/>
+                          ToolTip="Only affects the SUGGESTED order (cosmetic, opt-in): groups it as core, infrastructure, code, shells, additive data, overrides, patch. It does not regroup the table below."/>
+                <CheckBox x:Name="ChkTechCols" Content="Technical columns" VerticalAlignment="Center"
+                          Margin="0,0,18,0" Checked="TechCols_Changed" Unchecked="TechCols_Changed"
+                          ToolTip="Show the diagnostic columns (Source, Class, Data, Workshop ID). Hidden by default; everything they show is also in reports."/>
                 <TextBlock VerticalAlignment="Center" Margin="0,0,4,0">
                     <Hyperlink Click="CopyReport_Click">Copy report</Hyperlink>
                 </TextBlock>
@@ -257,13 +260,33 @@
                 </ContextMenu>
             </DataGrid.ContextMenu>
             <DataGrid.Columns>
+                <DataGridTemplateColumn Header="" Width="30" CanUserResize="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding StatusGlyph}" Foreground="{Binding StatusBrush}"
+                                       FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       ToolTip="{Binding StatusTip}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="On" Width="34" CanUserResize="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding Enabled, Mode=OneWay}" IsEnabled="{Binding CanToggle}"
+                                      Visibility="{Binding ToggleVisibility}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Click="RowEnable_Click"
+                                      ToolTip="Enabled: the game loads this mod. Unticking adds the game's own disabled marker, the same thing the in-game MODS screen toggle does."/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="#" Binding="{Binding Pos}" Width="36"/>
                 <DataGridTextColumn Header="Mod Name" Binding="{Binding Name}" Width="3*"/>
-                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="86"/>
-                <DataGridTextColumn Header="Class" Binding="{Binding Class}" Width="110"/>
-                <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="130"/>
+                <DataGridTextColumn x:Name="ColSource" Header="Source" Binding="{Binding Source}" Width="86"/>
+                <DataGridTextColumn x:Name="ColClass" Header="Class" Binding="{Binding Class}" Width="110"/>
+                <DataGridTextColumn x:Name="ColData" Header="Data" Binding="{Binding Data}" Width="130"/>
                 <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="80"/>
-                <DataGridTextColumn Header="Workshop ID" Binding="{Binding WorkshopId}" Width="110"/>
+                <DataGridTextColumn x:Name="ColWorkshopId" Header="Workshop ID" Binding="{Binding WorkshopId}" Width="110"/>
                 <DataGridTemplateColumn Header="Last Updated" Width="150">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
@@ -311,7 +334,7 @@
                     </ListBox>
                 </DockPanel>
             </TabItem>
-            <TabItem x:Name="TabCollisions" Header="Collisions">
+            <TabItem x:Name="TabCollisions" Header="Conflicts">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="8,6,8,0" TextWrapping="Wrap" FontSize="11.5"
                                Foreground="{DynamicResource SecondaryTextBrush}"
@@ -322,7 +345,7 @@
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
-            <TabItem x:Name="TabResolved" Header="Resolved / handled">
+            <TabItem x:Name="TabResolved" Header="Handled automatically">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="8,6,8,0" TextWrapping="Wrap" FontSize="11.5"
                                Foreground="{DynamicResource SecondaryTextBrush}"
@@ -333,12 +356,12 @@
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
-            <TabItem x:Name="TabOrder" Header="Order changes">
+            <TabItem x:Name="TabOrder" Header="Load order">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl x:Name="ListOrder" ItemTemplate="{StaticResource LineTemplate}" Margin="8"/>
                 </ScrollViewer>
             </TabItem>
-            <TabItem x:Name="TabPatch" Header="Patch">
+            <TabItem x:Name="TabPatch" Header="Compatibility patch">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8,2,8,8">
                         <Button x:Name="BtnPatchGenerate" Content="Resolve conflicts &amp; generate patch" Padding="10,4"

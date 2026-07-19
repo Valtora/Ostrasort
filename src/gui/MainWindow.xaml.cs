@@ -15,7 +15,13 @@ namespace Ostrasort.Gui;
 public sealed record ModRow(string Pos, string Name, string Source, string Class, string Data,
                             string Version, string WorkshopId, string Notes, Brush Brush, string? Dir, string Tooltip,
                             ModEntry M, bool Draggable,
-                            string LastUpdated, string UpdateText, Brush UpdateBrush);
+                            string LastUpdated, string UpdateText, Brush UpdateBrush,
+                            string StatusGlyph, Brush StatusBrush, string StatusTip,
+                            bool Enabled, bool CanToggle)
+{
+    public Visibility ToggleVisibility =>
+        M.Registered && M.Kind != EntryKind.Core && !M.IsPatch ? Visibility.Visible : Visibility.Collapsed;
+}
 public sealed record LineVm(string Text, Brush Brush, Thickness Margin, bool Bold = false, Collision? Collision = null)
 {
     public FontWeight Weight => Bold ? FontWeights.Bold : FontWeights.Normal;
@@ -85,6 +91,8 @@ public partial class MainWindow : Window
         SingleInstance.OnShutdown = () => Dispatcher.Invoke(Close);
         Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
+        ChkTechCols.IsChecked = _settings.TechColumns;
+        ApplyTechColumns();
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
         PopulateInstallations();
         OpLog.Add($"Ostrasort v{Program.Version} opened ({_env.GameRoot}).");
@@ -462,9 +470,37 @@ public partial class MainWindow : Window
         var draggable = m.Registered && m.Kind != EntryKind.Core;
         var (lastUpdated, updText, updBrush) = UpdateInfo(m);
         var version = m.Kind == EntryKind.Core ? "-" : m.ModVersion ?? "-";
+
+        // status glyph: colour is never the only signal - the shape carries it too
+        var hasBad = (m.Dir is null && m.Kind != EntryKind.Core) || m.JsonErrors.Count > 0 || m.LogNotes.Count > 0;
+        var hasWarn = (!m.Registered && !m.Ignored) || m.GameVersionNote(_env.InstalledVersion) is not null;
+        var (glyph, glyphBrush, glyphTip) =
+            m.Disabled || m.Ignored ? ("⏸", Dim, m.Disabled ? "Disabled: the game skips this mod." : "Ignored: kept unregistered on purpose.")
+            : hasBad ? ("✕", Bad, "Problems found. " + string.Join(" ", notes.Select(n => n + ".")))
+            : hasWarn ? ("!", Warn, string.Join(" ", notes.Select(n => n + ".")))
+            : ("✓", Good, "No problems found.");
+
         return new ModRow(pos, name, source, cls, data, version, m.WorkshopId ?? "-",
             string.Join("; ", notes), brush, m.Dir, tooltip, m, draggable,
-            lastUpdated, updText, updBrush);
+            lastUpdated, updText, updBrush,
+            glyph, glyphBrush, glyphTip,
+            Enabled: !m.Disabled, CanToggle: CanToggleRow(m));
+    }
+
+    private bool CanToggleRow(ModEntry m) =>
+        m is { Registered: true, Kind: not EntryKind.Core } && !m.IsPatch
+        && _state?.Analysis.Ffu is not { AutoloaderActive: true };
+
+    /// <summary>The per-row Enabled checkbox: toggles the game's own |disabled marker.</summary>
+    private void RowEnable_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ModRow row) return;
+        if (!ToggleDisabled(row, disable: !row.M.Disabled))
+        {
+            // the write was refused - snap the checkbox visual back to reality
+            var i = _rows.IndexOf(row);
+            if (i >= 0) _rows[i] = row with { };
+        }
     }
 
     /// <summary>
@@ -543,10 +579,10 @@ public partial class MainWindow : Window
 
         var attentionColl = a.Collisions.Count(CollisionView.NeedsAttention);
         var handledColl = a.Collisions.Count - attentionColl;   // benign + patch-merged + FFU/additive handled
-        SetTabHeader(TabCollisions, attentionColl == 0 ? "Collisions" : $"Collisions ({attentionColl})", collAttention);
-        SetTabHeader(TabResolved, handledColl == 0 ? "Resolved / handled" : $"Resolved / handled ({handledColl})", attention: false);
-        SetTabHeader(TabOrder, a.OrderChanged ? $"Order changes ({a.Changes.Count})" : "Order changes", orderAttention);
-        SetTabHeader(TabPatch, "Patch", patchAttention);
+        SetTabHeader(TabCollisions, attentionColl == 0 ? "Conflicts" : $"Conflicts ({attentionColl})", collAttention);
+        SetTabHeader(TabResolved, handledColl == 0 ? "Handled automatically" : $"Handled automatically ({handledColl})", attention: false);
+        SetTabHeader(TabOrder, a.OrderChanged ? $"Load order ({a.Changes.Count})" : "Load order", orderAttention);
+        SetTabHeader(TabPatch, "Compatibility patch", patchAttention);
         SetTabHeader(TabWarnings, warnCount == 0 ? "Warnings" : $"Warnings ({warnCount})", warnAttention);
 
         _attentionCount = new[] { collAttention, orderAttention, patchAttention, warnAttention }.Count(x => x);
@@ -1485,13 +1521,24 @@ public partial class MainWindow : Window
             item.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void MenuDisable_Click(object sender, RoutedEventArgs e) => ToggleDisabled(disable: true);
-    private void MenuEnable_Click(object sender, RoutedEventArgs e) => ToggleDisabled(disable: false);
-
-    /// <summary>Adds/removes the game's own |disabled marker on the selected entry (guarded write, undoable).</summary>
-    private void ToggleDisabled(bool disable)
+    private void MenuDisable_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || ModsGrid.SelectedItem is not ModRow row || !GateRunning() || !GateRival()) return;
+        if (ModsGrid.SelectedItem is ModRow row) ToggleDisabled(row, disable: true);
+    }
+
+    private void MenuEnable_Click(object sender, RoutedEventArgs e)
+    {
+        if (ModsGrid.SelectedItem is ModRow row) ToggleDisabled(row, disable: false);
+    }
+
+    /// <summary>
+    /// Adds/removes the game's own |disabled marker on an entry (guarded write,
+    /// undoable). Returns false when the write was refused or failed, so the
+    /// checkbox column can reset its visual.
+    /// </summary>
+    private bool ToggleDisabled(ModRow row, bool disable)
+    {
+        if (_state is null || !GateRunning() || !GateRival()) return false;
         var m = row.M;
         var name = m.DisplayName ?? m.Name;
         _busy = true;
@@ -1509,12 +1556,31 @@ public partial class MainWindow : Window
                 ? $"'{name}' disabled — the entry stays, the game skips it.  "
                 : $"'{name}' enabled.  ";
             RunStatus.Foreground = Good;
+            return true;
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
         finally { _busy = false; }
+    }
+
+    /// <summary>Show/hide the diagnostic mod-table columns (persisted).</summary>
+    private void TechCols_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settings.TechColumns = ChkTechCols.IsChecked == true;
+        ApplyTechColumns();
+    }
+
+    private void ApplyTechColumns()
+    {
+        var vis = _settings.TechColumns ? Visibility.Visible : Visibility.Collapsed;
+        ColSource.Visibility = vis;
+        ColClass.Visibility = vis;
+        ColData.Visibility = vis;
+        ColWorkshopId.Visibility = vis;
     }
 
     /// <summary>Registers the selected unregistered mod into loading_order.json in its suggested slot (guarded write, undoable).</summary>

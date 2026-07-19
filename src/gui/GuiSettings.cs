@@ -15,6 +15,7 @@ public sealed class GuiSettings
     public int Tab { get; set; }
     public string Theme { get; set; } = "system";   // "system" | "light" | "dark"
     public bool InstallPromptDismissed { get; set; } // the first-run "install to %LOCALAPPDATA%" prompt was answered/dismissed
+    public bool TechColumns { get; set; }            // show the diagnostic mod-table columns (Source/Class/Data/Workshop ID)
 
     private static string PathFor() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

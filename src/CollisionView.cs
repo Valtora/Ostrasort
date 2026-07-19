@@ -42,8 +42,8 @@ public static class CollisionView
         items.Length <= n ? string.Join(", ", items)
         : string.Join(", ", items.Take(n)) + $", +{items.Length - n} more";
 
-    public static List<ViewLine> Build(Analysis a) =>
-        Render(a.Collisions, "No two mods claim the same object — no conflicts.");
+    public static List<ViewLine> Build(Analysis a, bool cliHints = false) =>
+        Render(a.Collisions, "No two mods claim the same object — no conflicts.", cliHints);
 
     /// <summary>
     /// A collision still needs the user's eyes: the load order / patch / FFU do
@@ -71,13 +71,13 @@ public static class CollisionView
     /// are not shown here at all - they live on the Resolved / handled tab - so
     /// this tab reads clean when there is nothing to do.
     /// </summary>
-    public static List<ViewLine> BuildActive(Analysis a)
+    public static List<ViewLine> BuildActive(Analysis a, bool cliHints = false)
     {
         var attention = a.Collisions.Where(NeedsAttention).ToList();
         if (attention.Count > 0)
         {
             var lines = new List<ViewLine>();
-            RenderGroups(attention, lines);
+            RenderGroups(attention, lines, cliHints);
             return lines;
         }
 
@@ -85,7 +85,7 @@ public static class CollisionView
         return new List<ViewLine>
         {
             new(handled > 0
-                ? $"No conflicts need action — {handled} detected, all handled (see the Resolved / handled tab)."
+                ? $"No conflicts need action — {handled} detected, all handled (see the Handled automatically tab)."
                 : "No two mods claim the same object — no conflicts.", LineSev.Good, 0),
         };
     }
@@ -95,23 +95,23 @@ public static class CollisionView
     /// by the Ostrasort Patch, merged field-/entry-by-entry at load by FFU or the
     /// game, or handled losslessly by the load order (e.g. same-set shop pools).
     /// </summary>
-    public static List<ViewLine> BuildResolved(Analysis a) =>
+    public static List<ViewLine> BuildResolved(Analysis a, bool cliHints = false) =>
         Render(a.Collisions.Where(c => !NeedsAttention(c)).ToList(),
                a.Collisions.Count == 0
                    ? "No two mods claim the same object — no conflicts."
-                   : "Nothing handled automatically — every collision needs action (see the Collisions tab).");
+                   : "Nothing handled automatically — every conflict needs action (see the Conflicts tab).", cliHints);
 
-    private static List<ViewLine> Render(IReadOnlyList<Collision> collisions, string emptyMessage)
+    private static List<ViewLine> Render(IReadOnlyList<Collision> collisions, string emptyMessage, bool cliHints = false)
     {
         var lines = new List<ViewLine>();
         if (collisions.Count == 0)
             lines.Add(new ViewLine(emptyMessage, LineSev.Good, 0));
         else
-            RenderGroups(collisions, lines);
+            RenderGroups(collisions, lines, cliHints);
         return lines;
     }
 
-    private static void RenderGroups(IReadOnlyList<Collision> collisions, List<ViewLine> lines)
+    private static void RenderGroups(IReadOnlyList<Collision> collisions, List<ViewLine> lines, bool cliHints = false)
     {
         void Add(string text, LineSev sev, int indent, bool bold = false, Collision? col = null) =>
             lines.Add(new ViewLine(text, sev, indent, bold, col));
@@ -149,12 +149,16 @@ public static class CollisionView
             {
                 Add($"Both edit {what}. The game would keep only the last-loaded version and drop", LineSev.Bad, 1);
                 Add("the other mod's changes — but Ostrasort can merge them so nothing is lost.", LineSev.Bad, 1);
-                Add("→ Fixable — use “Resolve conflicts & generate patch” (or --patch) to merge them.", LineSev.Warn, 1);
+                Add(cliHints
+                    ? "→ Fixable — run with --patch to merge them."
+                    : "→ Fixable — press “Resolve conflicts & generate patch” (or “Fix automatically” at the top).", LineSev.Warn, 1);
             }
             else if (anyWrongOrder)
             {
                 Add($"Both stock {what}, and the current load order is dropping items.", LineSev.Bad, 1);
-                Add("→ Fixable — use “Apply Suggested Fixes” (or --apply) to reorder them.", LineSev.Warn, 1);
+                Add(cliHints
+                    ? "→ Fixable — run with --apply to reorder them."
+                    : "→ Fixable — press “Fix automatically” at the top to reorder them.", LineSev.Warn, 1);
             }
             else if (anyResolved)
             {

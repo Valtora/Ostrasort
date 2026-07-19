@@ -65,7 +65,7 @@ public static class Report
         // --------------------------------------------------------- collisions
         Line("");
         Line($"COLLISIONS ({a.Collisions.Count})", ConsoleColor.Cyan);
-        foreach (var v in CollisionView.Build(a))   // same grouped view as the GUI
+        foreach (var v in CollisionView.Build(a, cliHints: true))   // same grouped view as the GUI, CLI wording
             Line(new string(' ', 2 + v.Indent * 2) + v.Text, v.Sev switch
             {
                 LineSev.Good => ConsoleColor.Green,
