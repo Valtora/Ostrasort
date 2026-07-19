@@ -103,18 +103,20 @@ public static class Patcher
     public const string FolderName = "OstrasortPatch";
     public const string MarkerFile = "ostrasort_patch.json";
 
-    private static readonly JsonDocumentOptions Lenient = new()
-    {
-        AllowTrailingCommas = true,
-        CommentHandling = JsonCommentHandling.Skip,
-    };
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
-    /// <summary>Loot pools --patch can merge: every claimant has aLoots and some pair is a partial overlap.</summary>
+    /// <summary>
+    /// Loot pools --patch can merge: every claimant has aLoots and some pair is
+    /// a partial overlap. A pool any claimant edits via FFU precision commands
+    /// (even when its aLoots itself is plain) is excluded: folding it into the
+    /// union would drop that claimant's command-driven edits - those merge at
+    /// load instead (FieldDiff marks the collision FfuMergedAtLoad).
+    /// </summary>
     public static List<Collision> PatchableConflicts(Analysis a) =>
         a.Collisions.Where(c =>
             c.Type == "loot" &&
             c.Claimants.All(m => m.Claims.TryGetValue((c.Type, c.ObjName), out var l) && l is not null) &&
+            c.Claimants.All(m => !m.FfuArrayEditClaims.Contains((c.Type, c.ObjName))) &&
             c.Pairs.Any(p => p.Rel == Relation.Partial)).ToList();
 
     /// <summary>Non-loot objects a 3-way field merge would improve on (flagged by FieldDiff).</summary>
@@ -192,8 +194,18 @@ public static class Patcher
 
         var mergeableObjects = MergeableObjects(a);
         var current = PatchableConflicts(a).Concat(mergeableObjects).ToList();
+        var patchIdx = a.Registered.FindIndex(m => m.IsPatch);
         foreach (var c in current)
         {
+            // a merge only wins if the patch loads after every non-FFU mod it
+            // merges - if a source loads later, its whole-object override beats
+            // the merged version and "nothing lost" would be a false promise
+            if (patchIdx >= 0 && c.Claimants.Any(m => !m.IsFfu && a.Registered.IndexOf(m) > patchIdx))
+            {
+                info.StaleReasons.Add($"{c.Key}: the patch loads before a mod it merges - " +
+                                      "apply the suggested order or regenerate the patch");
+                continue;
+            }
             if (!markerPools.TryGetValue(c.Key, out var entry))
             {
                 info.StaleReasons.Add($"new conflict {c.Key} is not covered yet");
@@ -250,8 +262,6 @@ public static class Patcher
 
             foreach (var m in c.Claimants)
             {
-                // FFU command-driven edits merge at load - never fold them into the union
-                if (m.FfuArrayEditClaims.Contains((c.Type, c.ObjName))) continue;
                 var obj = LoadPoolObject(m.Dir!, c.Type, c.ObjName, a.IgnorePatterns);
                 if (obj is null) continue;
                 baseObj = obj;                       // last claimant's object = base
@@ -266,7 +276,9 @@ public static class Patcher
                 Collision = c,
                 BaseObject = baseObj,
                 LootItems = lootOrder.Select(t => BuildItem(t, lootOptions[t], priorChoices)).ToList(),
-                CoItems = coOrder.Select(t => BuildItem(t, coOptions[t], priorChoices)).ToList(),
+                // aCOs choices are stored under a "co:" prefix so a token present
+                // in both lists never shares one stored decision with aLoots
+                CoItems = coOrder.Select(t => BuildItem(t, coOptions[t], priorChoices, CoPrefix)).ToList(),
             };
             pools.Add(plan);
         }
@@ -312,37 +324,59 @@ public static class Patcher
         }
     }
 
+    /// <summary>Marker key prefix separating aCOs decisions from aLoots decisions in a pool.</summary>
+    private const string CoPrefix = "co:";
+
+    /// <summary>
+    /// Full-fidelity signature of an option's value, used to decide whether a
+    /// stored decision still matches. Object-field options carry their value in
+    /// Node (Entry is a truncated display string - two different values can
+    /// render identically); loot options carry the entry string itself.
+    /// </summary>
+    private static string ValueSig(MergeOption o) => o.Node?.ToJsonString() ?? o.Entry;
+
     private static MergeItem BuildItem(string token, List<MergeOption> options,
-                                       Dictionary<string, (string Source, string Entry, bool Auto, bool Excluded)>? prior)
+                                       Dictionary<string, (string Source, string Entry, bool Auto, bool Excluded)>? prior,
+                                       string prefix = "")
     {
         var item = new MergeItem { Token = token, Options = options };
-        ApplyPrior(item, prior);
+        ApplyPrior(item, prior, prefix);
         return item;
     }
 
     /// <summary>Re-applies a stored decision (source pick or exclusion) to an item if still valid.</summary>
     private static void ApplyPrior(MergeItem item,
-                                   Dictionary<string, (string Source, string Entry, bool Auto, bool Excluded)>? prior)
+                                   Dictionary<string, (string Source, string Entry, bool Auto, bool Excluded)>? prior,
+                                   string prefix = "")
     {
-        if (prior is null || !prior.TryGetValue(item.Token, out var p)) return;
+        if (prior is null) return;
+        // older markers stored aCOs decisions unprefixed - fall back for them
+        if (!prior.TryGetValue(prefix + item.Token, out var p) &&
+            (prefix.Length == 0 || !prior.TryGetValue(item.Token, out p))) return;
         if (p.Excluded)
         {
             item.Excluded = true;               // intent about the item/field - survives value changes
             item.ChosenSourceId = null;
         }
-        else if (item.Contested && item.Options.Any(o => o.SourceId == p.Source && o.Entry == p.Entry))
+        else if (item.Contested && item.Options.Any(o => o.SourceId == p.Source && ValueSig(o) == p.Entry))
         {
             item.ChosenSourceId = p.Source;     // decision still valid - keep it
             item.AutoResolved = p.Auto;
         }
     }
 
-    /// <summary>Headless fallback: unresolved contested items take the later-loaded entry, marked auto.</summary>
+    /// <summary>
+    /// Headless fallback: unresolved contested items take the later-loaded MOD's
+    /// entry (matching the game's own last-wins outcome), marked auto. The
+    /// synthetic union option is never auto-picked - a computed union the game
+    /// would not itself produce must be a person's explicit choice.
+    /// </summary>
     public static void ResolveFallback(MergePlan plan)
     {
         foreach (var item in plan.Unresolved.ToList())
         {
-            item.ChosenSourceId = item.Options[^1].SourceId;
+            var pick = item.Options.LastOrDefault(o => o.SourceId != "__union__") ?? item.Options[^1];
+            item.ChosenSourceId = pick.SourceId;
             item.AutoResolved = true;
         }
     }
@@ -390,6 +424,17 @@ public static class Patcher
             throw new InvalidOperationException("the merge plan still has undecided items - resolve them first.");
 
         var dir = Path.Combine(env.ModsDir, FolderName);
+        if (Directory.Exists(dir) && !File.Exists(Path.Combine(dir, MarkerFile))
+            && Directory.EnumerateFileSystemEntries(dir).Any())
+            throw new InvalidOperationException(
+                $"'{dir}' exists but has no {MarkerFile} - refusing to overwrite a folder Ostrasort did not generate.");
+
+        // a previous generation's data files must not survive: a conflict class
+        // that disappeared (a mod uninstalled or updated) would otherwise keep
+        // overriding the game via leftover files no staleness check can see
+        var dataDir = Path.Combine(dir, "data");
+        if (Directory.Exists(dataDir)) Directory.Delete(dataDir, recursive: true);
+
         var validator = new SchemaValidator(env);
         var markerPools = new JsonArray();
         var descriptions = new List<string>();
@@ -402,18 +447,22 @@ public static class Patcher
                 arr.Add(new JsonObject { ["id"] = SourceId(m), ["label"] = m.Label, ["hash"] = SourceSig(env, c, m, a.IgnorePatterns) });
             return arr;
         }
+        void AddChoices(JsonObject choices, IEnumerable<MergeItem> items, string prefix = "")
+        {
+            foreach (var i in items.Where(i => i.Excluded))
+                choices[prefix + i.Token] = new JsonObject { ["excluded"] = true };
+            foreach (var i in items.Where(i => i.Contested && !i.Excluded))
+                choices[prefix + i.Token] = new JsonObject
+                {
+                    ["source"] = i.Resolved.SourceId,
+                    ["entry"] = ValueSig(i.Resolved),
+                    ["auto"] = i.AutoResolved,
+                };
+        }
         JsonObject ChoicesFor(IEnumerable<MergeItem> items)
         {
             var choices = new JsonObject();
-            foreach (var i in items.Where(i => i.Excluded))
-                choices[i.Token] = new JsonObject { ["excluded"] = true };
-            foreach (var i in items.Where(i => i.Contested && !i.Excluded))
-                choices[i.Token] = new JsonObject
-                {
-                    ["source"] = i.Resolved.SourceId,
-                    ["entry"] = i.Resolved.Entry,
-                    ["auto"] = i.AutoResolved,
-                };
+            AddChoices(choices, items);
             return choices;
         }
 
@@ -426,15 +475,20 @@ public static class Patcher
             {
                 var obj = p.BaseObject;
                 obj["aLoots"] = new JsonArray(p.LootItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
-                obj["aCOs"] = new JsonArray(p.CoItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
+                // don't invent an aCOs field no source pool carried
+                if (p.CoItems.Count > 0 || obj["aCOs"] is not null)
+                    obj["aCOs"] = new JsonArray(p.CoItems.Where(i => !i.Excluded).Select(i => (JsonNode)i.Resolved.Entry).ToArray());
                 poolNodes.Add(obj);
+                var poolChoices = new JsonObject();
+                AddChoices(poolChoices, p.LootItems);
+                AddChoices(poolChoices, p.CoItems, CoPrefix);
                 markerPools.Add(new JsonObject
                 {
                     ["type"] = p.Collision.Type,
                     ["strName"] = p.Collision.ObjName,
                     ["kind"] = "loot",
                     ["sources"] = SourcesFor(p.Collision),
-                    ["choices"] = ChoicesFor(p.AllItems),
+                    ["choices"] = poolChoices,
                 });
                 descriptions.Add($"{p.Collision.ObjName} = {string.Join(" + ", p.Collision.Claimants.Select(m => m.DisplayName ?? m.Name))}");
             }
@@ -516,31 +570,13 @@ public static class Patcher
         return new GenerateResult(descriptions, schemaWarnings);
     }
 
-    /// <summary>Finds one object by strName in a mod's data\&lt;type&gt; folder and deep-clones it.</summary>
-    private static JsonNode? LoadPoolObject(string modDir, string type, string strName, IReadOnlyList<string>? ignorePatterns = null)
-    {
-        var typeDir = Path.Combine(modDir, "data", type);
-        if (!Directory.Exists(typeDir)) return null;
-        JsonNode? found = null;   // keep scanning: a later same-strName duplicate replaces the earlier (like the game)
-        foreach (var file in Directory.EnumerateFiles(typeDir, "*.json", SearchOption.AllDirectories))
-        {
-            if (Scanner.IsIgnored(file, ignorePatterns, out _)) continue;   // the game skips these files
-            // duplicate property names throw ArgumentException on first ACCESS
-            // of a lazily-materialized JsonNode - keep the walk inside the try
-            try
-            {
-                var root = JsonNode.Parse(File.ReadAllText(file), null, Lenient);
-                var objects = root is JsonArray arr ? arr.ToList() : new List<JsonNode?> { root };
-                foreach (var o in objects)
-                    if (o?["strName"]?.GetValue<string>() == strName)
-                        found = o.DeepClone();
-            }
-            catch (JsonException) { }
-            catch (ArgumentException) { }
-            catch (InvalidOperationException) { }
-        }
-        return found;
-    }
+    /// <summary>
+    /// Finds one object by strName in a mod's data\&lt;type&gt; folder and
+    /// deep-clones it. Delegates to <see cref="FieldDiff.LoadObject"/> so the
+    /// pool merge reads the exact same object the field diff does.
+    /// </summary>
+    private static JsonNode? LoadPoolObject(string modDir, string type, string strName, IReadOnlyList<string>? ignorePatterns = null) =>
+        FieldDiff.LoadObject(Path.Combine(modDir, "data", type), strName, ignorePatterns)?.DeepClone();
 
     // -------------------------------------------------- register / remove ---
 
@@ -549,13 +585,16 @@ public static class Patcher
         var lo = LoadOrderFile.Read(env.LoadingOrderPath);
         var target = lo.Order.Where(e => e.Split('|')[0] != FolderName).ToList();   // drop any marker variant
 
-        // insert before the first registered FFU mod so FFU mods keep loading
-        // after the patch (they merge on top of it at load); else append
+        // the patch must load after every non-FFU mod it merges; FFU mods keep
+        // loading after it (they field-merge on top at load). Anchor on the
+        // LAST non-FFU entry, not the first FFU one: if the current order has
+        // an FFU mod interleaved early, inserting before it would put the patch
+        // ahead of mods it merges and their whole-object overrides would win.
         var ffuRaws = a.Registered.Where(m => m.IsFfu && m.Raw.Length > 0)
             .Select(m => m.Raw).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var firstFfu = target.FindIndex(e => ffuRaws.Contains(e));
-        if (firstFfu < 0) target.Add(FolderName);
-        else target.Insert(firstFfu, FolderName);
+        var lastNonFfu = target.FindLastIndex(e => !ffuRaws.Contains(e));
+        if (lastNonFfu < 0) target.Add(FolderName);
+        else target.Insert(lastNonFfu + 1, FolderName);
 
         if (!target.SequenceEqual(lo.Order)) lo.Write(target);
     }

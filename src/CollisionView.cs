@@ -54,7 +54,7 @@ public static class CollisionView
     /// </summary>
     public static bool NeedsAttention(Collision c)
     {
-        if (c.ResolvedByPatch || c.FfuMergedAtLoad || c.AdditiveAtLoad) return false;
+        if (c.ResolvedByPatch || c.FfuMergedAtLoad || c.AdditiveAtLoad || c.NothingLost) return false;
         if (c.ObjectMergeable) return true;                             // a field merge would preserve more than last-wins
         return c.Pairs.Any(p => p.Rel is Relation.Partial              // loot: each side loses items (patch merges)
                                        or Relation.SubsetViolation      // loot: order drops items (reorder fixes)
@@ -63,7 +63,7 @@ public static class CollisionView
 
     /// <summary>Stable key for the set of mods in a collision, used to group the display.</summary>
     private static string GroupKey(Collision c) =>
-        string.Join("", c.Claimants.Select(m => m.Kind == EntryKind.Workshop ? m.Name : "local:" + m.Name));
+        string.Join("|", c.Claimants.Select(m => m.Kind == EntryKind.Workshop ? m.Name : "local:" + m.Name));
 
     /// <summary>
     /// The Collisions tab: ONLY collisions that need action. Benign ones (handled
@@ -130,8 +130,10 @@ public static class CollisionView
             var anyResolved = cols.Any(c => c.ResolvedByPatch);
             var anyFfuMerged = cols.Any(c => !c.ResolvedByPatch && c.FfuMergedAtLoad);
             var anyAdditive = cols.Any(c => !c.ResolvedByPatch && c.AdditiveAtLoad);
+            var anyNothingLost = cols.Any(c => !c.ResolvedByPatch && c.NothingLost);
             var anyDeadReplace = cols.Any(c => !c.ResolvedByPatch && !c.ObjectMergeable && !c.FfuMergedAtLoad &&
-                                               !c.AdditiveAtLoad && c.Pairs.Any(p => p.Rel == Relation.NonLoot));
+                                               !c.AdditiveAtLoad && !c.NothingLost &&
+                                               c.Pairs.Any(p => p.Rel == Relation.NonLoot));
             var fixableByPatch = anyLootConflict || anyMergeableObj;
 
             Add(string.Join("   +   ", mods), LineSev.Normal, 0, bold: true);
@@ -168,6 +170,11 @@ public static class CollisionView
                 Add($"Both add to {what} — the game merges these entry-by-entry at load, nothing lost", LineSev.Good, 1);
                 Add("(only an entry defined by both mods goes to the last-loaded one; see the detail below).", LineSev.Good, 1);
             }
+            else if (anyNothingLost)
+            {
+                Add($"Both edit {what} — the versions agree (identical, or the last-loaded includes", LineSev.Good, 1);
+                Add("every change), nothing lost (see the detail below).", LineSev.Good, 1);
+            }
             else if (anyDeadReplace)
             {
                 Add($"Both edit {what}. The game keeps only the last-loaded version and there is", LineSev.Warn, 1);
@@ -187,7 +194,9 @@ public static class CollisionView
                     : c.AdditiveAtLoad ? "merged entry-by-entry at load"
                     : p is null ? "claimed by multiple mods"
                     : p.Rel == Relation.NonLoot
-                        ? (c.ObjectMergeable ? "mergeable — see the field notes below" : $"only {Short(p.Later)}'s version applies")
+                        ? (c.ObjectMergeable ? "mergeable — see the field notes below"
+                           : c.NothingLost ? "nothing lost — see the field notes below"
+                           : $"only {Short(p.Later)}'s version applies")
                         : p.Rel switch
                         {
                             Relation.Partial => $"{Short(p.Later)} would drop {p.LostFromEarlier.Length} of {Short(p.Earlier)}'s items ({Sample(p.LostFromEarlier)})",

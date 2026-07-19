@@ -119,6 +119,43 @@ public class ObjectMergeTests
     }
 
     [Fact]
+    public void Union_DoesNotResurrectEntriesBothModsRemoved()
+    {
+        // core has "Sleep"; BOTH mods removed it. The union is the union of the
+        // MODS' entries - resurrecting a base-only entry would override their
+        // shared intent.
+        var core = Obj("""{"strName":"X","aInteractions":["Sit","Sleep"]}""");
+        var plan = ObjectMerge.Build(Coll("condowners", "X", A, B), core,
+            Versions((A, """{"strName":"X","aInteractions":["Sit","Wash"]}"""),
+                     (B, """{"strName":"X","aInteractions":["Sit","Drink"]}""")));
+
+        var field = Assert.Single(plan!.Fields);
+        field.ChosenSourceId = "__union__";
+        var merged = (JsonArray)ObjectMerge.Assemble(plan)["aInteractions"]!;
+        Assert.Equal(new[] { "Sit", "Wash", "Drink" }, merged.Select(n => n!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void ResolveFallback_PicksLaterModsEntry_NotTheUnion()
+    {
+        // headless auto-resolve must mirror the game's own last-wins outcome;
+        // a computed union is only ever a person's explicit choice
+        var core = Obj("""{"strName":"X","aTags":["x"]}""");
+        var plan = ObjectMerge.Build(Coll("condowners", "X", A, B), core,
+            Versions((A, """{"strName":"X","aTags":["x","y"]}"""),
+                     (B, """{"strName":"X","aTags":["x","z"]}""")));
+
+        var merge = new MergePlan { Pools = new List<PoolPlan>(), Objects = { plan! } };
+        Patcher.ResolveFallback(merge);
+
+        var field = Assert.Single(plan!.Fields);
+        Assert.True(field.AutoResolved);
+        Assert.Equal("ModB", field.Resolved.SourceLabel);   // later-loaded mod, not "__union__"
+        var merged = (JsonArray)ObjectMerge.Assemble(plan)["aTags"]!;
+        Assert.Equal(new[] { "x", "z" }, merged.Select(n => n!.GetValue<string>()));
+    }
+
+    [Fact]
     public void ExcludedField_RevertsToVanilla()
     {
         var core = Obj("""{"strName":"X","a":1}""");

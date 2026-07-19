@@ -115,6 +115,122 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void Regenerate_RemovesDataFilesForVanishedConflicts()
+    {
+        // two conflict classes: the conditions merge (fixture) plus a condowners one
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "condowners", "co.json"),
+            """[{"strName":"NewCO","fMass":1}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "condowners", "co.json"),
+            """[{"strName":"NewCO","nCount":5}]""");
+        var state = Engine.Analyze(_env);
+        Patcher.Generate(_env, Patcher.PlanMerge(_env, state.Analysis), state.Analysis, _env.InstalledVersion, "test");
+        var condownersFile = Path.Combine(_env.ModsDir, Patcher.FolderName, "data", "condowners", "ostrasort_merged.json");
+        Assert.True(File.Exists(condownersFile));
+
+        // the condowners conflict disappears (ModB drops its version); on
+        // regeneration the old merged file must not survive as a ghost override
+        File.Delete(Path.Combine(_env.ModsDir, "ModB", "data", "condowners", "co.json"));
+        state = Engine.Analyze(_env);
+        Patcher.Generate(_env, Patcher.PlanMerge(_env, state.Analysis), state.Analysis, _env.InstalledVersion, "test");
+
+        Assert.False(File.Exists(condownersFile));
+        Assert.True(File.Exists(Path.Combine(_env.ModsDir, Patcher.FolderName,
+            "data", "conditions", "ostrasort_merged.json")));   // surviving conflict still written
+    }
+
+    [Fact]
+    public void Generate_RefusesAFolderItDidNotGenerate()
+    {
+        var dir = Path.Combine(_env.ModsDir, Patcher.FolderName);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "somefile.txt"), "not ours");
+
+        var state = Engine.Analyze(_env);
+        var plan = Patcher.PlanMerge(_env, state.Analysis);
+        Assert.Throws<InvalidOperationException>(() =>
+            Patcher.Generate(_env, plan, state.Analysis, _env.InstalledVersion, "test"));
+        Assert.True(File.Exists(Path.Combine(dir, "somefile.txt")));   // nothing touched
+    }
+
+    [Fact]
+    public void Inspect_FlagsPatchRegisteredBeforeASourceMod()
+    {
+        var state = Engine.Analyze(_env);
+        Patcher.Generate(_env, Patcher.PlanMerge(_env, state.Analysis), state.Analysis, _env.InstalledVersion, "test");
+
+        // simulate a wrong order: the patch loads before the mods it merges,
+        // so their whole-object overrides beat the merged version
+        File.WriteAllText(_env.LoadingOrderPath,
+            """[{"strName":"Mod Loading Order","aLoadOrder":["core","OstrasortPatch","ModA","ModB"]}]""");
+        state = Engine.Analyze(_env);
+
+        Assert.True(state.Patch.Stale);
+        Assert.Contains(state.Patch.StaleReasons, r => r.Contains("loads before"));
+        Assert.False(state.Analysis.Collisions.Single(c => c.ObjName == "CondX").ResolvedByPatch);
+    }
+
+    [Fact]
+    public void IdenticalOverrides_NothingLost_NotFlaggedForAttention()
+    {
+        WriteJson(Path.Combine(_env.CoreDataDir, "condowners", "co.json"),
+            """[{"strName":"SameCO","fMass":1}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "condowners", "co.json"),
+            """[{"strName":"SameCO","fMass":2}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "condowners", "co.json"),
+            """[{"strName":"SameCO","fMass":2}]""");   // identical override
+
+        var state = Engine.Analyze(_env);
+        var col = state.Analysis.Collisions.Single(c => c.ObjName == "SameCO");
+        Assert.True(col.NothingLost);
+        Assert.False(col.ObjectMergeable);
+        Assert.False(CollisionView.NeedsAttention(col));
+    }
+
+    [Fact]
+    public void FfuInstalled_ArrayConflictBetweenPlainMods_StillMergeable()
+    {
+        // with the FFU framework present, a contested a* field between two
+        // NON-FFU mods must still be patchable - the synthetic "__union__"
+        // option must not poison the all-options-non-FFU test
+        WriteJson(Path.Combine(_env.CoreDataDir, "condowners", "co2.json"),
+            """[{"strName":"TagCO","aTags":["x"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "condowners", "co2.json"),
+            """[{"strName":"TagCO","aTags":["x","y"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "condowners", "co2.json"),
+            """[{"strName":"TagCO","aTags":["x","z"]}]""");
+
+        var state = Engine.Analyze(_env);
+        var a = state.Analysis;
+        a.Ffu = new FfuContext { FrameworkPresent = true };
+        var col = a.Collisions.Single(c => c.ObjName == "TagCO");
+        col.ObjectMergeable = false; col.FfuMergedAtLoad = false; col.FieldNotes.Clear();
+        col.NothingLost = false;
+        FieldDiff.Annotate(_env, a);
+
+        Assert.True(col.ObjectMergeable);
+        Assert.False(col.FfuMergedAtLoad);
+    }
+
+    [Fact]
+    public void LootPool_WithFfuCommandsInAnyArray_IsNotPatchable()
+    {
+        // ModA's pool carries FFU precision commands in aCOs (aLoots plain);
+        // folding it into a union would drop the command edits - the pool must
+        // be excluded from the patch and marked merged-at-load instead
+        WriteJson(Path.Combine(_env.CoreDataDir, "loot", "pool.json"),
+            """[{"strName":"PoolX","aLoots":["ItmA=1.0x1"],"aCOs":[]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "loot", "pool.json"),
+            """[{"strName":"PoolX","aLoots":["ItmA=1.0x1","ItmB=1.0x2"],"aCOs":["--ADD--","CondY=1.0x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "loot", "pool.json"),
+            """[{"strName":"PoolX","aLoots":["ItmA=1.0x1","ItmC=1.0x3"],"aCOs":[]}]""");
+
+        var state = Engine.Analyze(_env);
+        var col = state.Analysis.Collisions.Single(c => c.ObjName == "PoolX");
+        Assert.DoesNotContain(Patcher.PatchableConflicts(state.Analysis), c => c.ObjName == "PoolX");
+        Assert.True(col.FfuMergedAtLoad);
+    }
+
+    [Fact]
     public void Remove_DeletesFolderAndDropsLoadOrderEntry()
     {
         var state = Engine.Analyze(_env);

@@ -49,8 +49,7 @@ public sealed class SchemaValidator
         var errors = new List<string>();
         var itemSchema = ItemSchema(type);
         if (itemSchema is null) return errors;   // no schema for this type -> not validated
-        var node = JsonNode.Parse(obj.ToJsonString());   // to JsonElement world
-        using var doc = JsonDocument.Parse(node!.ToJsonString());
+        using var doc = JsonDocument.Parse(obj.ToJsonString());   // to JsonElement world
         ValidateNode(doc.RootElement, itemSchema.Value, "", errors);
         return errors;
     }
@@ -151,7 +150,10 @@ public sealed class SchemaValidator
         "boolean" => v.ValueKind is JsonValueKind.True or JsonValueKind.False,
         "object" => v.ValueKind == JsonValueKind.Object,
         "array" => v.ValueKind == JsonValueKind.Array,
-        "integer" => v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out _),
+        // JSON Schema treats 2.0 as an integer (zero fractional part), so accept
+        // integral doubles too, not only values that parse as Int64
+        "integer" => v.ValueKind == JsonValueKind.Number &&
+                     (v.TryGetInt64(out _) || (v.TryGetDouble(out var d) && double.IsInteger(d))),
         "number" => v.ValueKind == JsonValueKind.Number,
         "null" => v.ValueKind == JsonValueKind.Null,
         _ => true,

@@ -24,6 +24,7 @@ public sealed class Collision
     public bool ObjectMergeable { get; set; }                 // non-loot: a 3-way field merge would preserve more than last-wins
     public bool ResolvedByPatch { get; set; }                 // a fresh OstrasortPatch covers this pool
     public bool FfuMergedAtLoad { get; set; }                 // the FFU loader merges this at load - no action needed
+    public bool NothingLost { get; set; }                     // non-loot: identical overrides, or the last mod includes every change - lossless, no action
     public bool AdditiveAtLoad { get; set; }                  // flat-packed simple-container type: the game merges its records key-by-key at load, never whole-object replace
     public string? FriendlyName { get; set; }                 // loot pools: a readable description of the internal id (e.g. "OKLG embassy kiosk inventory")
     public string Key => $"{Type}/{ObjName}";

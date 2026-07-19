@@ -74,7 +74,7 @@ public static class ObjectMerge
             // array conflict: offer the union of everyone's entries as an extra choice
             if (distinctVals > 1 && isArray)
             {
-                var union = UnionArrays(baseVal, changers.Select(x => x.Val));
+                var union = UnionArrays(changers.Select(x => x.Val));
                 options.Add(new MergeOption("__union__", "union of both", Compact(union), union));
             }
 
@@ -138,21 +138,25 @@ public static class ObjectMerge
     private static bool LooksArray(JsonNode? baseVal, List<(ModEntry Mod, JsonNode? Val)> changers) =>
         baseVal is JsonArray || changers.Any(x => x.Val is JsonArray);
 
-    private static JsonArray UnionArrays(JsonNode? baseVal, IEnumerable<JsonNode?> vals)
+    /// <summary>
+    /// Union of the MODS' entries only. The base array is deliberately not
+    /// seeded in: an entry present in core but absent from every mod's version
+    /// was removed by all of them, and resurrecting it would override their
+    /// shared intent. Entries removed by only one mod survive via the other's array.
+    /// </summary>
+    private static JsonArray UnionArrays(IEnumerable<JsonNode?> vals)
     {
         var union = new JsonArray();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        void Take(JsonNode? n)
+        foreach (var v in vals)
         {
-            if (n is not JsonArray arr) return;
+            if (v is not JsonArray arr) continue;
             foreach (var el in arr)
             {
                 var key = el?.ToJsonString() ?? "null";
                 if (seen.Add(key)) union.Add(el is null ? null : el.DeepClone());
             }
         }
-        Take(baseVal);
-        foreach (var v in vals) Take(v);
         return union;
     }
 

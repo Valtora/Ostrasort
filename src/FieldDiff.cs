@@ -28,12 +28,11 @@ public static class FieldDiff
 
         foreach (var col in a.Collisions)
         {
-            // loot pools get item-level analysis + the patcher; skip them here
-            if (col.Claimants.All(m => m.Claims.TryGetValue((col.Type, col.ObjName), out var l) && l is not null))
-                continue;
-
             // a claimant editing via FFU --ADD--/--DEL--/... commands merges at
-            // load; there is no whole-object comparison to make
+            // load; there is no whole-object comparison to make. This runs BEFORE
+            // the loot-pool skip: a pool whose commands sit in aCOs (aLoots plain)
+            // still passes the all-claims-non-null test, but folding it into the
+            // union would silently drop the command-editing claimant's items.
             var editors = col.Claimants
                 .Where(m => m.FfuArrayEditClaims.Contains((col.Type, col.ObjName)))
                 .Select(m => m.DisplayName ?? m.Name).ToList();
@@ -45,6 +44,10 @@ public static class FieldDiff
                                    "the versions it edits (Ostrasort keeps FFU mods after non-FFU mods)");
                 continue;
             }
+
+            // loot pools get item-level analysis + the patcher; skip them here
+            if (col.Claimants.All(m => m.Claims.TryGetValue((col.Type, col.ObjName), out var l) && l is not null))
+                continue;
 
             // flat-packed "JsonSimple" containers (conditions_simple, strings,
             // names_*, crewskins, manpages, traitscores) are never whole-object-
@@ -108,6 +111,7 @@ public static class FieldDiff
             var plan = ObjectMerge.Build(col, coreObj ?? new JsonObject(), versions, ffuMerge);
             if (plan is null)
             {
+                col.NothingLost = true;
                 col.FieldNotes.Add("the mods' versions are identical — nothing is lost");
                 continue;
             }
@@ -122,15 +126,20 @@ public static class FieldDiff
             {
                 // the game itself keeps disjoint-field edits; a patch only adds
                 // value for fields contested among NON-FFU mods (it loads after
-                // the whole non-FFU block, and FFU mods win their fields anyway)
-                col.ObjectMergeable = conflicts.Any(f => f.Options.All(NonFfuOption));
+                // the whole non-FFU block, and FFU mods win their fields anyway).
+                // The synthetic "__union__" option is not a source mod - ignore
+                // it here, or an array conflict between two plain mods would
+                // never be offered a patch.
+                bool AllNonFfu(MergeItem f) =>
+                    f.Options.Where(o => o.SourceId != "__union__").All(NonFfuOption);
+                col.ObjectMergeable = conflicts.Any(AllNonFfu);
                 col.FfuMergedAtLoad = !col.ObjectMergeable;
 
                 if (auto.Count > 0)
                     col.FieldNotes.Add("merged by FFU at load — nothing lost: " + string.Join(", ",
                         auto.Select(f => $"{f.Token} (from {f.Options[0].SourceLabel})")));
                 foreach (var f in conflicts)
-                    col.FieldNotes.Add(f.Options.All(NonFfuOption)
+                    col.FieldNotes.Add(AllNonFfu(f)
                         ? $"conflict — you choose: {f.Token} (both non-FFU; the patch can enforce your pick)"
                         : $"conflict on {f.Token}: the last-loaded (FFU) mod's value wins that field at load");
                 continue;
@@ -153,7 +162,10 @@ public static class FieldDiff
             if (conflicts.Count > 0)
                 col.FieldNotes.Add("conflict — you choose: " + string.Join(", ", conflicts.Select(f => f.Token)));
             if (!col.ObjectMergeable && conflicts.Count == 0)
+            {
+                col.NothingLost = true;
                 col.FieldNotes.Add("the last-loaded mod already includes every change — nothing lost");
+            }
         }
     }
 
