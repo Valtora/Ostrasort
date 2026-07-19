@@ -491,12 +491,20 @@ public partial class MainWindow : Window
             _ when m.IsPatch => "generated",
             _ => "local",
         };
-        var notes = m.NoteLines(_env.InstalledVersion);   // shared with every report renderer
+        // the strGameVersion-lag note is informational only: players cannot
+        // update a Workshop mod themselves (only its author can), and most mods
+        // keep working across game updates. It stays in reports, tooltips and
+        // the detail panel for troubleshooting, but never in the table's Notes
+        // column and never as an alarm glyph.
+        var allNotes = m.NoteLines(_env.InstalledVersion);   // shared with every report renderer
+        var versionNote = m.GameVersionNote(_env.InstalledVersion);
+        var notes = versionNote is null ? allNotes : allNotes.Where(n => n != versionNote).ToList();
         var brush = m.Disabled || m.Ignored ? Dim
             : notes.Any(n => n.StartsWith("NOT") || n.StartsWith("DEAD") || n.Contains("JSON") || n.Contains("game-log")) ? Warn : Normal;
         var name = m.Kind == EntryKind.Core ? "core (base game data)" : m.DisplayName ?? m.Name;
         var tooltip = m.Dir ?? m.Raw;
         if (m.LogNotes.Count > 0) tooltip += "\n" + string.Join("\n", m.LogNotes.Select(n => "• " + n));
+        if (versionNote is not null) tooltip += "\n" + versionNote;
         tooltip += "\n(double-click for details)";
         var draggable = m.Registered && m.Kind != EntryKind.Core;
         var (lastUpdated, updText, updBrush) = UpdateInfo(m);
@@ -504,7 +512,7 @@ public partial class MainWindow : Window
 
         // status glyph: colour is never the only signal - the shape carries it too
         var hasBad = (m.Dir is null && m.Kind != EntryKind.Core) || m.JsonErrors.Count > 0 || m.LogNotes.Count > 0;
-        var hasWarn = (!m.Registered && !m.Ignored) || m.GameVersionNote(_env.InstalledVersion) is not null;
+        var hasWarn = !m.Registered && !m.Ignored;
         var (glyph, glyphBrush, glyphTip) =
             m.Disabled || m.Ignored ? ("⏸", Dim, m.Disabled ? "Disabled: the game skips this mod." : "Ignored: kept unregistered on purpose.")
             : hasBad ? ("✕", Bad, "Problems found. " + string.Join(" ", notes.Select(n => n + ".")))

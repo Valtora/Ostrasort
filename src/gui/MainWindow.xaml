@@ -265,7 +265,7 @@
                 </ContextMenu>
             </DataGrid.ContextMenu>
             <DataGrid.Columns>
-                <DataGridTemplateColumn Header="" Width="30" CanUserResize="False">
+                <DataGridTemplateColumn Header="" Width="30">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding StatusGlyph}" Foreground="{Binding StatusBrush}"
@@ -274,14 +274,14 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="On" Width="34" CanUserResize="False">
+                <DataGridTemplateColumn Header="Active" Width="52">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <CheckBox IsChecked="{Binding Enabled, Mode=OneWay}" IsEnabled="{Binding CanToggle}"
                                       Visibility="{Binding ToggleVisibility}"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"
                                       Click="RowEnable_Click"
-                                      ToolTip="Enabled: the game loads this mod. Unticking adds the game's own disabled marker, the same thing the in-game MODS screen toggle does."/>
+                                      ToolTip="Active: the game loads this mod. Unticking adds the game's own disabled marker, the same thing the in-game MODS screen toggle does."/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
