@@ -7,197 +7,211 @@ using System.Windows.Media;
 
 namespace Ostrasort.Gui;
 
+/// <summary>
+/// The conflict resolver as a paged wizard: a summary of what conflicts and
+/// what merges by itself, then one decision per page (with a pre-selected
+/// suggestion so Continue is never blocked), then a review page that creates
+/// the patch. "Choose for me" accepts the suggestion for everything remaining -
+/// the same outcome the headless fallback produces, marked for later review.
+/// The passed MergePlan is mutated in place; OK/Cancel tells the caller
+/// whether to generate from it.
+/// </summary>
 public partial class ResolverDialog : Window
 {
-    private readonly MergePlan _plan;
-    private readonly List<(MergeItem Item, List<RadioButton> Radios)> _wired = new();
     private static readonly FontFamily Mono = new("Consolas");
+
+    /// <summary>One decision page: the item it decides, its pre-built UI, and its radios (for sync).</summary>
+    private sealed record DecisionPage(MergeItem Item, string SuggestedId, UIElement Content, List<RadioButton> Radios);
+
+    private readonly MergePlan _plan;
+    private readonly List<DecisionPage> _pages = new();
+    private int _index = -1;   // -1 = summary, 0.._pages.Count-1 = decisions, _pages.Count = review
 
     public ResolverDialog(MergePlan plan)
     {
         _plan = plan;
         InitializeComponent();
-        TxtIntro.Foreground = ThemeManager.Dim;
-        TxtRemaining.Foreground = ThemeManager.Dim;
-        Build();
-        UpdateButtons();
+        TxtProgress.Foreground = ThemeManager.Dim;
+
+        // pre-select a suggestion on every undecided item: the later-loaded
+        // MOD's value, exactly what the game itself (and the headless fallback)
+        // would produce. AutoResolved marks it "a suggestion, not a person's
+        // choice" until the user confirms the page or picks something.
+        foreach (var item in _plan.Unresolved.ToList())
+        {
+            var pick = item.Options.LastOrDefault(o => o.SourceId != "__union__") ?? item.Options[^1];
+            item.ChosenSourceId = pick.SourceId;
+            item.AutoResolved = true;
+        }
+
+        BuildDecisionPages();
+        ShowPage(-1);
     }
 
-    private void Build()
+    // ---------------------------------------------------------------- pages ---
+
+    private void BuildDecisionPages()
     {
-        var unit = 0;
         foreach (var pool in _plan.Pools)
-            AddUnit(++unit, "Shop pool", pool.Collision, pool.AllItems.ToList(), isLoot: true);
-
+            foreach (var item in pool.AllItems.Where(i => i.Contested))
+                _pages.Add(BuildDecisionPage(pool.Collision, item, isLoot: true));
         foreach (var obj in _plan.Objects)
-            AddUnit(++unit, Capitalize(CollisionView.TypeLabel(obj.Type)), obj.Collision, obj.Fields, isLoot: false);
+            foreach (var item in obj.Fields.Where(i => i.Contested))
+                _pages.Add(BuildDecisionPage(obj.Collision, item, isLoot: false));
     }
 
-    private static string ModList(Collision c) =>
-        Join(c.Claimants.Select(m => m.DisplayName ?? m.Name).ToList());
-
-    /// <summary>Renders one merge unit (a loot pool or an object) as a titled card with per-field decisions.</summary>
-    private void AddUnit(int unitId, string typeLabel, Collision c, IReadOnlyList<MergeItem> items, bool isLoot)
+    private void ShowPage(int index)
     {
-        var body = new StackPanel();
+        _index = index;
+        var total = _pages.Count;
 
-        // friendly header: a bold title plus a dim "edited by A and B" subtitle,
-        // instead of a single raw string with the internal type slug in it
-        var head = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
-        head.Children.Add(new TextBlock
+        if (index < 0)
         {
-            Text = $"{typeLabel}: {c.ObjName}",
-            FontSize = 15,
-            FontWeight = FontWeights.SemiBold,
-        });
-        if (c.FriendlyName is { Length: > 0 } friendly)
-            head.Children.Add(new TextBlock
-            {
-                Text = $"“{friendly}”",
-                Foreground = ThemeManager.Dim,
-                Margin = new Thickness(0, 1, 0, 0),
-            });
-        head.Children.Add(new TextBlock
+            TxtPageTitle.Text = "What conflicts, and what happens next";
+            TxtProgress.Text = total == 0 ? "" : $"{total} decision(s) ahead";
+            PageHost.Content = BuildSummary();
+        }
+        else if (index < total)
         {
-            Text = (isLoot ? "stocked by " : "edited by ") + ModList(c),
-            Foreground = ThemeManager.Dim,
-            Margin = new Thickness(0, 1, 0, 0),
-        });
-
-        var box = new GroupBox
+            var page = _pages[index];
+            TxtPageTitle.Text = "Your decision";
+            TxtProgress.Text = $"Decision {index + 1} of {total}";
+            SyncRadios(page);
+            PageHost.Content = page.Content;
+        }
+        else
         {
-            Header = head,
-            Margin = new Thickness(0, 0, 0, 14),
-            Padding = new Thickness(10),
-            Content = body,
-        };
-
-        var contested = items.Where(i => i.Contested).ToList();
-        var carried = items.Where(i => !i.Contested).ToList();
-
-        if (contested.Count > 0)
-        {
-            AddTakeAllShortcuts(body, contested, isLoot);
-            foreach (var item in contested)
-                body.Children.Add(FieldCard(unitId, item, isLoot));
+            TxtPageTitle.Text = "Review and create the patch";
+            TxtProgress.Text = "Review";
+            PageHost.Content = BuildReview();
         }
 
-        if (carried.Count > 0)
-            body.Children.Add(CarriedExpander(carried, isLoot));
-
-        PoolsHost.Children.Add(box);
+        BtnBack.Visibility = index >= 0 ? Visibility.Visible : Visibility.Collapsed;
+        BtnNext.Visibility = index < total ? Visibility.Visible : Visibility.Collapsed;
+        BtnNext.Content = index < 0 ? "Continue" : index == total - 1 ? "Continue to review" : "Continue";
+        BtnOk.Visibility = index >= total ? Visibility.Visible : Visibility.Collapsed;
+        BtnOk.IsEnabled = !_plan.Unresolved.Any();
+        BtnChooseForMe.Visibility = index < total && total > 0 && _pages.Skip(Math.Max(0, index)).Any()
+            ? Visibility.Visible : Visibility.Collapsed;
+        PageScroller.ScrollToTop();
     }
 
-    /// <summary>"Take all from &lt;mod&gt;" buttons - one per source that appears in any contested row.</summary>
-    private void AddTakeAllShortcuts(Panel body, List<MergeItem> contested, bool isLoot)
-    {
-        var sources = contested.SelectMany(i => i.Options)
-            .Where(o => o.SourceId != "__union__")
-            .GroupBy(o => o.SourceId).Select(g => g.First()).ToList();
-        if (sources.Count <= 1) return;
+    private void Back_Click(object sender, RoutedEventArgs e) => ShowPage(_index - 1);
 
-        var shortcuts = new WrapPanel { Margin = new Thickness(0, 2, 0, 10) };
-        shortcuts.Children.Add(new TextBlock
-        {
-            Text = "Take all from:",
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0),
-            Foreground = ThemeManager.Dim,
-        });
-        foreach (var src in sources)
-        {
-            var btn = new Button { Content = src.SourceLabel, Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(0, 0, 6, 0) };
-            btn.Click += (_, _) =>
-            {
-                foreach (var item in contested.Where(i => i.Options.Any(o => o.SourceId == src.SourceId)))
-                {
-                    item.ChosenSourceId = src.SourceId;
-                    item.Excluded = false;
-                    item.AutoResolved = false;
-                }
-                SyncRadios();
-                UpdateButtons();
-            };
-            shortcuts.Children.Add(btn);
-        }
-        shortcuts.Children.Add(new TextBlock
-        {
-            Text = isLoot ? "or decide each item below"
-                          : "or decide each field below",
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = ThemeManager.Dim,
-            Margin = new Thickness(6, 0, 0, 0),
-        });
-        body.Children.Add(shortcuts);
+    private void Next_Click(object sender, RoutedEventArgs e)
+    {
+        // seeing the page and continuing IS the confirmation - the suggestion
+        // becomes the user's decision and stops being flagged for review
+        if (_index >= 0 && _index < _pages.Count)
+            _pages[_index].Item.AutoResolved = false;
+        ShowPage(_index + 1);
     }
 
-    /// <summary>One contested decision rendered as a card: the field/item, then side-by-side option columns.</summary>
-    private Border FieldCard(int unitId, MergeItem item, bool isLoot)
-    {
-        var card = new StackPanel();
+    private void ChooseForMe_Click(object sender, RoutedEventArgs e) => ShowPage(_pages.Count);
 
-        // title row: friendly label (bold) + the raw token in dim monospace
-        var title = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
-        title.Children.Add(new TextBlock
-        {
-            Text = isLoot ? item.Token : FriendlyField(item.Token),
-            FontWeight = FontWeights.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
+    private void Ok_Click(object sender, RoutedEventArgs e) => DialogResult = true;
+
+    // -------------------------------------------------------------- summary ---
+
+    private UIElement BuildSummary()
+    {
+        var panel = new StackPanel();
+        var units = _plan.Pools.Count + _plan.Objects.Count;
+        var auto = _plan.AllItems.Count(i => !i.Contested);
+        var contested = _pages.Count;
+
+        Para(panel,
+            $"{units} thing(s) are changed by more than one mod. " +
+            $"{auto} change(s) combine automatically with nothing lost. " +
+            (contested == 0 ? "Nothing needs a decision."
+                : contested == 1 ? "1 needs you to choose." : $"{contested} need you to choose."),
+            ThemeManager.Normal, 13.5, semiBold: true);
+        Para(panel,
+            "Ostrasort will create a small extra mod (the compatibility patch) that loads after the mods " +
+            "it merges, so no mod's changes are lost. Every decision is remembered for future refreshes, " +
+            "and the patch can be removed at any time.", ThemeManager.Dim);
+
+        foreach (var pool in _plan.Pools) SummaryUnit(panel, pool.Collision, pool.AllItems.ToList(), isLoot: true);
+        foreach (var obj in _plan.Objects) SummaryUnit(panel, obj.Collision, obj.Fields, isLoot: false);
+
+        if (contested > 0)
+            Para(panel,
+                "Each decision already has a suggested pick (the later-loaded mod's value, the same outcome " +
+                "the game itself would produce). Continue to confirm them one by one, or press Choose for me.",
+                ThemeManager.Dim);
+        return panel;
+    }
+
+    private void SummaryUnit(Panel panel, Collision c, IReadOnlyList<MergeItem> items, bool isLoot)
+    {
+        var contested = items.Count(i => i.Contested);
+        var auto = items.Count - contested;
+        var head = c.FriendlyName is { Length: > 0 } f ? $"“{f}” ({c.ObjName})" : c.ObjName;
+        var line = $"• {Capitalize(CollisionView.TypeLabel(c.Type))} {head}, "
+                   + (isLoot ? "stocked by " : "edited by ") + ModList(c) + ": "
+                   + (auto > 0 ? $"{auto} merge(s) automatically" : "")
+                   + (auto > 0 && contested > 0 ? ", " : "")
+                   + (contested > 0 ? $"{contested} to decide" : "")
+                   + ".";
+        Para(panel, line, ThemeManager.Normal, margin: new Thickness(0, 2, 0, 2));
+    }
+
+    // ------------------------------------------------------- decision pages ---
+
+    private DecisionPage BuildDecisionPage(Collision c, MergeItem item, bool isLoot)
+    {
+        var suggestedId = item.ChosenSourceId
+            ?? (item.Options.LastOrDefault(o => o.SourceId != "__union__") ?? item.Options[^1]).SourceId;
+
+        var panel = new StackPanel();
+
+        // context: what object, whose conflict
+        var head = c.FriendlyName is { Length: > 0 } f ? $"“{f}” ({c.ObjName})" : c.ObjName;
+        Para(panel,
+            isLoot
+                ? $"Both mods stock “{item.Token}” in the {CollisionView.TypeLabel(c.Type)} {head}."
+                : $"Both mods change “{FriendlyField(item.Token)}” of the {CollisionView.TypeLabel(c.Type)} {head}.",
+            ThemeManager.Normal, 13.5, semiBold: true);
+        Para(panel, (isLoot ? "Stocked by " : "Edited by ") + ModList(c) + ". Which should the game use?",
+            ThemeManager.Dim);
         if (!isLoot && !string.Equals(FriendlyField(item.Token), item.Token, StringComparison.Ordinal))
-            title.Children.Add(new TextBlock
-            {
-                Text = $"  {item.Token}",
-                FontFamily = Mono,
-                FontSize = 11,
-                Foreground = ThemeManager.Dim,
-                VerticalAlignment = VerticalAlignment.Bottom,
-            });
-        if (item.AutoResolved)
-            title.Children.Add(new TextBlock
-            {
-                Text = "   (auto-picked earlier - review)",
-                Foreground = ThemeManager.Warn,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-        card.Children.Add(title);
+            Para(panel, $"(the raw field is {item.Token})", ThemeManager.Dim, 11);
+        if (item.AutoResolved && item.ChosenSourceId is not null)
+            Para(panel, "A pick from an earlier run (or the suggestion) is pre-selected. Continue keeps it.",
+                ThemeManager.Dim, 11.5);
 
-        // the option columns, wrapping on a narrow window
-        var columns = new WrapPanel();
-        var group = $"u{unitId}:{item.Token}";
+        var columns = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+        var group = $"d{_pages.Count}:{item.Token}";
         var radios = new List<RadioButton>();
 
-        // objects show the vanilla baseline first as its own column (choosing it
-        // reverts the field - the model's "exclude"); loot has no vanilla base
+        // objects offer the vanilla baseline first (choosing it reverts the
+        // field - the model's "exclude"); loot has no vanilla base
         if (!isLoot)
             columns.Children.Add(BaselineColumn(group, item, radios));
-
         foreach (var opt in item.Options)
-            columns.Children.Add(OptionColumn(group, item, opt, isLoot, radios));
-
-        // loot: an explicit "stock from nobody" column (the model's "exclude")
+            columns.Children.Add(OptionColumn(group, item, opt, isLoot, radios, opt.SourceId == suggestedId));
         if (isLoot)
             columns.Children.Add(ExcludeColumn(group, item, radios));
 
-        card.Children.Add(columns);
-        _wired.Add((item, radios));
+        panel.Children.Add(columns);
+        return new DecisionPage(item, suggestedId, panel, radios);
+    }
 
-        return new Border
-        {
-            BorderBrush = ThemeManager.PanelBorder,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(10),
-            Margin = new Thickness(0, 0, 0, 8),
-            Child = card,
-        };
+    /// <summary>Re-check the page's radios from the item's current state (prior page edits, Choose for me).</summary>
+    private static void SyncRadios(DecisionPage page)
+    {
+        foreach (var rb in page.Radios)
+            rb.IsChecked = rb.Tag is MergeOption o
+                ? !page.Item.Excluded && page.Item.ChosenSourceId == o.SourceId
+                : page.Item.Excluded;
     }
 
     /// <summary>A selectable column card: a radio the whole card toggles, a heading, and the readable value.</summary>
-    private static Border ColumnShell(RadioButton rb, string heading, Brush headingColor, UIElement valueVisual)
+    private static Border ColumnShell(RadioButton rb, string heading, Brush headingColor, UIElement valueVisual, bool suggested = false)
     {
         var content = new StackPanel();
-        content.Children.Add(new TextBlock
+        var headRow = new WrapPanel();
+        headRow.Children.Add(new TextBlock
         {
             Text = heading,
             FontWeight = FontWeights.SemiBold,
@@ -205,6 +219,15 @@ public partial class ResolverDialog : Window
             Margin = new Thickness(0, 0, 0, 3),
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
+        if (suggested)
+            headRow.Children.Add(new TextBlock
+            {
+                Text = "  (suggested)",
+                Foreground = ThemeManager.Good,
+                FontSize = 11.5,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        content.Children.Add(headRow);
         content.Children.Add(valueVisual);
 
         rb.Content = content;
@@ -214,13 +237,13 @@ public partial class ResolverDialog : Window
 
         return new Border
         {
-            BorderBrush = ThemeManager.PanelBorder,
+            BorderBrush = suggested ? ThemeManager.Good : ThemeManager.PanelBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(8, 6, 8, 6),
             Margin = new Thickness(0, 0, 8, 8),
             MinWidth = 190,
-            MaxWidth = 320,
+            MaxWidth = 340,
             Child = rb,
         };
     }
@@ -233,7 +256,6 @@ public partial class ResolverDialog : Window
             item.Excluded = true;
             item.ChosenSourceId = null;
             item.AutoResolved = false;
-            UpdateButtons();
         };
         rb.ToolTip = "Keep the base game's value for this field, ignoring both mods.";
         radios.Add(rb);
@@ -248,15 +270,14 @@ public partial class ResolverDialog : Window
             item.Excluded = true;
             item.ChosenSourceId = null;
             item.AutoResolved = false;
-            UpdateButtons();
         };
-        rb.ToolTip = "Stock this item from nobody - dropped from the merged pool.";
+        rb.ToolTip = "Do not sell/spawn this item at all - it is dropped from the merged pool.";
         radios.Add(rb);
-        return ColumnShell(rb, "Stock from nobody", ThemeManager.Bad,
-            new TextBlock { Text = "dropped from the pool", Foreground = ThemeManager.Dim, TextWrapping = TextWrapping.Wrap });
+        return ColumnShell(rb, "Don't stock this item", ThemeManager.Bad,
+            new TextBlock { Text = "dropped from the merged pool", Foreground = ThemeManager.Dim, TextWrapping = TextWrapping.Wrap });
     }
 
-    private Border OptionColumn(string group, MergeItem item, MergeOption opt, bool isLoot, List<RadioButton> radios)
+    private Border OptionColumn(string group, MergeItem item, MergeOption opt, bool isLoot, List<RadioButton> radios, bool suggested)
     {
         var isUnion = opt.SourceId == "__union__";
         var rb = new RadioButton
@@ -270,11 +291,67 @@ public partial class ResolverDialog : Window
             item.ChosenSourceId = opt.SourceId;
             item.Excluded = false;
             item.AutoResolved = false;
-            UpdateButtons();
         };
         var heading = isUnion ? "Union of both" : opt.SourceLabel;
         var color = isUnion ? ThemeManager.Good : ThemeManager.Normal;
-        return ColumnShell(rb, heading, color, ValueForOption(opt, item, isLoot));
+        if (isUnion) rb.ToolTip = "Keep every entry either mod has - nothing is dropped.";
+        radios.Add(rb);
+        return ColumnShell(rb, heading, color, ValueForOption(opt, item, isLoot), suggested);
+    }
+
+    // --------------------------------------------------------------- review ---
+
+    private UIElement BuildReview()
+    {
+        var panel = new StackPanel();
+        Para(panel, "Everything is decided. Here is what the compatibility patch will contain.",
+            ThemeManager.Normal, 13.5, semiBold: true);
+
+        foreach (var pool in _plan.Pools)
+            ReviewUnit(panel, pool.Collision, pool.AllItems.ToList(), isLoot: true);
+        foreach (var obj in _plan.Objects)
+            ReviewUnit(panel, obj.Collision, obj.Fields, isLoot: false);
+
+        Para(panel,
+            "The patch is a small extra mod (“Ostrasort Patch”) that loads after the mods it merges, " +
+            "so nothing is lost. Merged game objects are best-effort, so verify them in game. If something " +
+            "looks odd, remove the patch any time (the Compatibility patch tab, or the More menu).",
+            ThemeManager.Dim);
+        return panel;
+    }
+
+    private void ReviewUnit(Panel panel, Collision c, IReadOnlyList<MergeItem> items, bool isLoot)
+    {
+        var head = new TextBlock
+        {
+            Text = $"{Capitalize(CollisionView.TypeLabel(c.Type))}: {c.ObjName}"
+                   + (c.FriendlyName is { Length: > 0 } f ? $"  “{f}”" : ""),
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 10, 0, 3),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        panel.Children.Add(head);
+
+        foreach (var item in items.Where(i => i.Contested))
+        {
+            var label = isLoot ? item.Token : FriendlyField(item.Token);
+            var outcome = item.Excluded
+                ? (isLoot ? "not stocked" : "kept at the vanilla value")
+                : item.Resolved.SourceId == "__union__" ? "union of both mods"
+                : $"{item.Resolved.SourceLabel}'s value";
+            var flag = item.AutoResolved ? "  (suggested pick, review in game)" : "";
+            Para(panel, $"• {label}: {outcome}{flag}",
+                item.AutoResolved ? ThemeManager.Warn : ThemeManager.Normal,
+                margin: new Thickness(12, 1, 0, 1));
+        }
+
+        var carried = items.Where(i => !i.Contested).ToList();
+        if (carried.Count > 0)
+        {
+            var exp = CarriedExpander(carried, isLoot);
+            exp.Margin = new Thickness(12, 2, 0, 2);
+            panel.Children.Add(exp);
+        }
     }
 
     // ------------------------------------------------------- value rendering ---
@@ -387,7 +464,7 @@ public partial class ResolverDialog : Window
         var val = entry.Contains('=') ? entry[(entry.IndexOf('=') + 1)..] : entry;
         var parts = val.Split('x');
         if (parts.Length == 2)
-            return $"count {parts[1]}  (weight {parts[0]})";
+            return $"stocks {parts[1]}  (chance weight {parts[0]})";
         return val;
     }
 
@@ -401,7 +478,7 @@ public partial class ResolverDialog : Window
             var opt = item.Resolved;
             var label = isLoot ? item.Token : FriendlyField(item.Token);
             var value = isLoot ? LootEntryPretty(opt.Entry)
-                               : (opt.Node is null ? "(removed)" : ShortValue(opt.Node, item));
+                               : (opt.Node is null ? "(removed)" : ShortValue(opt.Node));
             var cb = new CheckBox
             {
                 IsChecked = !item.Excluded,
@@ -414,15 +491,15 @@ public partial class ResolverDialog : Window
                 ToolTip = isLoot ? "Untick to exclude this item from the merged pool."
                                  : "Untick to revert this field to the vanilla value.",
             };
-            cb.Checked += (_, _) => { item.Excluded = false; UpdateButtons(); };
-            cb.Unchecked += (_, _) => { item.Excluded = true; UpdateButtons(); };
+            cb.Checked += (_, _) => item.Excluded = false;
+            cb.Unchecked += (_, _) => item.Excluded = true;
             list.Children.Add(cb);
         }
         return new Expander
         {
             Header = isLoot
                 ? $"{carried.Count} uncontested item(s) carried over - expand to review or exclude"
-                : $"{carried.Count} field(s) auto-merged - expand to review or revert to vanilla",
+                : $"{carried.Count} field(s) merged automatically - expand to review or revert to vanilla",
             Margin = new Thickness(0, 4, 0, 0),
             Content = new ScrollViewer
             {
@@ -434,7 +511,7 @@ public partial class ResolverDialog : Window
         };
     }
 
-    private static string ShortValue(JsonNode node, MergeItem item)
+    private static string ShortValue(JsonNode node)
     {
         if (node is JsonArray a) return $"{a.Count} entr{(a.Count == 1 ? "y" : "ies")}";
         if (node is JsonObject o) return $"{{{o.Count} field(s)}}";
@@ -496,51 +573,35 @@ public partial class ResolverDialog : Window
     private static string Capitalize(string s) =>
         string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
 
+    private static string ModList(Collision c) =>
+        Join(c.Claimants.Select(m => m.DisplayName ?? m.Name).ToList());
+
     private static string Join(IReadOnlyList<string> names) =>
         names.Count <= 1 ? (names.Count == 1 ? names[0] : "")
         : names.Count == 2 ? $"{names[0]} and {names[1]}"
         : string.Join(", ", names.Take(names.Count - 1)) + $", and {names[^1]}";
 
-    // --------------------------------------------------------------- wiring ---
-
-    /// <summary>Re-sync radio checks after a take-all shortcut changed the model.</summary>
-    private void SyncRadios()
+    private static void Para(Panel panel, string text, Brush brush, double size = 12.5,
+                             bool semiBold = false, Thickness? margin = null)
     {
-        foreach (var (item, radios) in _wired)
-            foreach (var rb in radios)
-                rb.IsChecked = rb.Tag is MergeOption o
-                    ? !item.Excluded && item.ChosenSourceId == o.SourceId
-                    : item.Excluded;
+        panel.Children.Add(new TextBlock
+        {
+            Text = text,
+            Foreground = brush,
+            FontSize = size,
+            FontWeight = semiBold ? FontWeights.SemiBold : FontWeights.Normal,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = margin ?? new Thickness(0, 0, 0, 8),
+        });
     }
 
-    private void UpdateButtons()
-    {
-        var remaining = _plan.Unresolved.Count();
-        var excluded = _plan.AllItems.Count(i => i.Excluded);
-        BtnOk.IsEnabled = remaining == 0;
-        TxtRemaining.Text = (remaining == 0 ? "all decided" : $"{remaining} still undecided")
-                          + (excluded > 0 ? $"  ·  {excluded} excluded/vanilla" : "");
-    }
-
-    private void Ok_Click(object sender, RoutedEventArgs e) => DialogResult = true;
+    // --------------------------------------------------------------- testing ---
 
     /// <summary>
-    /// Test hook: count the RadioButtons actually attached to the dialog's tree.
-    /// A contested plan must yield selectors here - if it renders zero, the
-    /// resolver is broken (this exact regression shipped once).
+    /// Test hook: count the RadioButtons across every pre-built decision page
+    /// (pages are built eagerly; only one is shown at a time). A contested plan
+    /// must yield selectors here - if it renders zero, the resolver is broken
+    /// (this exact regression shipped once).
     /// </summary>
-    internal int SelectorsInTree()
-    {
-        var n = 0;
-        void Walk(DependencyObject d)
-        {
-            foreach (var child in LogicalTreeHelper.GetChildren(d))
-            {
-                if (child is RadioButton) n++;
-                if (child is DependencyObject dep) Walk(dep);
-            }
-        }
-        Walk(PoolsHost);
-        return n;
-    }
+    internal int SelectorsInTree() => _pages.Sum(p => p.Radios.Count);
 }

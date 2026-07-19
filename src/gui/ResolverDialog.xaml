@@ -1,18 +1,24 @@
 <Window x:Class="Ostrasort.Gui.ResolverDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Resolve contested items" Height="640" Width="860" MinHeight="420" MinWidth="640"
+        Title="Resolve conflicts" Height="640" Width="860" MinHeight="420" MinWidth="640"
         Icon="/app.ico" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
-    <DockPanel Margin="12">
-        <TextBlock x:Name="TxtIntro" DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10" Foreground="Gray"
-                   Text="Where two mods change the same shop item or object field to different values, pick which one the merged patch keeps (or the union / vanilla). Everything the mods agree on, or only one of them touched, merges automatically — expand those to review. All decisions are remembered for future refreshes. Merged game objects are best-effort: verify them in game."/>
+    <DockPanel Margin="14">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock x:Name="TxtProgress" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0,0,0"/>
+            <TextBlock x:Name="TxtPageTitle" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+        </DockPanel>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <TextBlock x:Name="TxtRemaining" VerticalAlignment="Center" Margin="0,0,14,0" Foreground="Gray"/>
-            <Button x:Name="BtnOk" Content="Generate patch" Padding="16,6" IsDefault="True" Click="Ok_Click"/>
+            <Button x:Name="BtnChooseForMe" Content="Choose for me" Padding="14,6" Margin="0,0,16,0"
+                    Click="ChooseForMe_Click"
+                    ToolTip="Accept the suggested pick (the later-loaded mod's value, the same outcome the game itself would produce) for every remaining decision and jump to the review page. Each accepted pick stays marked for review next time."/>
+            <Button x:Name="BtnBack" Content="Back" Padding="16,6" Click="Back_Click"/>
+            <Button x:Name="BtnNext" Content="Continue" Padding="16,6" Margin="8,0,0,0" IsDefault="True" Click="Next_Click"/>
+            <Button x:Name="BtnOk" Content="Create compatibility patch" Padding="16,6" Margin="8,0,0,0" Click="Ok_Click"/>
             <Button Content="Cancel" Padding="16,6" Margin="8,0,0,0" IsCancel="True"/>
         </StackPanel>
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="PoolsHost"/>
+        <ScrollViewer x:Name="PageScroller" VerticalScrollBarVisibility="Auto">
+            <ContentControl x:Name="PageHost" HorizontalAlignment="Stretch"/>
         </ScrollViewer>
     </DockPanel>
 </Window>
