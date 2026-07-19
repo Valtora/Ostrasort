@@ -177,6 +177,9 @@
                         <Button x:Name="BtnHealthFix" Content="Fix automatically" Padding="14,6" FontWeight="SemiBold"
                                 Visibility="Collapsed" Click="HealthFix_Click"
                                 ToolTip="Apply the suggested load order and create or refresh the compatibility patch in one go. You are only asked when a genuine decision is needed, and every write keeps a backup."/>
+                        <Button x:Name="BtnHealthLog" Content="What went wrong?" Padding="14,6" Margin="8,0,0,0"
+                                Visibility="Collapsed" Click="HealthLog_Click"
+                                ToolTip="See the problems Ostranauts itself reported on its last launch, matched to the responsible mods, with one-click fixes."/>
                         <Button x:Name="BtnHealthShow" Content="Show me" Padding="14,6" Margin="8,0,0,0"
                                 Visibility="Collapsed" Click="HealthShow_Click"
                                 ToolTip="Open the tab that explains these issues."/>

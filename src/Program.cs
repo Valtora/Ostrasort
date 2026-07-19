@@ -227,6 +227,7 @@ public static class Program
             _ = new Gui.CollisionDetailDialog(smokeEnv, detailCol, smokeState.Analysis.IgnorePatterns);
             _ = new Gui.ModDetailDialog(smokeEnv, smokeState.Analysis, smokeState.Analysis.Registered[0],
                     "✓", System.Windows.Media.Brushes.Green, canToggle: true);
+            _ = new Gui.LogIssuesDialog(smokeState.Analysis);
             if (smokePlan.ContestedItems.Any() && resolver.SelectorsInTree() == 0)
             {
                 Console.Error.WriteLine("gui-smoke FAIL: resolver has contested items but rendered no selectors.");

@@ -246,6 +246,7 @@ public partial class MainWindow : Window
             TxtHealthDetail.Text = active == 1 ? "1 mod active." : $"{active} mods active.";
             TxtHealthDetail.Foreground = Dim;
             BtnHealthFix.Visibility = Visibility.Collapsed;
+            BtnHealthLog.Visibility = Visibility.Collapsed;
             BtnHealthShow.Visibility = Visibility.Collapsed;
         }
         else
@@ -259,6 +260,7 @@ public partial class MainWindow : Window
             TxtHealthDetail.Text = string.Join(" ", issues.Select(i => Capitalize(i) + "."));
             TxtHealthDetail.Foreground = Normal;
             BtnHealthFix.Visibility = fixable ? Visibility.Visible : Visibility.Collapsed;
+            BtnHealthLog.Visibility = logMods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             BtnHealthShow.Visibility = Visibility.Visible;
         }
         HealthBanner.Visibility = Visibility.Visible;
@@ -321,6 +323,35 @@ public partial class MainWindow : Window
             : a.OrderChanged ? TabOrder
             : _state.Patch.Stale || _state.Patch.Obsolete ? TabPatch
             : TabWarnings;
+    }
+
+    /// <summary>
+    /// The "what went wrong" flow: last-launch problems the game itself
+    /// reported, matched to the responsible mods, with one-click next steps.
+    /// </summary>
+    private void HealthLog_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null) return;
+        _busy = true;
+        ModEntry? toDisable;
+        try
+        {
+            var dlg = new LogIssuesDialog(_state.Analysis) { Owner = this };
+            dlg.ShowDialog();
+            toDisable = dlg.ToDisable;
+        }
+        finally { _busy = false; }
+
+        if (toDisable is not null)
+        {
+            var row = _rows.FirstOrDefault(r => ReferenceEquals(r.M, toDisable));
+            if (row is not null && ToggleDisabled(row, disable: true))
+            {
+                RunStatus.Text = $"'{toDisable.DisplayName ?? toDisable.Name}' disabled. Launch the game to " +
+                                 "confirm the problem is gone, then re-enable it or remove it.  ";
+                RunStatus.Foreground = Good;
+            }
+        }
     }
 
     /// <summary>The More menu: rescan, backups, and patch removal - the occasional actions.</summary>
