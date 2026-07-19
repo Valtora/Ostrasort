@@ -33,10 +33,25 @@ public sealed class VeloUpdate
     {
         try
         {
-            var mgr = new UpdateManager(new GithubSource(RepoUrl, accessToken: null, prerelease: false));
+            var mgr = BuildManager();
             return mgr.IsInstalled ? new VeloUpdate(mgr) : null;
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// The update source. Normally GitHub Releases. As a testing seam, when the
+    /// OSTRASORT_UPDATE_FEED environment variable points at a local vpk-packed
+    /// release folder, the updater reads from there instead - so the whole
+    /// download / apply / restart path can be exercised locally without a public
+    /// release. The variable is unset in production, so this is inert there.
+    /// </summary>
+    private static UpdateManager BuildManager()
+    {
+        var feed = Environment.GetEnvironmentVariable("OSTRASORT_UPDATE_FEED");
+        if (!string.IsNullOrWhiteSpace(feed))
+            return new UpdateManager(feed);
+        return new UpdateManager(new GithubSource(RepoUrl, accessToken: null, prerelease: false));
     }
 
     /// <summary>
