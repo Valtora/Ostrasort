@@ -14,6 +14,7 @@ namespace Ostrasort.Gui;
 
 public sealed record ModRow(string Pos, string Name, string Source, string Class, string Data,
                             string Version, string WorkshopId, string Notes, Brush Brush, string? Dir, string Tooltip,
+                            string Description, string DescriptionShort,
                             ModEntry M, bool Draggable,
                             string LastUpdated, string UpdateText, Brush UpdateBrush,
                             string StatusGlyph, Brush StatusBrush, string StatusTip,
@@ -21,6 +22,8 @@ public sealed record ModRow(string Pos, string Name, string Source, string Class
 {
     public Visibility ToggleVisibility =>
         M.Registered && M.Kind != EntryKind.Core && !M.IsPatch ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool HasDescription => !string.IsNullOrEmpty(DescriptionShort);
 }
 public sealed record LineVm(string Text, Brush Brush, Thickness Margin, bool Bold = false, Collision? Collision = null)
 {
@@ -62,9 +65,11 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private ModRow? _dragRow;
 
-    // Steam Workshop publish times (published-file id -> unix seconds), fetched
-    // once per session and reused across rescans so we don't re-hit Steam.
+    // Steam Workshop publish times (published-file id -> unix seconds) and page
+    // descriptions (id -> BBCode), fetched together once per session and reused
+    // across rescans so we don't re-hit Steam.
     private readonly Dictionary<string, long> _wsUpdated = new();
+    private readonly Dictionary<string, string?> _wsDescription = new();
     private System.Threading.CancellationTokenSource? _wsCts;
 
     // Velopack self-update: null for a copy Velopack doesn't manage (dev build).
@@ -200,6 +205,7 @@ public partial class MainWindow : Window
         foreach (var (pos, m) in all) _rows.Add(BuildRow(pos, m));
         ModsGrid.ItemsSource = _rows;
         ApplyFilter();
+        UpdateRowActions();   // rebuilt table clears the selection - reset the action bar
         _ = RefreshWorkshopUpdatesAsync();
 
         RenderFfuBanner(s);
@@ -357,38 +363,6 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>The More menu: rescan, backups, and patch removal - the occasional actions.</summary>
-    private void More_Click(object sender, RoutedEventArgs e)
-    {
-        if (_state is null) return;
-        var running = GameEnv.IsGameRunning();
-        var rival = _state.Analysis.Ffu is { AutoloaderActive: true };
-        var bak = _env.LoadingOrderPath + ".bak";
-        var backupCount = (File.Exists(bak) ? 1 : 0) + Backups.List(_env.LoadingOrderPath).Count;
-
-        var menu = new ContextMenu
-        {
-            PlacementTarget = BtnMore,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Top,
-        };
-        MenuItem Item(string header, RoutedEventHandler handler, bool enabled = true, string? tip = null)
-        {
-            var it = new MenuItem { Header = header, IsEnabled = enabled, ToolTip = tip };
-            it.Click += handler;
-            return it;
-        }
-        menu.Items.Add(Item("Rescan", Rescan_Click,
-            tip: "Re-read the install now (this also happens automatically when the window regains focus)."));
-        menu.Items.Add(Item("Make backup now", MakeBackup_Click,
-            tip: "Snapshot the current loading_order.json into the rolling backup history."));
-        menu.Items.Add(Item("Restore backup…", RestoreBak_Click, backupCount > 0 && !running && !rival,
-            "Restore loading_order.json from the .bak or a rolling backup."));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Remove compatibility patch…", Unpatch_Click, _state.Patch.Exists && !running && !rival,
-            "Delete the generated patch mod and its load-order entry. Safe: it can be regenerated any time."));
-        menu.IsOpen = true;
-    }
-
     /// <summary>
     /// The persistent (per-session dismissable) FFU banner: informational on a
     /// plain FFU install, alarm-red while the OstraAutoloader is active and
@@ -522,11 +496,30 @@ public partial class MainWindow : Window
             : hasWarn ? ("!", Warn, string.Join(" ", notes.Select(n => n + ".")))
             : ("✓", Good, "No problems found.");
 
+        var (descRaw, descLine) = DescribeMod(m);
+
         return new ModRow(pos, name, source, cls, data, version, m.WorkshopId ?? "-",
-            string.Join("; ", notes), brush, m.Dir, tooltip, m, draggable,
+            string.Join("; ", notes), brush, m.Dir, tooltip, descRaw, descLine, m, draggable,
             lastUpdated, updText, updBrush,
             glyph, glyphBrush, glyphTip,
             Enabled: !m.Disabled, CanToggle: CanToggleRow(m));
+    }
+
+    /// <summary>
+    /// The mod's Description-column text, as (raw BBCode, single-line plain).
+    /// Prefers the live Steam Workshop page description (fetched into
+    /// <see cref="_wsDescription"/> for subscribed Workshop mods) and falls back
+    /// to the mod's own mod_info.json strNotes. The raw BBCode feeds the rich
+    /// hover tooltip (rendered by <see cref="BbCodeInline"/>); the flattened plain
+    /// form feeds the ellipsis-trimmed cell and the search filter.
+    /// </summary>
+    private (string Raw, string Line) DescribeMod(ModEntry m)
+    {
+        string? raw = null;
+        if (m.WorkshopId is { } wid && _wsDescription.TryGetValue(wid, out var d) && !string.IsNullOrWhiteSpace(d))
+            raw = d;
+        raw ??= m.StrNotes;
+        return (raw ?? "", BbCode.Flatten(BbCode.ToPlainText(raw)));
     }
 
     private bool CanToggleRow(ModEntry m) =>
@@ -758,6 +751,12 @@ public partial class MainWindow : Window
         BtnLaunch.IsEnabled = !running;
         LinkReset.IsEnabled = _manualDirty;
 
+        // footer occasional actions (formerly behind "More…")
+        var bak = _env.LoadingOrderPath + ".bak";
+        var backupCount = (File.Exists(bak) ? 1 : 0) + Backups.List(_env.LoadingOrderPath).Count;
+        BtnRestoreBak.IsEnabled = backupCount > 0 && !running && !rivalLock;
+        BtnRemovePatch.IsEnabled = s.Patch.Exists && !running && !rivalLock;
+
         var arrUndoable = _manualDirty && _arrUndo.Count > 0;
         var arrRedoable = _arrRedo.Count > 0;
         BtnUndo.IsEnabled = arrUndoable || (_undo.Count > 0 && !running && !rivalLock);
@@ -821,7 +820,8 @@ public partial class MainWindow : Window
                     || r.WorkshopId.Contains(needle, StringComparison.OrdinalIgnoreCase)
                     || r.Class.Contains(needle, StringComparison.OrdinalIgnoreCase)
                     || r.Source.Contains(needle, StringComparison.OrdinalIgnoreCase)
-                    || r.Notes.Contains(needle, StringComparison.OrdinalIgnoreCase));
+                    || r.Notes.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                    || r.DescriptionShort.Contains(needle, StringComparison.OrdinalIgnoreCase));
     }
 
     private void Filter_Changed(object sender, TextChangedEventArgs e)
@@ -1250,7 +1250,7 @@ public partial class MainWindow : Window
     private void RestoreBak_Click(object sender, RoutedEventArgs e)
     {
         var bak = _env.LoadingOrderPath + ".bak";
-        var menu = new ContextMenu { PlacementTarget = BtnMore };
+        var menu = new ContextMenu { PlacementTarget = BtnRestoreBak };
         if (File.Exists(bak))
         {
             var item = new MenuItem
@@ -1923,6 +1923,50 @@ public partial class MainWindow : Window
         if (ModsGrid.SelectedItem is ModRow row) ShowModDetails(row);
     }
 
+    // ---- selected-mod action bar (buttons above the table act on the current
+    // selection; each reuses the same logic as its context-menu twin) ----
+
+    private void ModsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateRowActions();
+
+    /// <summary>
+    /// Enable/disable the action-bar buttons for the current selection, mirroring
+    /// the context-menu rules in <see cref="RowMenu_Opened"/>.
+    /// </summary>
+    private void UpdateRowActions()
+    {
+        if (BtnRowDetails is null) return;   // called before the template is built
+        var row = ModsGrid.SelectedItem as ModRow;
+        TxtRowActionTarget.Text = row is null ? "Select a mod for actions"
+            : row.M.Kind == EntryKind.Core ? "core (base game data)" : row.Name;
+
+        var rivalLock = _state?.Analysis.Ffu is { AutoloaderActive: true };
+        BtnRowDescription.IsEnabled = row is { HasDescription: true };
+        BtnRowDetails.IsEnabled = row is { M.Kind: not EntryKind.Core };
+        BtnRowFolder.IsEnabled = row?.Dir is not null;
+        BtnRowWorkshop.IsEnabled = row?.M.WorkshopId is not null;
+        BtnRowRemove.IsEnabled = rivalLock != true && (row?.M.IsPatch == true
+            ? _state?.Patch.Exists == true
+            : row?.M is { Kind: EntryKind.Local or EntryKind.PluginDir, Dir: not null });
+    }
+
+    /// <summary>Show the selected mod's formatted (BBCode) description in a small modal.</summary>
+    private void RowDescription_Click(object sender, RoutedEventArgs e)
+    {
+        if (ModsGrid.SelectedItem is not ModRow { HasDescription: true } row) return;
+        var body = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(16) };
+        BbCodeInline.SetSource(body, row.Description);
+        var win = new Window
+        {
+            Title = $"Description: {row.Name}",
+            Owner = this,
+            Width = 560,
+            Height = 480,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = body },
+        };
+        win.ShowDialog();
+    }
+
     private void MenuDetails_Click(object sender, RoutedEventArgs e)
     {
         if (ModsGrid.SelectedItem is ModRow row) ShowModDetails(row);
@@ -2224,10 +2268,10 @@ public partial class MainWindow : Window
         var cts = new System.Threading.CancellationTokenSource();
         _wsCts = cts;
 
-        Dictionary<string, long> fetched;
+        Dictionary<string, WorkshopDetails> fetched;
         try
         {
-            fetched = await FetchWorkshopUpdateTimesAsync(toFetch, cts.Token).ConfigureAwait(false);
+            fetched = await FetchWorkshopDetailsAsync(toFetch, cts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -2246,7 +2290,11 @@ public partial class MainWindow : Window
         // every UI touch back explicitly rather than trusting the captured context.
         await Dispatcher.InvokeAsync(() =>
         {
-            foreach (var kv in fetched) _wsUpdated[kv.Key] = kv.Value;
+            foreach (var kv in fetched)
+            {
+                _wsUpdated[kv.Key] = kv.Value.TimeUpdated;
+                _wsDescription[kv.Key] = kv.Value.Description;
+            }
             if (!ReferenceEquals(rows, _rows)) return;  // a rescan replaced the table underneath us
 
             var updates = 0;
@@ -2255,7 +2303,9 @@ public partial class MainWindow : Window
                 var r = rows[i];
                 if (r.M.Kind != EntryKind.Workshop || r.M.WorkshopId is not { } w || !fetched.ContainsKey(w)) continue;
                 var (lu, upd, ub) = UpdateInfo(r.M);
-                rows[i] = r with { LastUpdated = lu, UpdateText = upd, UpdateBrush = ub };
+                var (descRaw, descLine) = DescribeMod(r.M);
+                rows[i] = r with { LastUpdated = lu, UpdateText = upd, UpdateBrush = ub,
+                                   Description = descRaw, DescriptionShort = descLine };
                 if (upd.Length > 0) updates++;
             }
             OpLog.Add($"Workshop: checked {fetched.Count} item(s) for updates" +
@@ -2263,12 +2313,16 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>Publish time (unix seconds) plus page description (BBCode) for one Workshop item.</summary>
+    private readonly record struct WorkshopDetails(long TimeUpdated, string? Description);
+
     /// <summary>
-    /// Batched, key-less Steam Workshop lookup of publish times. Returns a map of
-    /// published-file id -> unix seconds (time_updated) for every item Steam
-    /// reported successfully; ids Steam couldn't resolve are simply absent.
+    /// Batched, key-less Steam Workshop lookup. Returns a map of published-file id
+    /// -> (time_updated, description) for every item Steam reported successfully;
+    /// ids Steam couldn't resolve are simply absent. The single call backs both the
+    /// "update available" flag and the Description column.
     /// </summary>
-    private static async Task<Dictionary<string, long>> FetchWorkshopUpdateTimesAsync(
+    private static async Task<Dictionary<string, WorkshopDetails>> FetchWorkshopDetailsAsync(
         List<string> ids, System.Threading.CancellationToken token)
     {
         var form = new List<KeyValuePair<string, string>> { new("itemcount", ids.Count.ToString()) };
@@ -2281,7 +2335,7 @@ public partial class MainWindow : Window
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadAsStringAsync(token);
 
-        var result = new Dictionary<string, long>();
+        var result = new Dictionary<string, WorkshopDetails>();
         using var doc = JsonDocument.Parse(json);
         if (!doc.RootElement.TryGetProperty("response", out var respEl) ||
             !respEl.TryGetProperty("publishedfiledetails", out var arr) ||
@@ -2292,8 +2346,10 @@ public partial class MainWindow : Window
         {
             if (!d.TryGetProperty("publishedfileid", out var idEl) || idEl.GetString() is not { } id) continue;
             if (d.TryGetProperty("result", out var rEl) && rEl.ValueKind == JsonValueKind.Number && rEl.GetInt32() != 1) continue;
-            if (d.TryGetProperty("time_updated", out var tuEl) && tuEl.TryGetInt64(out var tu) && tu > 0)
-                result[id] = tu;
+            var tu = d.TryGetProperty("time_updated", out var tuEl) && tuEl.TryGetInt64(out var t) && t > 0 ? t : 0;
+            var desc = d.TryGetProperty("description", out var deEl) && deEl.ValueKind == JsonValueKind.String
+                ? deEl.GetString() : null;
+            result[id] = new WorkshopDetails(tu, desc);
         }
         return result;
     }

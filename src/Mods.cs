@@ -34,6 +34,7 @@ public sealed class ModEntry
     public string? GameVersion { get; set; }         // strGameVersion from mod_info.json
     public string? ModVersion { get; set; }          // strModVersion from mod_info.json (the mod's own version)
     public string? PublishedId { get; set; }         // strWorkshopID from mod_info.json (published local mods)
+    public string? StrNotes { get; set; }             // strNotes from mod_info.json - the mod's own description (fallback for the Description column)
     public bool Registered { get; set; } = true;
     public bool Ignored { get; set; }                // user chose to leave it unregistered (see IgnoreList)
 
@@ -378,6 +379,9 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
             if (root.TryGetProperty("strWorkshopID", out var w) && w.ValueKind == JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(w.GetString()))
                 mod.PublishedId = w.GetString();
+            if (root.TryGetProperty("strNotes", out var sn) && sn.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(sn.GetString()))
+                mod.StrNotes = sn.GetString();
 
             // FFU-only mod_info extensions: entity removal + save-migration maps
             if (root.TryGetProperty("removeIds", out var rem) && rem.ValueKind == JsonValueKind.Object)

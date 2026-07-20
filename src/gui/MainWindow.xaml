@@ -1,12 +1,22 @@
 <Window x:Class="Ostrasort.Gui.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:Ostrasort.Gui"
         Title="Ostrasort" Height="760" Width="1120" MinHeight="560" MinWidth="860"
         Icon="/app.ico" WindowStartupLocation="CenterScreen"
         Activated="Window_Activated" Closing="Window_Closing"
         PreviewKeyDown="Window_PreviewKeyDown"
         AllowDrop="True" PreviewDragOver="Window_DragOver" PreviewDrop="Window_Drop">
     <Window.Resources>
+        <!-- icon + label button for the selected-mod action bar; the MDL2 glyph and
+             the text both inherit the themed button foreground (good contrast in
+             light and dark). Disabled buttons dim via the default Fluent style. -->
+        <Style x:Key="RowActionButton" TargetType="Button">
+            <Setter Property="Padding" Value="10,3"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
         <!-- Button-like tab headers so they keep contrast on both palettes; the
              brushes come from ThemeManager (pushed into Application resources). -->
         <Style TargetType="TabItem">
@@ -46,9 +56,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*"/>
-            <RowDefinition Height="8"/>
-            <RowDefinition Height="1.4*"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -219,12 +227,69 @@
             </Border>
         </StackPanel>
 
-        <!-- mod table -->
-        <DataGrid Grid.Row="3" x:Name="ModsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+        <!-- main content: mod table on the left, the detail console on the right,
+             side by side so both get the full height and the width is not wasted -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MinWidth="500"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="2*" MinWidth="280"/>
+            </Grid.ColumnDefinitions>
+
+        <!-- mod table + its selected-mod action bar -->
+        <DockPanel Grid.Column="0">
+        <!-- actions for the selected mod (hover a row for its description) -->
+        <Border DockPanel.Dock="Top" Margin="0,0,0,6" Padding="0,0,0,6"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource GridLineBrush}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Selected:" Foreground="{DynamicResource SecondaryTextBrush}"
+                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock x:Name="TxtRowActionTarget" Text="Select a mod for actions"
+                           VerticalAlignment="Center" Margin="0,0,16,0" MaxWidth="280"
+                           TextTrimming="CharacterEllipsis" FontWeight="SemiBold"/>
+                <Button x:Name="BtnRowDescription" Style="{StaticResource RowActionButton}" Click="RowDescription_Click"
+                        ToolTip="Show this mod's Steam Workshop / mod_info description (formatted).">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE7C3;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="Description" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnRowDetails" Style="{StaticResource RowActionButton}" Click="MenuDetails_Click"
+                        ToolTip="Everything about this mod in one place: status, problems, game-log issues, and its conflicts (also on double-click).">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="Details" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnRowFolder" Style="{StaticResource RowActionButton}" Click="MenuOpenFolder_Click"
+                        ToolTip="Open this mod's folder in Explorer.">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE838;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="Open folder" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnRowWorkshop" Style="{StaticResource RowActionButton}" Click="MenuOpenWorkshop_Click"
+                        ToolTip="Open this mod's Steam Workshop page in your browser.">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="Workshop page" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnRowRemove" Style="{StaticResource RowActionButton}" Click="MenuDeleteMod_Click"
+                        ToolTip="Remove this mod: park the folder as *.disabled (reversible) or delete it, and drop its load-order entry.">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="Remove" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+        <DataGrid x:Name="ModsGrid" AutoGenerateColumns="False" IsReadOnly="True"
                   CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False"
                   SelectionMode="Single" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                   HorizontalGridLinesBrush="{DynamicResource GridLineBrush}" RowHeaderWidth="0" FontSize="12.5"
                   MouseDoubleClick="ModsGrid_MouseDoubleClick"
+                  SelectionChanged="ModsGrid_SelectionChanged"
                   PreviewMouseLeftButtonDown="ModsGrid_PreviewMouseLeftButtonDown"
                   PreviewMouseMove="ModsGrid_PreviewMouseMove"
                   PreviewMouseRightButtonDown="ModsGrid_PreviewMouseRightButtonDown"
@@ -301,15 +366,15 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="4*"/>
             </DataGrid.Columns>
         </DataGrid>
+        </DockPanel>
 
-        <GridSplitter Grid.Row="4" HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                      Height="6" Background="Transparent"/>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                      Background="Transparent"/>
 
-        <!-- detail tabs -->
-        <TabControl Grid.Row="5" x:Name="Tabs" FontSize="12.5">
+        <!-- detail console -->
+        <TabControl Grid.Column="2" x:Name="Tabs" FontSize="12.5">
             <TabItem x:Name="TabProfiles" Header="Profiles">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8,2,8,8">
@@ -417,17 +482,24 @@
                 </DockPanel>
             </TabItem>
         </TabControl>
+        </Grid>
 
-        <!-- action bar: status + a manual-arrangement bar when one is pending,
-             one primary action, and everything occasional behind More -->
-        <DockPanel Grid.Row="6" Margin="0,10,0,0">
+        <!-- action bar: status on the left; the occasional actions and the one
+             primary action (Launch) laid out in full on the right -->
+        <DockPanel Grid.Row="4" Margin="0,10,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="BtnRescan" Content="Rescan" Padding="14,6" Margin="8,0,0,0" Click="Rescan_Click"
+                        ToolTip="Re-read the install now (this also happens automatically when the window regains focus)."/>
+                <Button x:Name="BtnBackupNow" Content="Make backup now" Padding="14,6" Margin="8,0,0,0" Click="MakeBackup_Click"
+                        ToolTip="Snapshot the current loading_order.json into the rolling backup history."/>
+                <Button x:Name="BtnRestoreBak" Content="Restore backup…" Padding="14,6" Margin="8,0,0,0" Click="RestoreBak_Click"
+                        ToolTip="Restore loading_order.json from the .bak or a rolling backup."/>
+                <Button x:Name="BtnRemovePatch" Content="Remove compatibility patch…" Padding="14,6" Margin="8,0,0,0" Click="Unpatch_Click"
+                        ToolTip="Delete the generated patch mod and its load-order entry. Safe: it can be regenerated any time."/>
                 <Button x:Name="BtnApplyManual" Content="Apply manual order" Padding="14,6" Margin="8,0,0,0"
                         Visibility="Collapsed" FontWeight="SemiBold" Click="Apply_Click"
                         ToolTip="Write the row arrangement you dragged into loading_order.json (a backup is kept)."/>
                 <Button x:Name="BtnLaunch" Content="Launch game" Padding="14,6" Margin="8,0,0,0" Click="Launch_Click"/>
-                <Button x:Name="BtnMore" Content="More…" Padding="14,6" Margin="8,0,0,0" Click="More_Click"
-                        ToolTip="Rescan, backups, and removing the compatibility patch."/>
             </StackPanel>
             <TextBlock VerticalAlignment="Center">
                 <Run x:Name="RunStatus" FontWeight="SemiBold"/>
