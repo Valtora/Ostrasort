@@ -65,13 +65,23 @@ public sealed class ModEntry
     // FFU (filled by the scanner + FfuAnalysis.Classify)
     public AutoloadMeta? Meta { get; set; }                  // Autoload.Meta.toml, when the mod ships one
     public bool IsFfu { get; set; }                          // belongs to the FFU block (loads after all non-FFU mods)
+    public bool FfuOverride { get; set; }                    // user manually marked it FFU-dependent (FfuOverrideList)
     public FfuLoadGroup FfuGroup { get; set; } = FfuLoadGroup.AfterFFU;   // effective tier when IsFfu
     public bool UsesElasticApi { get; set; }                 // FFU-only data features detected
     public List<string> FfuSignals { get; } = new();         // human-readable evidence for IsFfu
     public List<(string Type, string Id)> RemoveIds { get; } = new();     // mod_info.json "removeIds"
     public bool HasChangesMap { get; set; }                  // mod_info.json "changesMap"
+    public List<string> RequiredApis { get; } = new();       // mod_info.json "requiredAPIs" (raw) - non-empty => FFU-based (FFU:BR reads this)
+    public List<string> RequiredMods { get; } = new();       // mod_info.json "requiredMods" parsed to bare mod ids - FFU "load-after" deps (FFU drops the mod if unmet)
     public HashSet<(string Type, string Name)> FfuArrayEditClaims { get; } = new();  // claims using --ADD--/--DEL--/... commands
     public bool IsFfuPatch { get; set; }                     // FFU convention: apply once, right after its target
+
+    /// <summary>Whether this mod declares any FFU "load-after" dependency (Autoload.Meta.toml [dependencies] or mod_info.json requiredMods).</summary>
+    public bool HasFfuDeps => (Meta?.Dependencies.Count ?? 0) > 0 || RequiredMods.Count > 0;
+
+    /// <summary>FFU "load-after" dependency names: Autoload.Meta.toml [dependencies] plus mod_info.json requiredMods.</summary>
+    public IEnumerable<string> FfuDeps =>
+        (Meta?.Dependencies.Keys ?? Enumerable.Empty<string>()).Concat(RequiredMods);
     public ModEntry? FfuPatchTarget { get; set; }
 
     public string Label =>
@@ -169,7 +179,8 @@ public sealed class ModEntry
         if (HasPatchers) notes.Add("ships BepInEx patchers");
         if (HasPlugins && !HasPatchers) notes.Add("plugins");
         if (IsFfuPatch) notes.Add("FFU patch - remove after one use");
-        else if (IsFfu) notes.Add(FfuGroup == FfuLoadGroup.FFUCore ? "FFU core tier" : "FFU mod");
+        else if (IsFfu) notes.Add(FfuGroup == FfuLoadGroup.FFUCore ? "FFU core tier"
+            : FfuOverride ? "FFU mod (marked by you)" : "FFU mod");
         if (RemoveIds.Count > 0) notes.Add($"removes {RemoveIds.Count} core entr{(RemoveIds.Count == 1 ? "y" : "ies")} (FFU removeIds)");
         if (GameVersionNote(installedVersion) is { } versionNote) notes.Add(versionNote);
         if (JsonErrors.Count > 0) notes.Add($"{JsonErrors.Count} JSON problem(s)");
@@ -403,6 +414,25 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 mod.UsesElasticApi = true;
                 mod.FfuSignals.Add("changesMap in mod_info.json");
             }
+
+            // FFU:BR reads these two mod_info.json fields directly (verified in the
+            // decompiled loader): a non-empty requiredAPIs means the mod NEEDS the
+            // FFU framework, so FFU itself requires it to load AFTER Minor Fixes
+            // Plus; requiredMods are hard "load-after" deps FFU enforces by dropping
+            // the mod when they are missing or ordered wrong.
+            if (root.TryGetProperty("requiredAPIs", out var reqApis) && reqApis.ValueKind == JsonValueKind.Array)
+                foreach (var api in reqApis.EnumerateArray())
+                    if (api.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(api.GetString()))
+                        mod.RequiredApis.Add(api.GetString()!.Trim());
+            if (mod.RequiredApis.Count > 0)
+                mod.FfuSignals.Add($"requiredAPIs in mod_info.json ({string.Join(", ", mod.RequiredApis.Take(3))}) - needs the FFU framework");
+
+            if (root.TryGetProperty("requiredMods", out var reqMods) && reqMods.ValueKind == JsonValueKind.Array)
+                foreach (var rm in reqMods.EnumerateArray())
+                    if (rm.ValueKind == JsonValueKind.String && FfuAnalysis.DepName(rm.GetString()) is { Length: > 0 } dep)
+                        mod.RequiredMods.Add(dep);
+            if (mod.RequiredMods.Count > 0)
+                mod.FfuSignals.Add($"requiredMods in mod_info.json ({string.Join(", ", mod.RequiredMods.Take(3))})");
 
             // Ostrasort-specific opt-in hint. A pure FFU field-merge mod (partial
             // objects that overwrite only a few fields by strName) carries no

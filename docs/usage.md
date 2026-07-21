@@ -177,6 +177,13 @@ you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
   the permanent warning and the "add it" suggestion for a folder you deliberately
   keep parked. **Stop ignoring** brings both back. The preference is remembered
   per install.
+- **Mark as FFU-dependent (load after Minor Fixes Plus)** (right-click any mod)
+  tags an FFU mod that Ostrasort can't auto-detect, so it sorts into the FFU
+  block after Minor Fixes Plus instead of before it. Use it for a Steam Workshop
+  FFU mod whose files carry no `Autoload.Meta.toml` (you can't edit a subscribed
+  mod to add one). It is a sorting preference only, no game files are touched,
+  and it can only move the mod later, so it can't mis-sort a plain Workshop mod.
+  **Stop treating as FFU-dependent** clears it. Remembered per install.
 - **Remove mod (park or delete)…** (right-click a local mod) parks its folder as
   `*.disabled` (reversible, rename it back) or deletes it permanently, and drops
   its load-order entry either way. Deleted files are **not** restored by Ctrl+Z,
@@ -354,6 +361,11 @@ Ostrasort.exe --install-zip <p>
                           and register each data mod. Strips a GitHub-style wrapper folder and
                           installs every mod in a multi-mod archive
 Ostrasort.exe --overwrite with --install-zip: replace a mod already installed (default: skip)
+Ostrasort.exe --mark-ffu <name>       mark a mod FFU-dependent so it sorts into the FFU block
+                          after Minor Fixes Plus (for an FFU mod with no auto-detectable marker,
+                          e.g. a Workshop mod without an Autoload.Meta.toml). Sorting preference
+                          only, no game files change. <name> is the MODS-screen name or folder/id
+Ostrasort.exe --unmark-ffu <name>     clear a mod's manual FFU-dependent mark
 Ostrasort.exe --profile-list          list saved load-order profiles for this install
 Ostrasort.exe --profile-save <name>   save the current load order as a named profile
 Ostrasort.exe --profile-load <name>   switch to a saved profile: Replace by default (mods it

@@ -7,9 +7,10 @@ public sealed record EngineState(LoadOrderFile Lo, Scanner Scanner, Analysis Ana
 /// <summary>One full read-only pass over the install - shared by the console paths and the GUI.</summary>
 public static class Engine
 {
-    public static EngineState Analyze(GameEnv env, bool tidy = false, IgnoreList? ignore = null)
+    public static EngineState Analyze(GameEnv env, bool tidy = false, IgnoreList? ignore = null, FfuOverrideList? ffuOverrides = null)
     {
         ignore ??= IgnoreList.LoadDefault();
+        ffuOverrides ??= FfuOverrideList.LoadDefault();
         var lo = LoadOrderFile.Read(env.LoadingOrderPath);
         var analysis = new Analysis
         {
@@ -23,7 +24,7 @@ public static class Engine
         scanner.IndexCore();
         foreach (var m in analysis.AllMods) scanner.Scan(m);
 
-        FfuAnalysis.Classify(env, analysis);          // FFU block membership, patch targets, FFU hygiene
+        FfuAnalysis.Classify(env, analysis, ffuOverrides);   // FFU block membership, patch targets, FFU hygiene
         analysis.FindCollisions();
         foreach (var c in analysis.Collisions.Where(c => c.Type == "loot"))
             c.FriendlyName = scanner.LootNames.Describe(c.ObjName);   // readable name for the raw pool id

@@ -235,8 +235,30 @@ public static class FfuAnalysis
     public const string MinorFixesPlus = "Minor Fixes Plus";
 
     private static readonly Regex PatchWord = new(@"\bpatch\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex IdStrip = new("[^A-Za-z0-9_]", RegexOptions.Compiled);
 
-    public static void Classify(GameEnv env, Analysis a)
+    /// <summary>
+    /// FFU:BR's own mod-id normalization (its <c>GetID</c>): spaces become
+    /// underscores, then every character outside <c>[A-Za-z0-9_]</c> is dropped
+    /// (case preserved). So "Minor Fixes Plus" and a requiredMods entry
+    /// "Minor_Fixes_Plus" resolve to the same mod. Matches the decompiled loader.
+    /// </summary>
+    public static string FfuId(string? name) =>
+        string.IsNullOrEmpty(name) ? "" : IdStrip.Replace(name.Replace(' ', '_'), "");
+
+    /// <summary>
+    /// The bare mod/API id from a requiredMods / requiredAPIs entry, stripping any
+    /// trailing version constraint: "Minor_Fixes_Plus&gt;=0.6" -&gt; "Minor_Fixes_Plus".
+    /// FFU parses these with the same &gt; &gt;= &lt; &lt;= = != operators.
+    /// </summary>
+    public static string DepName(string? entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry)) return "";
+        var i = entry.IndexOfAny(new[] { '>', '<', '=', '!' });
+        return (i >= 0 ? entry[..i] : entry).Trim();
+    }
+
+    public static void Classify(GameEnv env, Analysis a, FfuOverrideList? overrides = null)
     {
         // disabled entries never load - they join no FFU block and get no hygiene nags
         var mods = a.AllMods.Where(m => m.Kind != EntryKind.Core && m.Dir is not null && !m.Disabled).ToList();
@@ -244,6 +266,17 @@ public static class FfuAnalysis
         // ---- seed FFU-ness from each mod's own signals ----
         foreach (var m in mods)
         {
+            // manual override: the user tagged this mod FFU-dependent (e.g. a
+            // Workshop mod with no auto-detectable FFU marker). It seeds the FFU
+            // block just like a declared AfterFFU meta; the Minor Fixes Plus /
+            // dependency logic below can still upgrade its tier.
+            if (overrides?.Contains(env, m) == true)
+            {
+                m.IsFfu = true;
+                m.FfuOverride = true;
+                m.FfuGroup = FfuLoadGroup.AfterFFU;
+                m.FfuSignals.Add("you marked it FFU-dependent (manual override)");
+            }
             if (m.Meta?.Group is FfuLoadGroup.FFUCore or FfuLoadGroup.AfterFFU)
             {
                 m.IsFfu = true;
@@ -264,6 +297,17 @@ public static class FfuAnalysis
                 m.IsFfu = true;
                 m.FfuGroup = FfuLoadGroup.AfterFFU;
             }
+            // requiredAPIs in mod_info.json = the mod needs the FFU framework, so
+            // FFU:BR itself requires it to load after Minor Fixes Plus. This is the
+            // authoritative FFU marker for a Workshop mod that ships no meta file.
+            if (m.RequiredApis.Count > 0 && !m.IsFfu)
+            {
+                if (m.Meta?.Group is FfuLoadGroup.WithVanilla)
+                    a.Warnings.Add($"'{m.DisplayName ?? m.Name}' declares LoadGroup=WithVanilla but its mod_info.json " +
+                                   "requiredAPIs needs the FFU framework - treating it as FFU-dependent");
+                m.IsFfu = true;
+                m.FfuGroup = FfuLoadGroup.AfterFFU;
+            }
         }
 
         // ---- propagate through declared dependencies (dep on an FFU mod = FFU mod) ----
@@ -271,17 +315,20 @@ public static class FfuAnalysis
         while (changed)
         {
             changed = false;
-            foreach (var m in mods.Where(m => !m.IsFfu && m.Meta is { Dependencies.Count: > 0 }))
+            foreach (var m in mods.Where(m => !m.IsFfu && m.HasFfuDeps))
             {
-                if (m.Meta!.Group is FfuLoadGroup.WithVanilla) continue;   // author explicitly opted out
-                foreach (var dep in m.Meta.Dependencies.Keys)
+                // an author who declared WithVanilla in Autoload.Meta.toml opted out
+                // of the FFU block - but a mod_info.json requiredMods edge is a hard
+                // FFU constraint that overrides that, so honour the opt-out only when
+                // the only deps are the meta's own.
+                if (m.Meta?.Group is FfuLoadGroup.WithVanilla && m.RequiredMods.Count == 0) continue;
+                foreach (var dep in m.FfuDeps)
                 {
                     var target = FindByStrName(mods, dep);
-                    if (target?.IsFfu != true &&
-                        !dep.Equals(MinorFixesPlus, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (target?.IsFfu != true && FfuId(dep) != FfuId(MinorFixesPlus)) continue;
                     m.IsFfu = true;
                     m.FfuGroup = FfuLoadGroup.AfterFFU;
-                    m.FfuSignals.Add($"depends on FFU mod '{dep}' (Autoload.Meta.toml)");
+                    m.FfuSignals.Add($"depends on FFU mod '{dep}'");
                     changed = true;
                     break;
                 }
@@ -294,9 +341,10 @@ public static class FfuAnalysis
         {
             m.IsFfuPatch = true;
             // the target is the (unique) declared dependency that is not the FFU core tier
-            var candidates = (m.Meta?.Dependencies.Keys ?? Enumerable.Empty<string>())
+            var candidates = m.FfuDeps
                 .Select(d => FindByStrName(mods, d))
                 .Where(t => t is not null && t != m && t.FfuGroup != FfuLoadGroup.FFUCore)
+                .Distinct()
                 .ToList();
             m.FfuPatchTarget = candidates.Count == 1 ? candidates[0] : NameHeuristicTarget(mods, m);
         }
@@ -310,9 +358,16 @@ public static class FfuAnalysis
         Hygiene(env, a, mods);
     }
 
-    private static ModEntry? FindByStrName(List<ModEntry> mods, string strName) =>
-        mods.FirstOrDefault(m => string.Equals(m.DisplayName, strName, StringComparison.OrdinalIgnoreCase))
-        ?? mods.FirstOrDefault(m => string.Equals(m.Name, strName, StringComparison.OrdinalIgnoreCase));
+    private static ModEntry? FindByStrName(List<ModEntry> mods, string strName)
+    {
+        var direct = mods.FirstOrDefault(m => string.Equals(m.DisplayName, strName, StringComparison.OrdinalIgnoreCase))
+                  ?? mods.FirstOrDefault(m => string.Equals(m.Name, strName, StringComparison.OrdinalIgnoreCase));
+        if (direct is not null) return direct;
+        // requiredMods entries are FFU ids (spaces->underscores); match on GetID too
+        var id = FfuId(strName);
+        return id.Length == 0 ? null
+            : mods.FirstOrDefault(m => FfuId(m.DisplayName) == id || FfuId(m.Name) == id);
+    }
 
     /// <summary>"Some Mod Patch" / "Some Mod Compat Patch" -> the installed mod whose name is the longest leading match.</summary>
     private static ModEntry? NameHeuristicTarget(List<ModEntry> mods, ModEntry patch)
@@ -389,6 +444,14 @@ public static class FfuAnalysis
                 a.Warnings.Add(FindByStrName(allInstalled, dep) is not null
                     ? $"'{m.DisplayName ?? m.Name}' requires '{dep}' (Autoload.Meta.toml) but that mod is DISABLED - it will not load"
                     : $"'{m.DisplayName ?? m.Name}' requires '{dep}' (Autoload.Meta.toml) but no such mod is installed");
+
+        // requiredMods is stricter than a meta dependency: FFU:BR drops the
+        // dependent mod outright when a required mod is missing or disabled.
+        foreach (var m in mods.Where(m => m.RequiredMods.Count > 0))
+            foreach (var dep in m.RequiredMods.Where(d => FindByStrName(mods, d) is null))
+                a.Warnings.Add(FindByStrName(allInstalled, dep) is not null
+                    ? $"'{m.DisplayName ?? m.Name}' requires '{dep}' (mod_info.json requiredMods) but that mod is DISABLED - FFU will drop '{m.DisplayName ?? m.Name}' at load"
+                    : $"'{m.DisplayName ?? m.Name}' requires '{dep}' (mod_info.json requiredMods) but no such mod is installed - FFU will drop '{m.DisplayName ?? m.Name}' at load");
 
         foreach (var m in mods.Where(m => m.Meta is { Problems.Count: > 0 }))
             foreach (var p in m.Meta!.Problems)

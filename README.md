@@ -113,6 +113,9 @@ Full walkthrough in **[docs/usage.md](docs/usage.md)**.
 - **[How it works](docs/how-it-works.md)** explains load order in Ostranauts,
   how mods are classified, what collisions Ostrasort detects, profiles, and the
   safety model.
+- **[FFU support](docs/ffu.md)** is the deep dive on Fight for Universe: Beyond
+  Reach — how it loads mods, how Ostrasort recognises and orders them, and the
+  quirks (OstraAutoloader, version pinning, the manual FFU tag).
 - **[Building and developing](docs/development.md)** covers the build and
   publish steps and the code layout.
 

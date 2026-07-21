@@ -317,6 +317,10 @@
                               ToolTip="Stop warning about this unregistered folder and stop suggesting to register it. It stays on disk, invisible to the game, until you register it or stop ignoring it."/>
                     <MenuItem x:Name="MenuUnignore" Header="Stop ignoring" Click="MenuUnignore_Click"
                               ToolTip="Warn about this unregistered folder again and offer to register it."/>
+                    <MenuItem x:Name="MenuMarkFfu" Header="Mark as FFU-dependent (load after Minor Fixes Plus)" Click="MenuMarkFfu_Click"
+                              ToolTip="For an FFU mod Ostrasort can't auto-detect (e.g. a Workshop mod with no Autoload.Meta.toml): sort it into the FFU block, after Minor Fixes Plus, instead of before it. A sorting preference only - no game files are touched, and it's remembered per install."/>
+                    <MenuItem x:Name="MenuUnmarkFfu" Header="Stop treating as FFU-dependent" Click="MenuUnmarkFfu_Click"
+                              ToolTip="Remove the manual FFU tag so this mod sorts normally again."/>
                     <MenuItem x:Name="MenuDeleteMod" Header="Remove mod (park or delete)…" Click="MenuDeleteMod_Click"
                               ToolTip="Park the mod folder as *.disabled (reversible) or delete it permanently, and drop its load-order entry either way. Deleted files are NOT restored by Ostrasort's undo."/>
                     <MenuItem x:Name="MenuUnsubscribe" Header="Unsubscribe on Steam…" Click="MenuUnsubscribe_Click"

@@ -55,6 +55,7 @@ public partial class MainWindow : Window
     private string? _activeInstall;
     private bool _switchingInstall;
     private readonly IgnoreList _ignore = IgnoreList.LoadDefault();
+    private readonly FfuOverrideList _ffuOverrides = FfuOverrideList.LoadDefault();
     private EngineState? _state;
     private System.Collections.ObjectModel.ObservableCollection<ModRow> _rows = new();
     private bool _manualDirty;
@@ -118,7 +119,7 @@ public partial class MainWindow : Window
             _manualDirty = false;
             _arrUndo.Clear();
             _arrRedo.Clear();
-            _state = Engine.Analyze(_env, ChkTidy.IsChecked == true, _ignore);
+            _state = Engine.Analyze(_env, ChkTidy.IsChecked == true, _ignore, _ffuOverrides);
             LogCorrelation.Annotate(_state.Analysis, GameEnv.PlayerLogPath, _env.BepInExLogPath);   // attribute last-launch log issues
             RenderState(_state);
         }
@@ -1539,6 +1540,14 @@ public partial class MainWindow : Window
         Show(MenuIgnore, canIgnore && row!.M is { Ignored: false });
         Show(MenuUnignore, canIgnore && row!.M is { Ignored: true });
 
+        // manual FFU tag: for any real mod (esp. a Workshop mod with no
+        // auto-detectable FFU marker). Offer "mark" only when it isn't already
+        // FFU by any means; "unmark" when the tag is what makes it FFU. No game
+        // files are written, so this is safe even under the autoloader rival lock.
+        var canMarkFfu = row?.M is { Kind: not EntryKind.Core, IsPatch: false, Dir: not null };
+        Show(MenuMarkFfu, canMarkFfu && row!.M is { IsFfu: false });
+        Show(MenuUnmarkFfu, canMarkFfu && row!.M.FfuOverride);
+
         // removal: local/plugins-dir folders (park or delete), the generated
         // patch (its own guarded removal, regenerable), or Workshop (Steam owns
         // the files - offer Unsubscribe instead)
@@ -1556,6 +1565,7 @@ public partial class MainWindow : Window
             MenuDisable.Visibility == Visibility.Visible || MenuEnable.Visibility == Visibility.Visible ||
             MenuRegister.Visibility == Visibility.Visible ||
             MenuIgnore.Visibility == Visibility.Visible || MenuUnignore.Visibility == Visibility.Visible ||
+            MenuMarkFfu.Visibility == Visibility.Visible || MenuUnmarkFfu.Visibility == Visibility.Visible ||
             MenuDeleteMod.Visibility == Visibility.Visible || MenuUnsubscribe.Visibility == Visibility.Visible
                 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -1661,6 +1671,9 @@ public partial class MainWindow : Window
     private void MenuIgnore_Click(object sender, RoutedEventArgs e) => SetIgnored(true);
     private void MenuUnignore_Click(object sender, RoutedEventArgs e) => SetIgnored(false);
 
+    private void MenuMarkFfu_Click(object sender, RoutedEventArgs e) => SetFfuOverride(true);
+    private void MenuUnmarkFfu_Click(object sender, RoutedEventArgs e) => SetFfuOverride(false);
+
     /// <summary>Park a local/plugins-dir mod as *.disabled or delete it, and drop its load-order entry.</summary>
     private void MenuDeleteMod_Click(object sender, RoutedEventArgs e)
     {
@@ -1734,6 +1747,27 @@ public partial class MainWindow : Window
             ? $"Ignoring unregistered mod '{row.M.DisplayName ?? row.M.Name}' (kept unregistered on purpose)."
             : $"Stopped ignoring '{row.M.DisplayName ?? row.M.Name}'.");
         Rescan();
+    }
+
+    /// <summary>
+    /// Persists "treat this mod as FFU-dependent" (or clears it). Only a sorting
+    /// preference: the suggested order moves the mod into the FFU block after
+    /// Minor Fixes Plus. No game files are touched, so it is not rival-gated.
+    /// </summary>
+    private void SetFfuOverride(bool ffu)
+    {
+        if (ModsGrid.SelectedItem is not ModRow row) return;
+        var name = row.M.DisplayName ?? row.M.Name;
+        var key = FfuOverrideList.KeyFor(_env, row.M);
+        if (ffu) _ffuOverrides.Add(key); else _ffuOverrides.Remove(key);
+        OpLog.Add(ffu
+            ? $"Marked '{name}' FFU-dependent - it will sort into the FFU block after Minor Fixes Plus."
+            : $"Cleared the FFU-dependent mark on '{name}'.");
+        Rescan();
+        RunStatus.Text = ffu
+            ? $"'{name}' marked FFU-dependent — it now sorts after Minor Fixes Plus.  "
+            : $"'{name}' no longer marked FFU-dependent.  ";
+        RunStatus.Foreground = Good;
     }
 
     private void MenuOpenFolder_Click(object sender, RoutedEventArgs e)

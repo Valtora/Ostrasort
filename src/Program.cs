@@ -45,7 +45,7 @@ public static class Program
         AppPaths.MigrateLegacyData();   // one-time move of pre-0.23 data to roaming AppData (no-op after the first run)
 
         bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false;
-        string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null, installZip = null;
+        string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null, installZip = null, markFfu = null, unmarkFfu = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -68,6 +68,8 @@ public static class Program
                 case "--unpatch": unpatch = true; break;
                 case "--install-zip" when HasValue(args, i): installZip = args[++i]; break;
                 case "--overwrite": break;                              // modifier for --install-zip (handled below)
+                case "--mark-ffu" when HasValue(args, i): markFfu = args[++i]; break;
+                case "--unmark-ffu" when HasValue(args, i): unmarkFfu = args[++i]; break;
                 case "--allow-rival-stack": allowRival = true; break;   // override the autoloader write-block (at your own risk)
                 case "--disable-autoloader": break;                     // park/delete the OstraAutoloader DLL(s) (handled below)
                 case "--remove-ffu": break;                             // remove FFU Core (handled below)
@@ -81,7 +83,8 @@ public static class Program
                 // a value-taking flag whose value is missing (end of line, or the
                 // next token is another flag) must say so - falling through to
                 // "unknown argument" is wrong and cryptic
-                case "--profile-save" or "--profile-load" or "--install-zip" or "--game" or "--mods" or "--install":
+                case "--profile-save" or "--profile-load" or "--install-zip" or "--game" or "--mods" or "--install"
+                     or "--mark-ffu" or "--unmark-ffu":
                     Console.Error.WriteLine($"{args[i]} needs a value (try --help)");
                     return 1;
                 case "--version":
@@ -118,6 +121,14 @@ public static class Program
                                       a multi-mod archive installs every mod it holds
                           --overwrite with --install-zip: replace a mod that is already installed
                                       (default: skip it and report)
+                          --mark-ffu <name>
+                                      mark a mod FFU-dependent so it sorts into the FFU block
+                                      after Minor Fixes Plus. For an FFU mod Ostrasort can't
+                                      auto-detect (e.g. a Workshop mod with no Autoload.Meta.toml).
+                                      A sorting preference only - no game files change. <name> is
+                                      the mod's MODS-screen name or its folder/Workshop id
+                          --unmark-ffu <name>
+                                      clear a mod's manual FFU-dependent mark
                           --profile-list          list saved load-order profiles for this install
                           --profile-save <name>   save the current load order as a named profile
                           --profile-load <name>   switch to a saved profile (Replace by default);
@@ -168,6 +179,8 @@ public static class Program
         if (installZip is not null) standalone.Add("--install-zip");
         if (profileList) standalone.Add("--profile-list");
         if (profileSave is not null) standalone.Add("--profile-save");
+        if (markFfu is not null) standalone.Add("--mark-ffu");
+        if (unmarkFfu is not null) standalone.Add("--unmark-ffu");
         if (args.Contains("--normalize")) standalone.Add("--normalize");
         if (args.Contains("--dump-collisions")) standalone.Add("--dump-collisions");
         if (args.Contains("--disable-autoloader")) standalone.Add("--disable-autoloader");
@@ -412,6 +425,49 @@ public static class Program
             ProfileStore.Save(senv.LoadingOrderPath, profile);
             OpLog.Add($"[cli] Saved profile '{profileSave}' ({profile.ModCount} mods).");
             Console.WriteLine($"Saved profile '{profileSave}' ({profile.ModCount} mods) for {senv.GameRoot}.");
+            return 0;
+        }
+
+        if (markFfu is not null || unmarkFfu is not null)
+        {
+            var wanted = markFfu ?? unmarkFfu!;
+            var mark = markFfu is not null;
+            var fenv = GameEnv.Locate(gameRoot, modsDir);
+            var fstate = Engine.Analyze(fenv);
+            // match by strName (DisplayName) or the folder/Workshop id, case-insensitively
+            var matches = fstate.Analysis.AllMods
+                .Where(m => m.Kind != EntryKind.Core && m.Dir is not null)
+                .Where(m => string.Equals(m.DisplayName, wanted, StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(m.Name, wanted, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (matches.Count == 0)
+            {
+                Console.Error.WriteLine($"no installed mod matches '{wanted}' (match its MODS-screen name or its folder/Workshop id).");
+                return 1;
+            }
+            if (matches.Count > 1)
+            {
+                Console.Error.WriteLine($"'{wanted}' is ambiguous - it matches {matches.Count} mods. Use the exact folder/Workshop id.");
+                return 1;
+            }
+            var target = matches[0];
+            var flist = FfuOverrideList.LoadDefault();
+            var key = FfuOverrideList.KeyFor(fenv, target);
+            var name = target.DisplayName ?? target.Name;
+            if (mark)
+            {
+                if (flist.Contains(key)) { Console.WriteLine($"'{name}' is already marked FFU-dependent."); return 0; }
+                flist.Add(key);
+                OpLog.Add($"[cli] Marked '{name}' FFU-dependent (manual override).");
+                Console.WriteLine($"Marked '{name}' FFU-dependent - it will sort into the FFU block after Minor Fixes Plus. Run --report / --apply next.");
+            }
+            else
+            {
+                if (!flist.Contains(key)) { Console.WriteLine($"'{name}' was not marked FFU-dependent - nothing to clear."); return 0; }
+                flist.Remove(key);
+                OpLog.Add($"[cli] Cleared the FFU-dependent mark on '{name}'.");
+                Console.WriteLine($"Cleared the FFU-dependent mark on '{name}'. Run --report / --apply next.");
+            }
             return 0;
         }
 

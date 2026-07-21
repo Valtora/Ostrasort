@@ -302,15 +302,17 @@ public sealed class Analysis
 
         ModEntry? Resolve(string strName) =>
             ordered.FirstOrDefault(m => string.Equals(m.DisplayName, strName, StringComparison.OrdinalIgnoreCase))
-            ?? ordered.FirstOrDefault(m => string.Equals(m.Name, strName, StringComparison.OrdinalIgnoreCase));
+            ?? ordered.FirstOrDefault(m => string.Equals(m.Name, strName, StringComparison.OrdinalIgnoreCase))
+            ?? ordered.FirstOrDefault(m => FfuAnalysis.FfuId(m.DisplayName) == FfuAnalysis.FfuId(strName)
+                                        || FfuAnalysis.FfuId(m.Name) == FfuAnalysis.FfuId(strName));
 
         // bubble dependents after their dependencies (bounded - a cycle can't loop forever)
         for (var pass = 0; pass <= ffu.Count; pass++)
         {
             var moved = false;
-            foreach (var m in ordered.Where(m => m.Meta is { Dependencies.Count: > 0 }).ToList())
+            foreach (var m in ordered.Where(m => m.HasFfuDeps).ToList())
             {
-                var deps = m.Meta!.Dependencies.Keys.Select(Resolve).OfType<ModEntry>().Where(d => d != m).ToList();
+                var deps = m.FfuDeps.Select(Resolve).OfType<ModEntry>().Where(d => d != m).ToList();
                 if (deps.Count == 0) continue;
                 var maxDep = deps.Max(d => ordered.IndexOf(d));
                 var idx = ordered.IndexOf(m);
@@ -406,13 +408,15 @@ public sealed class Analysis
                 if (firstAfter >= 0 && order.IndexOf(m) > firstAfter)
                     issues.Add($"{m.DisplayName ?? m.Name}: the FFU core tier (Minor Fixes Plus) must be the first FFU mod loaded.");
         }
-        foreach (var m in order.Where(m => m.Meta is { Dependencies.Count: > 0 }))
-            foreach (var dep in m.Meta!.Dependencies.Keys)
+        foreach (var m in order.Where(m => m.HasFfuDeps))
+            foreach (var dep in m.FfuDeps)
             {
                 var t = order.FirstOrDefault(o => string.Equals(o.DisplayName, dep, StringComparison.OrdinalIgnoreCase)
-                                               || string.Equals(o.Name, dep, StringComparison.OrdinalIgnoreCase));
+                                               || string.Equals(o.Name, dep, StringComparison.OrdinalIgnoreCase))
+                     ?? order.FirstOrDefault(o => FfuAnalysis.FfuId(o.DisplayName) == FfuAnalysis.FfuId(dep)
+                                               || FfuAnalysis.FfuId(o.Name) == FfuAnalysis.FfuId(dep));
                 if (t is not null && t != m && order.IndexOf(t) > order.IndexOf(m))
-                    issues.Add($"{m.DisplayName ?? m.Name}: loads before its declared dependency '{dep}' (Autoload.Meta.toml).");
+                    issues.Add($"{m.DisplayName ?? m.Name}: loads before its FFU dependency '{dep}'.");
             }
 
         var patchIdx = order.FindIndex(m => m.IsPatch);

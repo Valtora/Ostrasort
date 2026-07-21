@@ -256,6 +256,50 @@ public class FfuClassifyTests
     }
 
     [Fact]
+    public void RequiredApis_SeedsFfuAfterFfu()
+    {
+        // FFU:BR treats a non-empty requiredAPIs as "this mod needs the framework"
+        // and requires it to load after Minor Fixes Plus - the authoritative marker
+        var m = Mod("NeedsFramework");
+        m.RequiredApis.Add("FFU_BR_Core>=0.6.0");
+        Analyze(m);
+        Assert.True(m.IsFfu);
+        Assert.Equal(FfuLoadGroup.AfterFFU, m.FfuGroup);
+    }
+
+    [Fact]
+    public void RequiredMods_OnMinorFixesPlus_PropagatesFfu()
+    {
+        var mfp = Mod("Minor_Fixes_Plus"); mfp.DisplayName = "Minor Fixes Plus";
+        var dep = Mod("Content");
+        dep.RequiredMods.Add("Minor_Fixes_Plus");   // the GetID form
+        Analyze(mfp, dep);
+        Assert.True(dep.IsFfu);
+        Assert.Equal(FfuLoadGroup.AfterFFU, dep.FfuGroup);
+    }
+
+    [Fact]
+    public void RequiredMods_GetIdMatch_ResolvesSpacedName()
+    {
+        var glass = Mod("Glass"); glass.DisplayName = "Glass Only EVA";
+        glass.RequiredApis.Add("FFU_BR_Core");      // makes Glass itself FFU
+        var addon = Mod("Addon");
+        addon.RequiredMods.Add("Glass_Only_EVA");   // GetID of "Glass Only EVA"
+        Analyze(glass, addon);
+        Assert.True(addon.IsFfu);                   // resolved via GetID, then propagated
+    }
+
+    [Fact]
+    public void RequiredMods_MissingDependency_WarnsFfuWillDrop()
+    {
+        var m = Mod("Dependent");
+        m.RequiredApis.Add("FFU_BR_Core");
+        m.RequiredMods.Add("Not_Installed_Mod");
+        var a = Analyze(m);
+        Assert.Contains(a.Warnings, w => w.Contains("requiredMods") && w.Contains("FFU will drop"));
+    }
+
+    [Fact]
     public void PatchMod_ResolvesTargetFromDependency()
     {
         var target = Mod("CoolGuns"); target.UsesElasticApi = true;
@@ -360,6 +404,19 @@ public class FfuOrderTests
         var a = new Analysis { Registered = [Core(), user, lib] };
         a.BuildSuggestion();
         Assert.Equal(new[] { "core", "FfuLib", "FfuUser" }, a.SuggestedOrder);
+    }
+
+    [Fact]
+    public void RequiredMods_LoadBeforeDependent_ViaGetId()
+    {
+        var lib = Local("FFU Lib", ffu: true);
+        var user = Local("FFU User", ffu: true);
+        user.RequiredMods.Add("FFU_Lib");    // GetID of "FFU Lib" - no meta involved
+        var a = new Analysis { Registered = [Core(), user, lib] };
+        a.BuildSuggestion();
+        var order = a.SuggestedOrder;
+        Assert.True(order.IndexOf("FFU Lib") < order.IndexOf("FFU User"),
+            $"the requiredMods dependency must load first. Order: {string.Join(", ", order)}");
     }
 
     [Fact]
@@ -649,5 +706,153 @@ public class FfuScannerTests
             Assert.True(mod.Claims.ContainsKey(("condowners", "NewSuit")));
         }
         finally { try { Directory.Delete(root, true); } catch { } }
+    }
+
+    [Fact]
+    public void Scan_ReadsRequiredApisAndMods_StrippingVersions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ostrasort-test-" + Guid.NewGuid().ToString("N"));
+        var modDir = Path.Combine(root, "Ostranauts_Data", "Mods", "ApiMod");
+        try
+        {
+            Directory.CreateDirectory(modDir);
+            File.WriteAllText(Path.Combine(modDir, "mod_info.json"), """
+                [{"strName":"Api Mod","strAuthor":"t","strGameVersion":"1",
+                  "requiredAPIs":["FFU_BR_Core>=0.6.0","Base_Game>=0.15"],
+                  "requiredMods":["Minor_Fixes_Plus","Some Other Mod>=1.2"]}]
+                """);
+            var env = new GameEnv
+            {
+                GameRoot = root,
+                DiscoveredVia = "test",
+                CoreDataDir = Path.Combine(root, "Ostranauts_Data", "StreamingAssets", "data"),
+                ModsDir = Path.Combine(root, "Ostranauts_Data", "Mods"),
+            };
+            var mod = ModEntry.Parse("ApiMod", env);
+            new Scanner(env).Scan(mod);
+
+            Assert.Equal(2, mod.RequiredApis.Count);
+            Assert.Contains("FFU_BR_Core>=0.6.0", mod.RequiredApis);
+            Assert.Equal(new[] { "Minor_Fixes_Plus", "Some Other Mod" }, mod.RequiredMods);   // version suffix stripped
+        }
+        finally { try { Directory.Delete(root, true); } catch { } }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// FFU id normalization + dependency-string parsing (mirrors FFU:BR's GetID)
+// ---------------------------------------------------------------------------
+
+public class FfuIdTests
+{
+    [Theory]
+    [InlineData("Minor Fixes Plus", "Minor_Fixes_Plus")]
+    [InlineData("Glass Only EVA!", "Glass_Only_EVA")]
+    [InlineData("a-b.c", "abc")]
+    [InlineData("", "")]
+    public void FfuId_MatchesGameGetId(string input, string expected) =>
+        Assert.Equal(expected, FfuAnalysis.FfuId(input));
+
+    [Theory]
+    [InlineData("Minor_Fixes_Plus>=0.6", "Minor_Fixes_Plus")]
+    [InlineData("Mod!=1.0", "Mod")]
+    [InlineData("Thing<2", "Thing")]
+    [InlineData("PlainName", "PlainName")]
+    public void DepName_StripsVersionOperator(string input, string expected) =>
+        Assert.Equal(expected, FfuAnalysis.DepName(input));
+}
+
+// ---------------------------------------------------------------------------
+// Manual FFU override: tag a mod (e.g. an undetectable Workshop mod) FFU-dependent
+// ---------------------------------------------------------------------------
+
+public class FfuOverrideTests
+{
+    private static GameEnv Env => new()
+    {
+        GameRoot = @"C:\nonexistent-ostrasort-test",
+        DiscoveredVia = "test",
+        CoreDataDir = @"C:\nonexistent-ostrasort-test\data",
+        ModsDir = @"C:\nonexistent-ostrasort-test\Mods",
+    };
+
+    private static FfuOverrideList TempList(out string path)
+    {
+        path = Path.Combine(Path.GetTempPath(), "ostrasort-ffuov-" + Guid.NewGuid().ToString("N") + ".json");
+        return new FfuOverrideList(path);
+    }
+
+    private static ModEntry Core() =>
+        new() { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+
+    [Fact]
+    public void AddRemove_PersistsAcrossReload()
+    {
+        var list = TempList(out var path);
+        try
+        {
+            list.Add("A|key");
+            Assert.True(list.Contains("A|key"));
+            Assert.True(new FfuOverrideList(path).Contains("A|key"));   // survives a reload
+
+            list.Remove("A|key");
+            Assert.False(list.Contains("A|key"));
+            Assert.False(new FfuOverrideList(path).Contains("A|key"));
+        }
+        finally { try { File.Delete(path); } catch { } }
+    }
+
+    [Fact]
+    public void MarkedWorkshopMod_SeedsFfuBlockMembership()
+    {
+        var env = Env;
+        var list = TempList(out var path);
+        try
+        {
+            var glass = Workshop("111", "Glass Only EVA");   // no meta, no elastic API, no bFFU
+            list.Add(FfuOverrideList.KeyFor(env, glass));
+
+            var a = new Analysis { Registered = new() { glass } };
+            FfuAnalysis.Classify(env, a, list);
+
+            Assert.True(glass.IsFfu);
+            Assert.True(glass.FfuOverride);
+            Assert.Equal(FfuLoadGroup.AfterFFU, glass.FfuGroup);
+            Assert.Contains(glass.FfuSignals, s => s.Contains("marked it FFU-dependent"));
+        }
+        finally { try { File.Delete(path); } catch { } }
+    }
+
+    [Fact]
+    public void UnmarkedMod_StaysNonFfu()
+    {
+        var env = Env;
+        var glass = Workshop("111", "Glass Only EVA");
+        var a = new Analysis { Registered = new() { glass } };
+        FfuAnalysis.Classify(env, a, TempList(out _));
+        Assert.False(glass.IsFfu);
+        Assert.False(glass.FfuOverride);
+    }
+
+    [Fact]
+    public void MarkedMod_SortsAfterMinorFixesPlus_EndToEnd()
+    {
+        var env = Env;
+        var list = TempList(out var path);
+        try
+        {
+            var mfp = Mod("Minor_Fixes_Plus"); mfp.DisplayName = "Minor Fixes Plus";
+            var glass = Workshop("111", "Glass Only EVA");
+            list.Add(FfuOverrideList.KeyFor(env, glass));
+
+            var a = new Analysis { Registered = new() { Core(), glass, mfp } };
+            FfuAnalysis.Classify(env, a, list);
+            a.BuildSuggestion();
+
+            var order = a.SuggestedOrder;
+            Assert.True(order.IndexOf("Minor_Fixes_Plus") < order.IndexOf(glass.Raw),
+                $"Minor Fixes Plus must load before the marked mod. Order: {string.Join(", ", order)}");
+        }
+        finally { try { File.Delete(path); } catch { } }
     }
 }

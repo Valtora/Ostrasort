@@ -141,25 +141,42 @@ Surfaced in the same pass.
 entries merge **field-by-field** into existing objects at load, `strReference`
 clones an existing entry, `removeIds` and `changesMap` in `mod_info.json` delete
 or migrate entries, and `--ADD--`, `--INS--`, `--DEL--`, and `--MOD--` commands
-edit arrays in place. FFU mods declare their place in the world in an
-`Autoload.Meta.toml`, a `LoadGroup` (`WithVanilla`, `FFUCore`, `AfterFFU`) plus
-dependencies keyed by `strName`.
+edit arrays in place. The most reliable marker is in a mod's own
+`mod_info.json`: FFU:BR reads a **`requiredAPIs`** array (a non-empty one means
+the mod needs the FFU framework, so FFU itself requires it to load *after* Minor
+Fixes Plus) and a **`requiredMods`** array (hard "load-after" dependencies FFU
+enforces by *dropping* the mod if one is missing or ordered wrong). A mod may
+also carry an `Autoload.Meta.toml` — a `LoadGroup` (`WithVanilla`, `FFUCore`,
+`AfterFFU`) plus dependencies — but that file is read by Robyn's OstraAutoloader,
+**not** by FFU:BR itself (which just loads in `loading_order.json` order).
 
 A **pure field-merge mod** (partial objects that overwrite only a few fields by
-`strName`, with no `--ADD--`-style commands or `strReference`) carries no marker
-Ostrasort can see. It is content-identical to a normal whole-object override, so
-by default it would be sorted *up*, out of the FFU block. Two ways keep it in
-place. Give it an `Autoload.Meta.toml` with `LoadGroup="AfterFFU"` (the standard
-FFU declaration, which also tells FFU to load it after its target), or add
-`"bFFU": true` to its `mod_info.json`, an **Ostrasort-only sorting hint** (FFU's
-field-merge is automatic once FFU is installed, and neither FFU nor the game
-reads this key).
+`strName`, with no `requiredAPIs`, `--ADD--`-style commands, or `strReference`)
+carries no marker Ostrasort can see. It is content-identical to a normal
+whole-object override, so by default it would be sorted *up*, out of the FFU
+block. The fix is any marker the mod can ship: a `requiredAPIs`/`requiredMods`
+entry or an `Autoload.Meta.toml` `LoadGroup="AfterFFU"` (the real FFU
+declarations), or `"bFFU": true` in `mod_info.json` — an **Ostrasort-only sorting
+hint** for a pure field-merge mod that legitimately declares none of the above.
+
+When a **Steam Workshop** FFU mod ships one of those markers, Ostrasort detects
+it automatically — no action needed. Only when the mod ships *nothing* (no
+`requiredAPIs`, no meta, no `bFFU`) and its files are read-only can Ostrasort not
+see it. For that case, **mark the mod FFU-dependent yourself**: right-click it and
+choose "Mark as FFU-dependent (load after Minor Fixes Plus)", or run
+`--mark-ffu <name>` from a terminal. It is a per-install sorting preference only
+(no game files change), remembered in `%APPDATA%\Ostrasort`, and can only ever
+move a mod later in the order, so it can never mis-sort a plain Workshop mod on
+its own.
 
 Ostrasort treats all of that as a **supported ordering contract**.
 
-- A mod is classified **FFU** when its meta declares `FFUCore` or `AfterFFU`, it
-  depends on an FFU mod, its data uses the FFU-only API features above, or its
-  `mod_info.json` carries the `bFFU` hint.
+- A mod is classified **FFU** when its `mod_info.json` declares `requiredAPIs`, it
+  depends on an FFU mod (`requiredMods` or an `Autoload.Meta.toml` dependency), its
+  meta declares `FFUCore`/`AfterFFU`, its data uses the FFU-only API features
+  above, its `mod_info.json` carries the `bFFU` hint, or you marked it
+  FFU-dependent by hand. Mod names resolve by FFU's own id rule (spaces become
+  underscores, so `Minor Fixes Plus` and `Minor_Fixes_Plus` are the same mod).
 - The sort keeps every FFU mod **after all non-FFU mods** (the game loads non-FFU
   content first, which is FFU's own rule), with the **Minor Fixes Plus** tier
   leading the FFU block and dependencies before dependents.
