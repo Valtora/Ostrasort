@@ -1,8 +1,10 @@
-# Builds the end-user release artifacts with Velopack: an installer
-# (Ostrasort-win-Setup.exe), a portable zip (Ostrasort-win-Portable.zip), the
-# update package (*-full.nupkg) and the update manifest (releases.win.json).
-# Output: publish\releases\. Upload the whole folder with `vpk upload github`
-# (see docs\development.md).
+# Builds the end-user release artifacts with Velopack and shapes them for
+# release. A release ships THREE files: the versioned installer
+# (Ostrasort-v<ver>-Setup.exe), the update package (Ostrasort-<ver>-full.nupkg)
+# and the update manifest (releases.win.json). vpk also emits a portable zip and
+# a legacy RELEASES file into publish\releases\; those are NOT shipped. Upload the
+# three with `gh release create` (this script prints the command; see
+# docs\development.md).
 #
 # Close the running app first: it locks its own exe and the publish will fail.
 $ErrorActionPreference = 'Stop'
@@ -57,10 +59,31 @@ vpk pack `
     --outputDir $relDir
 if ($LASTEXITCODE -ne 0) { throw "vpk pack failed with exit code $LASTEXITCODE." }
 
+# 5) Version-name the installer. vpk names it '<packId>-<channel>-Setup.exe'
+#    (Ostrasort-win-Setup.exe); the updater keys off releases.win.json + the
+#    nupkg, not the installer name, so renaming it is safe and gives each release
+#    a self-describing download.
+$setupSrc = Join-Path $relDir 'Ostrasort-win-Setup.exe'
+$setupOut = Join-Path $relDir "Ostrasort-v$ver-Setup.exe"
+if (-not (Test-Path $setupSrc)) { throw "vpk pack did not produce $setupSrc." }
+if (Test-Path $setupOut) { Remove-Item $setupOut -Force }
+Rename-Item $setupSrc $setupOut
+
+$nupkg    = Join-Path $relDir "Ostrasort-$ver-full.nupkg"
+$manifest = Join-Path $relDir 'releases.win.json'
+foreach ($f in @($nupkg, $manifest)) {
+    if (-not (Test-Path $f)) { throw "Expected release asset missing: $f" }
+}
+
 "`nRelease artifacts (v$ver)  ->  $relDir" | Write-Output
 Get-ChildItem $relDir | Sort-Object Name | ForEach-Object {
     "  {0,-34} {1,8:N1} KB" -f $_.Name, ($_.Length / 1KB)
 }
-"`nGUI smoke passed. Publish with:" | Write-Output
-"  vpk upload github --repoUrl https://github.com/Valtora/Ostrasort --publish --releaseName v$ver --tag v$ver --token (gh auth token)" | Write-Output
+"`nShip ONLY these three (the nupkg + manifest are what self-update reads):" | Write-Output
+"  Ostrasort-v$ver-Setup.exe, Ostrasort-$ver-full.nupkg, releases.win.json" | Write-Output
+"`nGUI smoke passed. Publish with (draft the notes first):" | Write-Output
+"  gh release create v$ver --title v$ver --notes-file notes.md ``" | Write-Output
+"      `"$setupOut`" ``" | Write-Output
+"      `"$nupkg`" ``" | Write-Output
+"      `"$manifest`"" | Write-Output
 exit 0

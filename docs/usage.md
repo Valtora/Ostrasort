@@ -1,15 +1,12 @@
 # Using Ostrasort
 
-**Windows only** (64-bit Windows 10 or 11). Two ways to get it, both per-user
-with no admin rights.
+**Windows only** (64-bit Windows 10 or 11), per-user with no admin rights.
 
-- **Installer (recommended).** Download `Ostrasort-win-Setup.exe` from the
-  [latest release](https://github.com/Valtora/Ostrasort/releases/latest) and run
-  it. It installs Ostrasort for your user, adds **Desktop** and **Start Menu**
-  shortcuts, and opens the window. An installed copy keeps itself up to date (see
-  below).
-- **Portable.** Download `Ostrasort-win-Portable.zip`, unzip it anywhere, and run
-  `Ostrasort.exe` from the folder. No install, and it still self-updates in place.
+Download the installer (`Ostrasort-v*-Setup.exe`, the version is in the name) from
+the [latest release](https://github.com/Valtora/Ostrasort/releases/latest) and run
+it. It installs Ostrasort for your user, adds **Desktop** and **Start Menu**
+shortcuts, and opens the window. An installed copy keeps itself up to date (see
+below).
 
 Ostrasort finds your Ostranauts install by itself through the Steam registry and
 `libraryfolders.vdf`, whatever drive it is on. (For an unusual install, point it

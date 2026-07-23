@@ -87,12 +87,10 @@ one-click way out. The [documentation](#documentation) covers the details.
 
 **Windows only** (64-bit), no admin rights needed.
 
-1. Download **`Ostrasort-win-Setup.exe`** from the
+1. Download the installer (**`Ostrasort-v*-Setup.exe`**) from the
    [latest release](https://github.com/Valtora/Ostrasort/releases/latest) and
    run it. It installs Ostrasort for your user, adds Desktop and Start Menu
-   shortcuts, and keeps itself up to date. (Prefer no install. Download
-   **`Ostrasort-win-Portable.zip`** instead, unzip it anywhere, and run
-   `Ostrasort.exe`.)
+   shortcuts, and keeps itself up to date.
 2. **Close Ostranauts.** Ostrasort will not change anything while the game is
    running.
 3. **Open Ostrasort.** It finds your install on its own and lists every mod in

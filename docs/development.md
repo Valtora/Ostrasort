@@ -34,10 +34,16 @@ Install, shortcuts, and auto-update are handled by
 
 ## Publishing (read this before releasing)
 
-`publish.ps1` produces the release artifacts in `publish\releases\`:
-`Ostrasort-win-Setup.exe` (installer), `Ostrasort-win-Portable.zip` (portable),
-`Ostrasort-*-full.nupkg` (the update package) and `releases.win.json` (the
-manifest the in-app updater reads). It:
+`publish.ps1` produces the release artifacts in `publish\releases\`. `vpk pack`
+emits a few files there, but **a release ships only three of them**:
+`Ostrasort-v<ver>-Setup.exe` (the installer, renamed to carry its version),
+`Ostrasort-<ver>-full.nupkg` (the update payload), and `releases.win.json` (the
+manifest the in-app updater reads). Those last two are **required** for
+self-update: the updater reads `releases.win.json` off the latest release, then
+downloads the `full.nupkg` it names. The other files `vpk` leaves in the folder
+(`Ostrasort-win-Portable.zip`, the legacy Squirrel `RELEASES`, `assets.win.json`)
+are **not** uploaded — the portable zip is not offered, and Velopack's own updater
+does not read `RELEASES`. `publish.ps1`:
 
 1. `dotnet publish`es a **plain self-contained** build to `publish\raw` (not
    single-file — Velopack does its own bundling, and a normal layout keeps WPF's
@@ -47,7 +53,8 @@ manifest the in-app updater reads). It:
    and refuses to pack a build that fails it. Always test the published exe, not
    `bin\Release` — a `bin\Release` smoke pass proves nothing about the shipped
    layout.
-3. `vpk pack`s `publish\raw` into `publish\releases`.
+3. `vpk pack`s `publish\raw` into `publish\releases`, then renames the installer
+   to `Ostrasort-v<ver>-Setup.exe`.
 
 It needs the `vpk` CLI once: `dotnet tool install -g vpk`.
 
@@ -136,18 +143,26 @@ The repo is public. To cut a release:
    it becomes the packed version and what the in-app updater compares).
 2. Run `.\publish.ps1` (with the app closed) to build and validate the artifacts
    in `publish\releases\`.
-3. Publish to GitHub Releases with the Velopack uploader, which uploads the
-   installer, portable zip, update package **and** `releases.win.json` together
-   (the manifest the updater reads — do not upload assets by hand and forget it):
+3. Create the GitHub release and upload **exactly the three shipped assets**: the
+   versioned installer, the update package, and the manifest. `releases.win.json`
+   and the `full.nupkg` are what make self-update work — do not omit either.
 
    ```powershell
-   vpk upload github --repoUrl https://github.com/Valtora/Ostrasort `
-       --publish --releaseName vX.Y.Z --tag vX.Y.Z --token (gh auth token)
+   gh release create vX.Y.Z --title vX.Y.Z --notes-file notes.md `
+       publish\releases\Ostrasort-vX.Y.Z-Setup.exe `
+       publish\releases\Ostrasort-X.Y.Z-full.nupkg `
+       publish\releases\releases.win.json
    ```
 
    The release title is the bare version (`vX.Y.Z`). Draft the notes from
-   `git log <last-tag>..HEAD`.
+   `git log <last-tag>..HEAD`. Do **not** upload the portable zip or the legacy
+   `RELEASES` file — the release ships the installer only, and Velopack's updater
+   reads `releases.win.json`, not `RELEASES`. (`vpk upload github` is the Velopack
+   uploader, but it publishes the portable zip and `RELEASES` as well and names
+   the installer `Ostrasort-win-Setup.exe`, so the plain `gh` upload above is used
+   instead to ship the trimmed, version-named set.)
 
 Installed copies pick the update up on their next launch: `UpdateManager` reads
 `releases.win.json`, compares its own version against the newest release, and
-downloads it. A release whose `<Version>` didn't move will not be offered.
+downloads the `full.nupkg` it names. A release whose `<Version>` didn't move will
+not be offered.
