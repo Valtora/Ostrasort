@@ -8,4 +8,6 @@ publish/
 Thumbs.db
 desktop.ini
 
-.claude/settings.json
+# Local editor/agent tooling and hooks (kept off the repo)
+.claude/
+.githooks/
