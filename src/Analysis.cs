@@ -25,6 +25,7 @@ public sealed class Collision
     public bool ResolvedByPatch { get; set; }                 // a fresh OstrasortPatch covers this pool
     public bool FfuMergedAtLoad { get; set; }                 // the FFU loader merges this at load - no action needed
     public bool NothingLost { get; set; }                     // non-loot: identical overrides, or the last mod includes every change - lossless, no action
+    public bool ResolvedByOrder { get; set; }                 // a final-say (late-tier) mod curates this object and loads last, so its version wins by design - do NOT patch-merge (that would re-add what it removed)
     public bool AdditiveAtLoad { get; set; }                  // flat-packed simple-container type: the game merges its records key-by-key at load, never whole-object replace
     public string? FriendlyName { get; set; }                 // loot pools: a readable description of the internal id (e.g. "OKLG embassy kiosk inventory")
     public string Key => $"{Type}/{ObjName}";
@@ -101,11 +102,20 @@ public sealed class Analysis
         if (a is null || b is null)
             return new PairRelation(earlier, later, Relation.NonLoot, [], []);
 
-        // aLoots entries are "Item=weightxcount" - compare at item granularity
-        static HashSet<string> Items(string[] loots) =>
-            loots.Select(l => l.Split('=')[0]).ToHashSet(StringComparer.Ordinal);
+        // aLoots AND aCOs entries are "Item=weightxcount" - compare at item
+        // granularity, unioning both pools. Some pools (character-generation
+        // ship/intro routing) carry an empty aLoots and route everything through
+        // aCOs, so ignoring aCOs would read those overrides as identical-empty.
+        static HashSet<string> Items(string[] entries) =>
+            entries.Select(l => l.Split('=')[0]).ToHashSet(StringComparer.Ordinal);
+        static HashSet<string> PoolItems(ModEntry m, string type, string name)
+        {
+            var set = Items(m.Claims[(type, name)]!);
+            if (m.CoClaims.TryGetValue((type, name), out var cos)) set.UnionWith(Items(cos));
+            return set;
+        }
 
-        HashSet<string> ia = Items(a), ib = Items(b);
+        HashSet<string> ia = PoolItems(earlier, type, name), ib = PoolItems(later, type, name);
         var lost = ia.Where(x => !ib.Contains(x)).OrderBy(x => x).ToArray();
         var added = ib.Where(x => !ia.Contains(x)).OrderBy(x => x).ToArray();
 
@@ -117,6 +127,37 @@ public sealed class Analysis
             _ => Relation.Partial,
         };
         return new PairRelation(earlier, later, rel, lost, added);
+    }
+
+    /// <summary>
+    /// Marks collisions a final-say (late-tier) mod resolves just by loading last.
+    /// A character-generation mod - or any mod the user pinned late - deliberately
+    /// curates the objects it owns (e.g. replacing the vanilla starting-ship dice
+    /// roll with a deterministic choice), so when it is the last claimant its
+    /// whole-object version is meant to win and the other mods' versions are
+    /// intentionally replaced. That is lossless-by-design: it needs no attention
+    /// and must NOT be patch-merged, since a per-item union would re-add exactly
+    /// the entries the author removed. Run AFTER <see cref="FieldDiff.Annotate"/>
+    /// so it overrides a mergeable verdict, and after category classification.
+    /// </summary>
+    public void MarkOrderResolved()
+    {
+        foreach (var c in Collisions)
+        {
+            if (c.Claimants.Count < 2) continue;
+            var last = c.Claimants[^1];   // Claimants are in effective load order
+            if (last.Tier != LoadTier.Late) continue;
+            // auto-detection claims final say only over character-generation
+            // objects; a manual late pin claims it over everything the mod touches
+            if (!last.CategoryManual && !CategoryAnalysis.IsCharacterGenClaim(c.Type, c.ObjName)) continue;
+            // only where the order actually resolves a would-be loss
+            if (!c.Pairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation or Relation.NonLoot)) continue;
+
+            c.ResolvedByOrder = true;
+            c.ObjectMergeable = false;   // final say wins wholesale - do not offer a field merge
+            c.FieldNotes.Add($"{last.DisplayName ?? last.Name} owns this and loads last for final say, " +
+                             "so its version wins by design - the other mod's version is intentionally replaced, not merged");
+        }
     }
 
     /// <summary>
@@ -233,6 +274,11 @@ public sealed class Analysis
         foreach (var col in Collisions)
             foreach (var pair in col.Pairs.Where(p => p.Rel == Relation.SubsetViolation))
             {
+                // a final-say (late-tier) mod deliberately curates its pool - a
+                // smaller set loading last is intended, not a violation. Never
+                // move a lower-tier superset below it: that would push the
+                // final-say mod toward the top and undo its override.
+                if (Tier(pair.Later) == LoadTier.Late && Tier(pair.Earlier) < LoadTier.Late) continue;
                 int from = work.IndexOf(pair.Earlier), to = work.IndexOf(pair.Later);
                 if (from < 0 || to < 0 || from > to) continue;
                 work.RemoveAt(from);
@@ -240,6 +286,29 @@ public sealed class Analysis
                 Changes.Add(new Change("move", pair.Earlier.Raw,
                     $"its {col.Key} pool is a superset of {pair.Later.Label}'s and must load after it"));
             }
+
+        // rule 4.5: category load-priority bands. Detected character-generation
+        // mods (late / final say) and any mod the user pinned (early or late)
+        // settle into ordered bands within the content block - early, then
+        // normal, then late - stable inside each band so nothing else shuffles.
+        // Runs AFTER the loot subset rule (which it also guards above), so a
+        // final-say mod is never left pushed up by pure item count. FFU mods and
+        // the patch keep their slots here; rules 5 and 6 place them.
+        var band = Enumerable.Range(insertAt, work.Count - insertAt)
+            .Where(i => !work[i].IsFfu && !work[i].IsPatch).ToList();
+        var content = band.Select(i => work[i]).ToList();
+        var ordered = content.OrderBy(m => (int)Tier(m)).ToList();   // OrderBy is stable
+        if (!ordered.SequenceEqual(content))
+        {
+            for (var k = 0; k < band.Count; k++) work[band[k]] = ordered[k];
+            foreach (var m in ordered.Where((m, k) => content.IndexOf(m) != k && Tier(m) != LoadTier.Normal))
+                Changes.Add(new Change("move", SuggestedRaw(m),
+                    Tier(m) == LoadTier.Late
+                        ? (m.CategoryManual
+                            ? "you pinned it to load late (final say)"
+                            : "owns the new-game / start flow - loads late so its choices win over other mods")
+                        : "you pinned it to load early (yields to other mods)"));
+        }
 
         // rule 5 (FFU): FFU-dependent mods form a block AFTER every non-FFU mod:
         // the FFU core tier (Minor Fixes Plus) first, then FFU mods dependency-
@@ -347,6 +416,12 @@ public sealed class Analysis
         : m.Dir ?? m.Name;   // unregistered entries all share Raw "" - identify by folder
 
     /// <summary>
+    /// A mod's effective load tier for sorting. A disabled entry does not load,
+    /// so it is treated as neutral and never moved by a category/priority rule.
+    /// </summary>
+    internal static LoadTier Tier(ModEntry m) => m.Disabled ? LoadTier.Normal : m.Tier;
+
+    /// <summary>
     /// The exact aLoadOrder string this mod registers as: local mods keep their
     /// |edit marker, Workshop/plugins-dir mods register by absolute path, the
     /// generated patch registers plain. Used by the suggestion and by the
@@ -389,11 +464,25 @@ public sealed class Analysis
                 for (var j = i + 1; j < claimants.Count; j++)
                 {
                     var rel = Relate(type, name, claimants[i], claimants[j]);
-                    if (rel.Rel == Relation.SubsetViolation)
+                    // a final-say (late-tier) mod curating a pool it loads last is
+                    // intended, not a violation - it deliberately replaces the set
+                    if (rel.Rel == Relation.SubsetViolation &&
+                        !(Tier(claimants[j]) == LoadTier.Late && Tier(claimants[i]) < LoadTier.Late))
                         issues.Add($"{type}/{name}: {claimants[j].DisplayName ?? claimants[j].Name} would drop " +
                                    $"{rel.LostFromEarlier.Length} item(s) that {claimants[i].DisplayName ?? claimants[i].Name} stocks " +
                                    "- the superset should load last.");
                 }
+
+        // category priority: a final-say (late-tier) mod must load after lower-tier
+        // non-FFU content, or a later mod's whole-object override beats its curation
+        foreach (var late in order.Where(m => !m.IsFfu && !m.IsPatch && m.Kind != EntryKind.Core && !m.Disabled && Tier(m) == LoadTier.Late))
+        {
+            var after = order.Skip(order.IndexOf(late) + 1)
+                .Count(m => !m.IsFfu && !m.IsPatch && m.Kind != EntryKind.Core && !m.Disabled && Tier(m) < LoadTier.Late);
+            if (after > 0)
+                issues.Add($"{late.DisplayName ?? late.Name}: has final say (new game / start) but {after} lower-priority mod(s) " +
+                           "load after it - move it below them so its changes are not overridden.");
+        }
 
         // FFU rules: the FFU block sits after every non-FFU mod, core tier first,
         // dependencies before dependents

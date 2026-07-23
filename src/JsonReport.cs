@@ -46,6 +46,7 @@ public static class JsonReport
                 ["additiveAtLoad"] = c.AdditiveAtLoad,
                 ["objectMergeable"] = c.ObjectMergeable,
                 ["nothingLost"] = c.NothingLost,
+                ["resolvedByOrder"] = c.ResolvedByOrder,
                 // the same predicate the GUI badge and the exit code use, so
                 // tooling never has to re-derive the needs-attention split
                 ["needsAttention"] = CollisionView.NeedsAttention(c),
@@ -142,6 +143,9 @@ public static class JsonReport
             ["gameVersionNote"] = m.GameVersionNote(env.InstalledVersion),
             ["dataObjects"] = m.DataObjects,
             ["coreOverrides"] = m.CoreOverrides,
+            ["category"] = m.Kind == EntryKind.Core ? null : m.Category.ToString(),
+            ["loadTier"] = m.Kind == EntryKind.Core ? null : m.Tier.ToString().ToLowerInvariant(),
+            ["loadTierPinned"] = m.CategoryManual,
             ["isPatch"] = m.IsPatch,
             ["hasPlugins"] = m.HasPlugins,
             ["hasPatchers"] = m.HasPatchers,

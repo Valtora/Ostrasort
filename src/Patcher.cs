@@ -115,6 +115,10 @@ public static class Patcher
     public static List<Collision> PatchableConflicts(Analysis a) =>
         a.Collisions.Where(c =>
             c.Type == "loot" &&
+            // a final-say mod that loads last deliberately curates the pool - a
+            // per-item union would re-add exactly the entries it removed, so it is
+            // resolved by load order, not by merging
+            !c.ResolvedByOrder &&
             c.Claimants.All(m => m.Claims.TryGetValue((c.Type, c.ObjName), out var l) && l is not null) &&
             c.Claimants.All(m => !m.FfuArrayEditClaims.Contains((c.Type, c.ObjName))) &&
             c.Pairs.Any(p => p.Rel == Relation.Partial)).ToList();
@@ -136,7 +140,10 @@ public static class Patcher
     private static string SourceSig(GameEnv env, Collision c, ModEntry m, IReadOnlyList<string>? ignore)
     {
         if (m.Claims.TryGetValue((c.Type, c.ObjName), out var loots) && loots is not null)
-            return ItemsHash(loots);
+            // include aCOs: it is part of the pool the patch merges, so a change to
+            // it must invalidate the stored merge just as an aLoots change does
+            return ItemsHash(m.CoClaims.TryGetValue((c.Type, c.ObjName), out var cos)
+                ? loots.Concat(cos) : loots);
         if (m.Dir is null) return "";
         var obj = FieldDiff.LoadObject(Path.Combine(m.Dir, "data", c.Type), c.ObjName, ignore);
         return obj is null ? "" : ItemsHash(new[] { obj.ToJsonString() });

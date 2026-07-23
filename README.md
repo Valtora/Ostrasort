@@ -30,7 +30,10 @@ names the mod responsible and the next step to take.
 **It sorts your load order.** It scans the base game plus every local, Steam
 Workshop, and BepInEx mod, works out what each one actually contains, and
 suggests a load order that follows the rules, with the smallest change to what
-you already have.
+you already have. It also sorts by what each mod changes, not just its file
+types, so a mod that owns the new-game and character-creation flow loads last and
+its choices win over, say, a mod that only adds a starter ship. You can pin any
+mod's load priority yourself if you want the final word.
 
 **It merges conflicts.** When two mods change the
 same thing, Ostrasort can build a small compatibility patch that keeps both.

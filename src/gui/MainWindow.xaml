@@ -321,6 +321,18 @@
                               ToolTip="For an FFU mod Ostrasort can't auto-detect (e.g. a Workshop mod with no Autoload.Meta.toml): sort it into the FFU block, after Minor Fixes Plus, instead of before it. A sorting preference only - no game files are touched, and it's remembered per install."/>
                     <MenuItem x:Name="MenuUnmarkFfu" Header="Stop treating as FFU-dependent" Click="MenuUnmarkFfu_Click"
                               ToolTip="Remove the manual FFU tag so this mod sorts normally again."/>
+                    <MenuItem x:Name="MenuLoadPriority" Header="Load priority"
+                              ToolTip="Pin where this mod loads. Late = final say (loads last, like a character-generation mod, so its changes win). Early = yields to other mods. A sorting preference only - no game files are touched, and it's remembered per install.">
+                        <MenuItem x:Name="MenuPriorityLate" Header="Late (final say)" IsCheckable="True" Click="MenuPriorityLate_Click"
+                                  ToolTip="Load this mod last so its overrides win - for a mod that must have the final say (e.g. it curates character generation)."/>
+                        <MenuItem x:Name="MenuPriorityNormal" Header="Normal" IsCheckable="True" Click="MenuPriorityNormal_Click"
+                                  ToolTip="Neutral placement - pin here to cancel an auto-detected late placement."/>
+                        <MenuItem x:Name="MenuPriorityEarly" Header="Early (yields to others)" IsCheckable="True" Click="MenuPriorityEarly_Click"
+                                  ToolTip="Load this mod early so other mods override it."/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuPriorityAuto" Header="Auto (detected)" IsCheckable="True" Click="MenuPriorityAuto_Click"
+                                  ToolTip="Clear the pin and let Ostrasort detect the priority from the mod's contents."/>
+                    </MenuItem>
                     <MenuItem x:Name="MenuDeleteMod" Header="Remove mod (park or delete)…" Click="MenuDeleteMod_Click"
                               ToolTip="Park the mod folder as *.disabled (reversible) or delete it permanently, and drop its load-order entry either way. Deleted files are NOT restored by Ostrasort's undo."/>
                     <MenuItem x:Name="MenuUnsubscribe" Header="Unsubscribe on Steam…" Click="MenuUnsubscribe_Click"

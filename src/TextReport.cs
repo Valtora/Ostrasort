@@ -34,7 +34,9 @@ public static class TextReport
             var notes = m.NoteLines(env.InstalledVersion);
             var name = m.Kind == EntryKind.Core ? "core" : m.DisplayName ?? m.Name;
             var id = m.WorkshopId is { } w ? $" [{w}]" : "";
-            sb.AppendLine($"  {pos,3}  {name}{id}  ({cls}{(m.DataObjects > 0 ? $", {m.DataObjects} objs/{m.CoreOverrides} ovr" : "")})" +
+            var cat = m.Kind != EntryKind.Core && !m.IsPatch && m.Category != ModCategory.General
+                ? $", {CategoryAnalysis.Label(m.Category)}" : "";
+            sb.AppendLine($"  {pos,3}  {name}{id}  ({cls}{cat}{(m.DataObjects > 0 ? $", {m.DataObjects} objs/{m.CoreOverrides} ovr" : "")})" +
                           (notes.Count > 0 ? $"  !! {string.Join("; ", notes)}" : ""));
         }
         sb.AppendLine();
@@ -92,6 +94,8 @@ public static class TextReport
     /// </summary>
     internal static string PairText(Collision col, PairRelation p) => p.Rel switch
     {
+        _ when col.ResolvedByOrder =>
+            $"final say: {col.Claimants[^1].DisplayName ?? col.Claimants[^1].Name} loads last on purpose - its version wins by design",
         Relation.SupersetOk => $"OK: {p.Later.DisplayName ?? p.Later.Name} is a superset (+{p.AddedByLater.Length} items)",
         Relation.Equal => "OK: identical item sets, quantities last-wins",
         Relation.SubsetViolation => $"WRONG ORDER: {p.LostFromEarlier.Length} item(s) dropped - superset must load last",

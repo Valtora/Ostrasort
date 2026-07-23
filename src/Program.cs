@@ -46,6 +46,7 @@ public static class Program
 
         bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false;
         string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null, installZip = null, markFfu = null, unmarkFfu = null;
+        string? markLate = null, markEarly = null, markNormal = null, unpinPriority = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -70,6 +71,10 @@ public static class Program
                 case "--overwrite": break;                              // modifier for --install-zip (handled below)
                 case "--mark-ffu" when HasValue(args, i): markFfu = args[++i]; break;
                 case "--unmark-ffu" when HasValue(args, i): unmarkFfu = args[++i]; break;
+                case "--mark-late" when HasValue(args, i): markLate = args[++i]; break;
+                case "--mark-early" when HasValue(args, i): markEarly = args[++i]; break;
+                case "--mark-normal" when HasValue(args, i): markNormal = args[++i]; break;
+                case "--unpin-priority" when HasValue(args, i): unpinPriority = args[++i]; break;
                 case "--allow-rival-stack": allowRival = true; break;   // override the autoloader write-block (at your own risk)
                 case "--disable-autoloader": break;                     // park/delete the OstraAutoloader DLL(s) (handled below)
                 case "--remove-ffu": break;                             // remove FFU Core (handled below)
@@ -84,7 +89,8 @@ public static class Program
                 // next token is another flag) must say so - falling through to
                 // "unknown argument" is wrong and cryptic
                 case "--profile-save" or "--profile-load" or "--install-zip" or "--game" or "--mods" or "--install"
-                     or "--mark-ffu" or "--unmark-ffu":
+                     or "--mark-ffu" or "--unmark-ffu" or "--mark-late" or "--mark-early" or "--mark-normal"
+                     or "--unpin-priority":
                     Console.Error.WriteLine($"{args[i]} needs a value (try --help)");
                     return 1;
                 case "--version":
@@ -129,6 +135,19 @@ public static class Program
                                       the mod's MODS-screen name or its folder/Workshop id
                           --unmark-ffu <name>
                                       clear a mod's manual FFU-dependent mark
+                          --mark-late <name>
+                                      pin a mod to load LATE (final say) so its overrides win,
+                                      like a character-generation mod. For a mod that must load
+                                      last but ships no detectable signal. A sorting preference
+                                      only - no game files change. <name> is the mod's MODS-screen
+                                      name or its folder/Workshop id
+                          --mark-early <name>
+                                      pin a mod to load EARLY (yields to other mods)
+                          --mark-normal <name>
+                                      pin a mod to NORMAL priority (cancel an auto-detected late
+                                      placement without falling back to detection)
+                          --unpin-priority <name>
+                                      clear a mod's load-priority pin, restoring auto-detection
                           --profile-list          list saved load-order profiles for this install
                           --profile-save <name>   save the current load order as a named profile
                           --profile-load <name>   switch to a saved profile (Replace by default);
@@ -181,6 +200,10 @@ public static class Program
         if (profileSave is not null) standalone.Add("--profile-save");
         if (markFfu is not null) standalone.Add("--mark-ffu");
         if (unmarkFfu is not null) standalone.Add("--unmark-ffu");
+        if (markLate is not null) standalone.Add("--mark-late");
+        if (markEarly is not null) standalone.Add("--mark-early");
+        if (markNormal is not null) standalone.Add("--mark-normal");
+        if (unpinPriority is not null) standalone.Add("--unpin-priority");
         if (args.Contains("--normalize")) standalone.Add("--normalize");
         if (args.Contains("--dump-collisions")) standalone.Add("--dump-collisions");
         if (args.Contains("--disable-autoloader")) standalone.Add("--disable-autoloader");
@@ -467,6 +490,49 @@ public static class Program
                 flist.Remove(key);
                 OpLog.Add($"[cli] Cleared the FFU-dependent mark on '{name}'.");
                 Console.WriteLine($"Cleared the FFU-dependent mark on '{name}'. Run --report / --apply next.");
+            }
+            return 0;
+        }
+
+        if (markLate is not null || markEarly is not null || markNormal is not null || unpinPriority is not null)
+        {
+            var wanted = markLate ?? markEarly ?? markNormal ?? unpinPriority!;
+            LoadTier? tier = markLate is not null ? LoadTier.Late
+                : markEarly is not null ? LoadTier.Early
+                : markNormal is not null ? LoadTier.Normal
+                : null;   // unpin
+            var penv = GameEnv.Locate(gameRoot, modsDir);
+            var pstate = Engine.Analyze(penv);
+            var matches = pstate.Analysis.AllMods
+                .Where(m => m.Kind != EntryKind.Core && m.Dir is not null && !m.IsPatch)
+                .Where(m => string.Equals(m.DisplayName, wanted, StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(m.Name, wanted, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (matches.Count == 0)
+            {
+                Console.Error.WriteLine($"no installed mod matches '{wanted}' (match its MODS-screen name or its folder/Workshop id).");
+                return 1;
+            }
+            if (matches.Count > 1)
+            {
+                Console.Error.WriteLine($"'{wanted}' is ambiguous - it matches {matches.Count} mods. Use the exact folder/Workshop id.");
+                return 1;
+            }
+            var target = matches[0];
+            var plist = CategoryOverrideList.LoadDefault();
+            var key = CategoryOverrideList.KeyFor(penv, target);
+            var name = target.DisplayName ?? target.Name;
+            if (tier is { } t)
+            {
+                plist.Set(key, t);
+                OpLog.Add($"[cli] Pinned '{name}' load priority to {CategoryAnalysis.Label(t)}.");
+                Console.WriteLine($"Pinned '{name}' to load priority: {CategoryAnalysis.Label(t)}. Run --report / --apply next.");
+            }
+            else
+            {
+                plist.Clear(key);
+                OpLog.Add($"[cli] Cleared the load-priority pin on '{name}'.");
+                Console.WriteLine($"Cleared the load-priority pin on '{name}' (back to auto-detection). Run --report / --apply next.");
             }
             return 0;
         }

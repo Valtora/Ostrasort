@@ -90,6 +90,19 @@ public partial class ModDetailDialog : Window
             Line($"Changes {m.DataObjects} game object(s), {m.CoreOverrides} of them base-game overrides.", Dim);
         if (m.HasPlugins || m.HasPatchers)
             Line("Ships code (BepInEx " + (m.HasPatchers ? "patchers" : "plugins") + ") that runs inside the game.", Dim);
+        // category + load priority (not shown for the base game or the generated patch)
+        if (m.Kind != EntryKind.Core && !m.IsPatch && !m.IsFfu)
+        {
+            var priority = m.Tier switch
+            {
+                LoadTier.Late => "loads late (final say - its overrides win)",
+                LoadTier.Early => "loads early (yields to other mods)",
+                _ => "normal load priority",
+            };
+            var how = m.CategoryManual ? "pinned by you" : "auto-detected";
+            Line($"Category: {CategoryAnalysis.Label(m.Category)} - {priority} ({how}). " +
+                 "Change it with right-click > Load priority.", Dim);
+        }
 
         // ---- status notes ----
         var notes = m.NoteLines(_env.InstalledVersion);

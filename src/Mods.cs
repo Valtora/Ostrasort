@@ -52,6 +52,21 @@ public sealed class ModEntry
     public int DataObjects { get; set; }
     public int CoreOverrides { get; set; }
     public Dictionary<(string Type, string Name), string[]?> Claims { get; } = new();
+    /// <summary>
+    /// aCOs entries per loot object, flattened to individual "Id=weightxcount"
+    /// tokens (each pipe-joined weighted list is split into its members). aCOs is
+    /// the parallel pool the game merges alongside aLoots - character-generation
+    /// pools route entirely through it - so the collision analysis unions both
+    /// (see <see cref="Analysis.Relate"/>). Empty for non-loot objects and for
+    /// pools a mod edits with FFU array commands.
+    /// </summary>
+    public Dictionary<(string Type, string Name), string[]> CoClaims { get; } = new();
+
+    // category / load priority (filled by CategoryAnalysis.Classify)
+    public ModCategory Category { get; set; } = ModCategory.General;   // detected game-system category
+    public LoadTier Tier { get; set; } = LoadTier.Normal;             // effective load tier, after any manual pin
+    public bool CategoryManual { get; set; }                          // the tier came from a user pin, not detection
+    public List<string> CategorySignals { get; } = new();            // human-readable evidence for the category/tier
     public HashSet<string> ImagePaths { get; } = new(StringComparer.OrdinalIgnoreCase);   // relative under images\
     public HashSet<string> DataFiles { get; } = new(StringComparer.OrdinalIgnoreCase);    // relative under data\ (forward-slashed) - for Player.log attribution
     public HashSet<string> PluginDlls { get; } = new(StringComparer.OrdinalIgnoreCase);   // basenames under BepInEx\plugins
@@ -181,6 +196,16 @@ public sealed class ModEntry
         if (IsFfuPatch) notes.Add("FFU patch - remove after one use");
         else if (IsFfu) notes.Add(FfuGroup == FfuLoadGroup.FFUCore ? "FFU core tier"
             : FfuOverride ? "FFU mod (marked by you)" : "FFU mod");
+        // ordering-relevant load priority (the descriptive category is shown in
+        // its own report column; here we only note a non-neutral placement)
+        if (!IsFfu)
+        {
+            if (Tier == LoadTier.Late)
+                notes.Add(CategoryManual ? "loads late (final say, pinned by you)"
+                    : "new game / start (loads late for final say)");
+            else if (Tier == LoadTier.Early) notes.Add("loads early (pinned by you)");
+            else if (CategoryManual) notes.Add("load priority pinned to normal by you");
+        }
         if (RemoveIds.Count > 0) notes.Add($"removes {RemoveIds.Count} core entr{(RemoveIds.Count == 1 ? "y" : "ies")} (FFU removeIds)");
         if (GameVersionNote(installedVersion) is { } versionNote) notes.Add(versionNote);
         if (JsonErrors.Count > 0) notes.Add($"{JsonErrors.Count} JSON problem(s)");
@@ -333,6 +358,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                          _ignore, (file, pat) => { if (ignoredFiles.Add(file)) mod.IgnoredFiles.Add((file, pat)); }))
             {
                 mod.Claims[(d.Type, d.Name)] = d.Loots;
+                if (d.Cos is { Length: > 0 }) mod.CoClaims[(d.Type, d.Name)] = d.Cos;
                 mod.DataFiles.Add(d.RelPath.Replace('\\', '/'));   // for Player.log error attribution
                 mod.DataObjects++;
                 if (d.FromSimple) mod.SimpleConditionNames.Add(d.Name);
@@ -463,7 +489,8 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
     /// <summary>One data object found in a mod: its claim plus the FFU elastic-API markers it carries.</summary>
     internal readonly record struct DataObject(
         string Type, string Name, string[]? Loots, bool HasReference, bool ArrayCommands,
-        string RelPath, bool FromSimple = false, string? Friendly = null, string[]? LootPoolRefs = null);
+        string RelPath, bool FromSimple = false, string? Friendly = null, string[]? LootPoolRefs = null,
+        string[]? Cos = null);
 
     /// <summary>Object fields that name a loot pool - drives the core loot-pool reverse index.</summary>
     private static readonly string[] LootRefFields = { "strLoot", "strCondLoot" };
@@ -586,19 +613,35 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                                 && lv.GetString() is { Length: > 0 } pool)
                                 (poolRefs ??= new()).Add(pool);
 
-                        string[]? loots = null;
-                        if (wantLoot && type.Equals("loot", StringComparison.OrdinalIgnoreCase) &&
-                            obj.TryGetProperty("aLoots", out var lootsEl) && lootsEl.ValueKind == JsonValueKind.Array)
+                        string[]? loots = null, cos = null;
+                        if (wantLoot && type.Equals("loot", StringComparison.OrdinalIgnoreCase))
                         {
-                            var entries = lootsEl.EnumerateArray()
-                                .Where(x => x.ValueKind == JsonValueKind.String)
-                                .Select(x => x.GetString()!)
-                                .ToArray();
-                            // command-driven aLoots merge at load (FFU) - not a whole-pool replacement
-                            if (!entries.Any(e => FfuCommand.IsMatch(e))) loots = entries;
+                            if (obj.TryGetProperty("aLoots", out var lootsEl) && lootsEl.ValueKind == JsonValueKind.Array)
+                            {
+                                var entries = lootsEl.EnumerateArray()
+                                    .Where(x => x.ValueKind == JsonValueKind.String)
+                                    .Select(x => x.GetString()!)
+                                    .ToArray();
+                                // command-driven aLoots merge at load (FFU) - not a whole-pool replacement
+                                if (!entries.Any(e => FfuCommand.IsMatch(e))) loots = entries;
+                            }
+                            // aCOs is a parallel pool: an array of pipe-joined weighted
+                            // lists ("A=0.16x1|B=0.16x1"). Flatten to individual tokens so
+                            // the collision analysis can union it with aLoots. Skip a
+                            // command-driven aCOs (an FFU array edit, merged at load).
+                            if (obj.TryGetProperty("aCOs", out var cosEl) && cosEl.ValueKind == JsonValueKind.Array)
+                            {
+                                var entries = cosEl.EnumerateArray()
+                                    .Where(x => x.ValueKind == JsonValueKind.String)
+                                    .Select(x => x.GetString()!)
+                                    .ToArray();
+                                if (!entries.Any(e => FfuCommand.IsMatch(e)))
+                                    cos = entries.SelectMany(e => e.Split('|'))
+                                        .Where(s => s.Length > 0).ToArray();
+                            }
                         }
                         yield return new DataObject(type, nameEl.GetString()!, loots, hasReference, commands, relPath,
-                            Friendly: friendly, LootPoolRefs: poolRefs?.ToArray());
+                            Friendly: friendly, LootPoolRefs: poolRefs?.ToArray(), Cos: cos);
 
                         // each 7-tuple in a conditions_simple container defines one
                         // condition in the CONDITIONS namespace (ParseConditionsSimple)

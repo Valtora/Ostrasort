@@ -53,6 +53,56 @@ Optional **tidy grouping** additionally groups the list (core, then
 infrastructure, then code, then shells, then additive, then overrides, then
 patch) for readability. It is off by default.
 
+## Game-system categories and load priority
+
+Class answers "what kind of files does this mod ship". A second, independent axis
+answers "what part of the game does it change", and that is what decides which
+mod should win when two touch the same system. Ostrasort buckets every mod into a
+**category** from its data types and object namespaces (ships and stations, items
+and economy, characters and behaviour, interactions and rules, narrative,
+cosmetic, and **new game / start**), shown in the mod detail and the exported
+report.
+
+Most categories carry no ordering weight: their mods stay put (minimal churn).
+One does. A **new game / start** mod owns character generation, the choices a
+player makes before the game begins, and it must have the **final say**, so it
+loads **late** (after ordinary content, before the Ostrasort patch and the FFU
+block). The signal is reliable: in the base game the whole `lifeevents` data type
+is character generation, and every character-generation object across other types
+carries the `CGEnc` (Character Generation Encounter) name prefix. A mod that
+touches either is detected as new game / start.
+
+This is why, for example, **Vanilla Plus Character Generation** sorts to the
+bottom. It replaces the vanilla starting-ship dice roll with a deterministic
+choice by overriding the `CGEncShipbreaker*` pools. Because the game keeps the
+**last-loaded** version of a shared object, its deterministic version only wins if
+it loads after every other mod that touches those pools, including a ship mod that
+merely adds a starter ship to the selection. The old purely-quantity loot rule
+(the mod stocking *more* items should load last) fought that: a curation mod
+deliberately stocks *fewer*, so it read as the one to move up. The category rule
+wins over that heuristic, so a final-say mod is never pushed up by item count.
+
+**Curation is respected, not merged.** When a final-say mod loads last over a pool
+it owns, that collision is handled by load order: its version wins by design and
+the other mod's is intentionally replaced. Ostrasort does **not** fold such a pool
+into the compatibility patch, because a per-item union would re-add exactly the
+entries the author removed (the vanilla ships a deterministic start is meant to
+exclude). The collision shows on the **Handled automatically** tab, not as a
+conflict.
+
+**Load priority (aCOs).** Character-generation pools route their choices through
+the `aCOs` field (a parallel weighted list) rather than `aLoots`, so the collision
+analysis compares both, unioning their referenced entries. A pool whose only
+difference is in `aCOs` is no longer read as an identical empty pool.
+
+**Pinning it yourself.** Detection is data-driven, but you have the final word.
+Right-click any mod and pick **Load priority** to pin it Late (final say), Early
+(yields to other mods), Normal, or back to Auto. From a terminal the same is
+`--mark-late`, `--mark-early`, `--mark-normal`, and `--unpin-priority`. It is a
+per-install sorting preference only (no game files change, remembered in
+`%APPDATA%\Ostrasort`) and the suggestion honours it on every rescan instead of
+re-proposing a move.
+
 ## Collision detection (every data type)
 
 Ostrasort cross-references every `(data type, strName)` claim across all mods.

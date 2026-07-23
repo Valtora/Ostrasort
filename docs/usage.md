@@ -184,6 +184,13 @@ you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
   mod to add one). It is a sorting preference only, no game files are touched,
   and it can only move the mod later, so it can't mis-sort a plain Workshop mod.
   **Stop treating as FFU-dependent** clears it. Remembered per install.
+- **Load priority** (right-click any mod) pins where the mod loads: **Late (final
+  say)** so its overrides win (Ostrasort already does this for a detected new
+  game / start mod, but use it for one that must load last and ships no signal),
+  **Early (yields to others)**, **Normal**, or **Auto (detected)** to clear the
+  pin. It is a sorting preference only, no game files change, remembered per
+  install, and the suggestion honours it on every rescan. See
+  [how-it-works.md](how-it-works.md#game-system-categories-and-load-priority).
 - **Remove mod (park or delete)…** (right-click a local mod) parks its folder as
   `*.disabled` (reversible, rename it back) or deletes it permanently, and drops
   its load-order entry either way. Deleted files are **not** restored by Ctrl+Z,
@@ -366,6 +373,11 @@ Ostrasort.exe --mark-ffu <name>       mark a mod FFU-dependent so it sorts into 
                           e.g. a Workshop mod without an Autoload.Meta.toml). Sorting preference
                           only, no game files change. <name> is the MODS-screen name or folder/id
 Ostrasort.exe --unmark-ffu <name>     clear a mod's manual FFU-dependent mark
+Ostrasort.exe --mark-late <name>      pin a mod to load LATE (final say) so its overrides win,
+                          like a character-generation mod. Sorting preference only, per install
+Ostrasort.exe --mark-early <name>     pin a mod to load EARLY (yields to other mods)
+Ostrasort.exe --mark-normal <name>    pin a mod to NORMAL priority (cancel an auto-detected late)
+Ostrasort.exe --unpin-priority <name> clear a mod's load-priority pin (back to auto-detection)
 Ostrasort.exe --profile-list          list saved load-order profiles for this install
 Ostrasort.exe --profile-save <name>   save the current load order as a named profile
 Ostrasort.exe --profile-load <name>   switch to a saved profile: Replace by default (mods it

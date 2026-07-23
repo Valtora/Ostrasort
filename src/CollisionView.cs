@@ -54,7 +54,7 @@ public static class CollisionView
     /// </summary>
     public static bool NeedsAttention(Collision c)
     {
-        if (c.ResolvedByPatch || c.FfuMergedAtLoad || c.AdditiveAtLoad || c.NothingLost) return false;
+        if (c.ResolvedByPatch || c.FfuMergedAtLoad || c.AdditiveAtLoad || c.NothingLost || c.ResolvedByOrder) return false;
         if (c.ObjectMergeable) return true;                             // a field merge would preserve more than last-wins
         return c.Pairs.Any(p => p.Rel is Relation.Partial              // loot: each side loses items (patch merges)
                                        or Relation.SubsetViolation      // loot: order drops items (reorder fixes)
@@ -130,9 +130,10 @@ public static class CollisionView
             var anyResolved = cols.Any(c => c.ResolvedByPatch);
             var anyFfuMerged = cols.Any(c => !c.ResolvedByPatch && c.FfuMergedAtLoad);
             var anyAdditive = cols.Any(c => !c.ResolvedByPatch && c.AdditiveAtLoad);
+            var anyOrderResolved = cols.Any(c => !c.ResolvedByPatch && c.ResolvedByOrder);
             var anyNothingLost = cols.Any(c => !c.ResolvedByPatch && c.NothingLost);
             var anyDeadReplace = cols.Any(c => !c.ResolvedByPatch && !c.ObjectMergeable && !c.FfuMergedAtLoad &&
-                                               !c.AdditiveAtLoad && !c.NothingLost &&
+                                               !c.AdditiveAtLoad && !c.NothingLost && !c.ResolvedByOrder &&
                                                c.Pairs.Any(p => p.Rel == Relation.NonLoot));
             var fixableByPatch = anyLootConflict || anyMergeableObj;
 
@@ -174,6 +175,11 @@ public static class CollisionView
                 Add($"Both add to {what} — the game merges these entry-by-entry at load, nothing lost", LineSev.Good, 1);
                 Add("(only an entry defined by both mods goes to the last-loaded one; see the detail below).", LineSev.Good, 1);
             }
+            else if (anyOrderResolved)
+            {
+                Add($"Both edit {what}, and a final-say mod (new game / start) loads last on purpose —", LineSev.Good, 1);
+                Add("its version wins by design, so the other mod's is intentionally replaced, not merged.", LineSev.Good, 1);
+            }
             else if (anyNothingLost)
             {
                 Add($"Both edit {what} — the versions agree (identical, or the last-loaded includes", LineSev.Good, 1);
@@ -196,6 +202,7 @@ public static class CollisionView
                     c.ResolvedByPatch ? "merged into the patch"
                     : c.FfuMergedAtLoad ? "merged by FFU at load"
                     : c.AdditiveAtLoad ? "merged entry-by-entry at load"
+                    : c.ResolvedByOrder ? $"{Short(c.Claimants[^1])} loads last (final say) - its version wins by design"
                     : p is null ? "claimed by multiple mods"
                     : p.Rel == Relation.NonLoot
                         ? (c.ObjectMergeable ? "mergeable — see the field notes below"

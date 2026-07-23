@@ -7,10 +7,12 @@ public sealed record EngineState(LoadOrderFile Lo, Scanner Scanner, Analysis Ana
 /// <summary>One full read-only pass over the install - shared by the console paths and the GUI.</summary>
 public static class Engine
 {
-    public static EngineState Analyze(GameEnv env, bool tidy = false, IgnoreList? ignore = null, FfuOverrideList? ffuOverrides = null)
+    public static EngineState Analyze(GameEnv env, bool tidy = false, IgnoreList? ignore = null,
+        FfuOverrideList? ffuOverrides = null, CategoryOverrideList? categoryOverrides = null)
     {
         ignore ??= IgnoreList.LoadDefault();
         ffuOverrides ??= FfuOverrideList.LoadDefault();
+        categoryOverrides ??= CategoryOverrideList.LoadDefault();
         var lo = LoadOrderFile.Read(env.LoadingOrderPath);
         var analysis = new Analysis
         {
@@ -25,10 +27,12 @@ public static class Engine
         foreach (var m in analysis.AllMods) scanner.Scan(m);
 
         FfuAnalysis.Classify(env, analysis, ffuOverrides);   // FFU block membership, patch targets, FFU hygiene
+        CategoryAnalysis.Classify(env, analysis, categoryOverrides);   // game-system category + load-priority tier
         analysis.FindCollisions();
         foreach (var c in analysis.Collisions.Where(c => c.Type == "loot"))
             c.FriendlyName = scanner.LootNames.Describe(c.ObjName);   // readable name for the raw pool id
         FieldDiff.Annotate(env, analysis);
+        analysis.MarkOrderResolved();   // final-say (late-tier) mods that win by loading last - after FieldDiff so it overrides "mergeable"
         CheckImages(analysis);
         CheckBepInEx(env, analysis);
         CheckIgnorePatterns(scanner, analysis);

@@ -56,6 +56,7 @@ public partial class MainWindow : Window
     private bool _switchingInstall;
     private readonly IgnoreList _ignore = IgnoreList.LoadDefault();
     private readonly FfuOverrideList _ffuOverrides = FfuOverrideList.LoadDefault();
+    private readonly CategoryOverrideList _categoryOverrides = CategoryOverrideList.LoadDefault();
     private EngineState? _state;
     private System.Collections.ObjectModel.ObservableCollection<ModRow> _rows = new();
     private bool _manualDirty;
@@ -119,7 +120,7 @@ public partial class MainWindow : Window
             _manualDirty = false;
             _arrUndo.Clear();
             _arrRedo.Clear();
-            _state = Engine.Analyze(_env, ChkTidy.IsChecked == true, _ignore, _ffuOverrides);
+            _state = Engine.Analyze(_env, ChkTidy.IsChecked == true, _ignore, _ffuOverrides, _categoryOverrides);
             LogCorrelation.Annotate(_state.Analysis, GameEnv.PlayerLogPath, _env.BepInExLogPath);   // attribute last-launch log issues
             RenderState(_state);
         }
@@ -1548,6 +1549,20 @@ public partial class MainWindow : Window
         Show(MenuMarkFfu, canMarkFfu && row!.M is { IsFfu: false });
         Show(MenuUnmarkFfu, canMarkFfu && row!.M.FfuOverride);
 
+        // load-priority pin: any real non-FFU mod. The submenu ticks the current
+        // effective tier and offers Auto (detected) to clear a pin. FFU mods have
+        // their own block, so the priority tiers do not apply to them. A sorting
+        // preference only - no game files written, safe under the rival lock.
+        var canPin = row?.M is { Kind: not EntryKind.Core, IsPatch: false, IsFfu: false, Dir: not null };
+        Show(MenuLoadPriority, canPin);
+        if (canPin)
+        {
+            MenuPriorityLate.IsChecked = row!.M.Tier == LoadTier.Late;
+            MenuPriorityNormal.IsChecked = row.M.Tier == LoadTier.Normal;
+            MenuPriorityEarly.IsChecked = row.M.Tier == LoadTier.Early;
+            MenuPriorityAuto.IsChecked = !row.M.CategoryManual;
+        }
+
         // removal: local/plugins-dir folders (park or delete), the generated
         // patch (its own guarded removal, regenerable), or Workshop (Steam owns
         // the files - offer Unsubscribe instead)
@@ -1566,6 +1581,7 @@ public partial class MainWindow : Window
             MenuRegister.Visibility == Visibility.Visible ||
             MenuIgnore.Visibility == Visibility.Visible || MenuUnignore.Visibility == Visibility.Visible ||
             MenuMarkFfu.Visibility == Visibility.Visible || MenuUnmarkFfu.Visibility == Visibility.Visible ||
+            MenuLoadPriority.Visibility == Visibility.Visible ||
             MenuDeleteMod.Visibility == Visibility.Visible || MenuUnsubscribe.Visibility == Visibility.Visible
                 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -1674,6 +1690,11 @@ public partial class MainWindow : Window
     private void MenuMarkFfu_Click(object sender, RoutedEventArgs e) => SetFfuOverride(true);
     private void MenuUnmarkFfu_Click(object sender, RoutedEventArgs e) => SetFfuOverride(false);
 
+    private void MenuPriorityLate_Click(object sender, RoutedEventArgs e) => SetLoadPriority(LoadTier.Late);
+    private void MenuPriorityNormal_Click(object sender, RoutedEventArgs e) => SetLoadPriority(LoadTier.Normal);
+    private void MenuPriorityEarly_Click(object sender, RoutedEventArgs e) => SetLoadPriority(LoadTier.Early);
+    private void MenuPriorityAuto_Click(object sender, RoutedEventArgs e) => SetLoadPriority(null);
+
     /// <summary>Park a local/plugins-dir mod as *.disabled or delete it, and drop its load-order entry.</summary>
     private void MenuDeleteMod_Click(object sender, RoutedEventArgs e)
     {
@@ -1767,6 +1788,28 @@ public partial class MainWindow : Window
         RunStatus.Text = ffu
             ? $"'{name}' marked FFU-dependent — it now sorts after Minor Fixes Plus.  "
             : $"'{name}' no longer marked FFU-dependent.  ";
+        RunStatus.Foreground = Good;
+    }
+
+    /// <summary>
+    /// Pins a mod's load priority (or clears the pin with null, restoring
+    /// auto-detection). Only a sorting preference: the suggested order settles
+    /// the mod into its band (late = final say, early = yields). No game files
+    /// are touched, so it is not rival-gated.
+    /// </summary>
+    private void SetLoadPriority(LoadTier? tier)
+    {
+        if (ModsGrid.SelectedItem is not ModRow row) return;
+        var name = row.M.DisplayName ?? row.M.Name;
+        var key = CategoryOverrideList.KeyFor(_env, row.M);
+        if (tier is { } t) _categoryOverrides.Set(key, t); else _categoryOverrides.Clear(key);
+        OpLog.Add(tier is { } tt
+            ? $"Pinned '{name}' load priority to {CategoryAnalysis.Label(tt)}."
+            : $"Cleared the load-priority pin on '{name}' (back to auto-detection).");
+        Rescan();
+        RunStatus.Text = tier is { } t2
+            ? $"'{name}' pinned to load {CategoryAnalysis.Label(t2)}.  "
+            : $"'{name}' load priority back to auto-detected.  ";
         RunStatus.Foreground = Good;
     }
 
