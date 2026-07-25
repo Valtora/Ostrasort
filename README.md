@@ -6,7 +6,8 @@ Ostrasort is a mod manager for **Ostranauts** (Blue Bottle Games). You run it
 before you launch the game. It reads your whole mod setup, tells you in plain
 words whether it is healthy, and tries its best to help you fix things if there are any issues.
 
-<img width="2560" height="1380" alt="Screenshot 2026-07-19 162715" src="https://github.com/user-attachments/assets/9659e490-5edf-4222-889e-dcb324fa96fe" />
+<img width="2560" height="1380" alt="Screenshot 2026-07-25 215724" src="https://github.com/user-attachments/assets/843371cf-c75c-46c6-a540-feaddf49f85f" />
+
 
 ## Why use Ostrasort?
 
