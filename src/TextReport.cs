@@ -96,6 +96,10 @@ public static class TextReport
     {
         _ when col.ResolvedByOrder =>
             $"final say: {col.Claimants[^1].DisplayName ?? col.Claimants[^1].Name} loads last on purpose - its version wins by design",
+        // one side edits with FFU precision commands: the edit merges into whatever
+        // the other side ships, so there is no winner to report for this pair (the
+        // item sets are not comparable - a command list is not a pool)
+        _ when col.MergesAtLoad(p) => "merged by FFU at load - nothing lost",
         Relation.SupersetOk => $"OK: {p.Later.DisplayName ?? p.Later.Name} is a superset (+{p.AddedByLater.Length} items)",
         Relation.Equal => "OK: identical item sets, quantities last-wins",
         Relation.SubsetViolation => $"WRONG ORDER: {p.LostFromEarlier.Length} item(s) dropped - superset must load last",

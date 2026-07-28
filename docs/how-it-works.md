@@ -271,6 +271,17 @@ A loot pool's `aLoots` is an additive list, so merging two versions is the
 per-item union. Every mod's wares survive, and where two mods stock the same item
 with different quantities, you pick which wins (or exclude it).
 
+**A pool can mix plain mods with FFU array editors.** A mod using FFU's `--ADD--`
+/ `--DEL--` commands *edits* a pool rather than replacing it, and using that API
+makes it FFU-dependent, so it always loads in the FFU block **after** the
+Ostrasort patch. Its commands therefore land on top of whatever the patch merged.
+The other claimants still ship a plain whole copy of the pool and still overwrite
+each other, because a pool carries its entire payload in one array field and a
+field-level merge just hands that field to the last loader. So one FFU editor on
+a pool no longer marks the whole thing handled: the plain claimants are analysed
+and merged among themselves as usual, and only the command editor is left out of
+the union (folding its `--ADD--` tokens in would corrupt the merged pool).
+
 A pool's internal id (`CNDOLKioskEmbassyOKLG`) means little on its own, so
 Ostrasort annotates it with a **friendly name**. It reverse-indexes the core game
 so a pool is described by the kiosk or shop that uses it (its `strNameFriendly`,

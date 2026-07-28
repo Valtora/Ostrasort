@@ -106,22 +106,26 @@ public static class Patcher
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
     /// <summary>
-    /// Loot pools --patch can merge: every claimant has aLoots and some pair is
-    /// a partial overlap. A pool any claimant edits via FFU precision commands
-    /// (even when its aLoots itself is plain) is excluded: folding it into the
-    /// union would drop that claimant's command-driven edits - those merge at
-    /// load instead (FieldDiff marks the collision FfuMergedAtLoad).
+    /// True for a loot pool --patch can merge: at least two PLAIN claimants (see
+    /// <see cref="Collision.PlainClaimants"/>), each with an aLoots, and some pair
+    /// between two of them is a partial overlap. A claimant editing via FFU
+    /// precision commands is never folded into the union (that would write raw
+    /// <c>--ADD--</c> tokens into the patch) but no longer blocks the merge either:
+    /// it loads after the patch and re-applies its commands on top.
     /// </summary>
+    public static bool IsPatchableLoot(Collision c) =>
+        c.Type == "loot" &&
+        // a final-say mod that loads last deliberately curates the pool - a
+        // per-item union would re-add exactly the entries it removed, so it is
+        // resolved by load order, not by merging
+        !c.ResolvedByOrder &&
+        c.PlainClaimants.Count >= 2 &&
+        c.PlainClaimants.All(m => m.Claims.TryGetValue((c.Type, c.ObjName), out var l) && l is not null) &&
+        c.PlainPairs.Any(p => p.Rel == Relation.Partial);
+
+    /// <summary>Every loot pool --patch can merge.</summary>
     public static List<Collision> PatchableConflicts(Analysis a) =>
-        a.Collisions.Where(c =>
-            c.Type == "loot" &&
-            // a final-say mod that loads last deliberately curates the pool - a
-            // per-item union would re-add exactly the entries it removed, so it is
-            // resolved by load order, not by merging
-            !c.ResolvedByOrder &&
-            c.Claimants.All(m => m.Claims.TryGetValue((c.Type, c.ObjName), out var l) && l is not null) &&
-            c.Claimants.All(m => !m.FfuArrayEditClaims.Contains((c.Type, c.ObjName))) &&
-            c.Pairs.Any(p => p.Rel == Relation.Partial)).ToList();
+        a.Collisions.Where(IsPatchableLoot).ToList();
 
     /// <summary>Non-loot objects a 3-way field merge would improve on (flagged by FieldDiff).</summary>
     public static List<Collision> MergeableObjects(Analysis a) =>
@@ -267,11 +271,14 @@ public static class Patcher
             var coOrder = new List<string>();
             JsonNode? baseObj = null;
 
-            foreach (var m in c.Claimants)
+            // plain claimants only: a command editor's arrays hold --ADD--/--DEL--
+            // tokens, not entries, so unioning them would corrupt the merged pool.
+            // It loads after the patch and applies its commands to the result.
+            foreach (var m in c.PlainClaimants)
             {
                 var obj = LoadPoolObject(m.Dir!, c.Type, c.ObjName, a.IgnorePatterns);
                 if (obj is null) continue;
-                baseObj = obj;                       // last claimant's object = base
+                baseObj = obj;                       // last plain claimant's object = base
                 Collect(obj["aLoots"], m, lootOrder, lootOptions);
                 Collect(obj["aCOs"], m, coOrder, coOptions);
             }
@@ -497,7 +504,7 @@ public static class Patcher
                     ["sources"] = SourcesFor(p.Collision),
                     ["choices"] = poolChoices,
                 });
-                descriptions.Add($"{p.Collision.ObjName} = {string.Join(" + ", p.Collision.Claimants.Select(m => m.DisplayName ?? m.Name))}");
+                descriptions.Add($"{p.Collision.ObjName} = {string.Join(" + ", p.Collision.PlainClaimants.Select(m => m.DisplayName ?? m.Name))}");
             }
             File.WriteAllText(Path.Combine(dir, "data", "loot", "loot.json"), poolNodes.ToJsonString(Indented) + "\n");
         }

@@ -29,6 +29,30 @@ public sealed class Collision
     public bool AdditiveAtLoad { get; set; }                  // flat-packed simple-container type: the game merges its records key-by-key at load, never whole-object replace
     public string? FriendlyName { get; set; }                 // loot pools: a readable description of the internal id (e.g. "OKLG embassy kiosk inventory")
     public string Key => $"{Type}/{ObjName}";
+
+    /// <summary>
+    /// True when this claimant EDITS the object with FFU precision array commands
+    /// (<c>--ADD--</c>, <c>--DEL--</c>, …) instead of shipping a replacement.
+    /// </summary>
+    public bool IsCommandEdit(ModEntry m) => m.FfuArrayEditClaims.Contains((Type, ObjName));
+
+    /// <summary>
+    /// Claimants that ship a plain whole-object version - everyone except the
+    /// command editors. Those are what a load order actually decides between, and
+    /// what the patch merges. Excluding a command editor is safe in both
+    /// directions: using the FFU array API makes a mod FFU-dependent
+    /// (<see cref="ModEntry.UsesElasticApi"/> seeds <see cref="ModEntry.IsFfu"/>),
+    /// so it always lands in the FFU block AFTER the Ostrasort patch and re-applies
+    /// its commands on top of whatever the patch merged.
+    /// </summary>
+    public List<ModEntry> PlainClaimants => Claimants.Where(m => !IsCommandEdit(m)).ToList();
+
+    /// <summary>Pairs between two plain claimants - the ones load order decides.</summary>
+    public IEnumerable<PairRelation> PlainPairs =>
+        Pairs.Where(p => !IsCommandEdit(p.Earlier) && !IsCommandEdit(p.Later));
+
+    /// <summary>A pair the FFU loader merges at load because one side edits via precision commands.</summary>
+    public bool MergesAtLoad(PairRelation p) => IsCommandEdit(p.Earlier) || IsCommandEdit(p.Later);
 }
 
 public sealed record Change(string Action, string Entry, string Reason);

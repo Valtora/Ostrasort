@@ -124,9 +124,13 @@ public static class CollisionView
             var cols = group.ToList();
             var mods = cols[0].Claimants.Select(Short).ToList();
 
-            var anyLootConflict = cols.Any(c => !c.ResolvedByPatch && c.Pairs.Any(p => p.Rel == Relation.Partial));
+            // "fixable" must mean the patch would actually act on it - ask the
+            // patcher rather than re-deriving it, so the header can never promise
+            // a merge for a pool PatchableConflicts skips
+            var anyLootConflict = cols.Any(c => !c.ResolvedByPatch && Patcher.IsPatchableLoot(c));
             var anyMergeableObj = cols.Any(c => !c.ResolvedByPatch && c.ObjectMergeable);
-            var anyWrongOrder = cols.Any(c => !c.ResolvedByPatch && c.Pairs.Any(p => p.Rel == Relation.SubsetViolation));
+            var anyWrongOrder = cols.Any(c => !c.ResolvedByPatch && !c.FfuMergedAtLoad && !c.ResolvedByOrder
+                                              && c.PlainPairs.Any(p => p.Rel == Relation.SubsetViolation));
             var anyResolved = cols.Any(c => c.ResolvedByPatch);
             var anyFfuMerged = cols.Any(c => !c.ResolvedByPatch && c.FfuMergedAtLoad);
             var anyAdditive = cols.Any(c => !c.ResolvedByPatch && c.AdditiveAtLoad);
@@ -197,7 +201,14 @@ public static class CollisionView
 
             foreach (var c in cols)
             {
-                var p = c.Pairs.LastOrDefault();
+                // describe the collision by the pairs load order decides. A pair
+                // with a command editor merges at load and says nothing about what
+                // the plain claimants do to each other, so it must not stand in as
+                // the representative outcome; the worst plain pair leads.
+                var plain = c.Pairs.Where(x => !c.MergesAtLoad(x)).ToList();
+                var p = plain.FirstOrDefault(x => x.Rel == Relation.Partial)
+                        ?? plain.FirstOrDefault(x => x.Rel == Relation.SubsetViolation)
+                        ?? plain.LastOrDefault() ?? c.Pairs.LastOrDefault();
                 string outcome =
                     c.ResolvedByPatch ? "merged into the patch"
                     : c.FfuMergedAtLoad ? "merged by FFU at load"

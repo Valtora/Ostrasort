@@ -29,24 +29,40 @@ public static class FieldDiff
         foreach (var col in a.Collisions)
         {
             // a claimant editing via FFU --ADD--/--DEL--/... commands merges at
-            // load; there is no whole-object comparison to make. This runs BEFORE
-            // the loot-pool skip: a pool whose commands sit in aCOs (aLoots plain)
-            // still passes the all-claims-non-null test, but folding it into the
-            // union would silently drop the command-editing claimant's items.
-            var editors = col.Claimants
-                .Where(m => m.FfuArrayEditClaims.Contains((col.Type, col.ObjName)))
+            // load; there is no whole-object comparison to make for THAT claimant,
+            // and it is never folded into a union (its arrays hold commands, not
+            // entries). Whether the collision as a whole is lossless depends on the
+            // other claimants, which is what the loot test below decides.
+            var editors = col.Claimants.Where(col.IsCommandEdit)
                 .Select(m => m.DisplayName ?? m.Name).ToList();
             if (editors.Count > 0)
             {
-                col.FfuMergedAtLoad = true;
                 col.FieldNotes.Add($"{string.Join(", ", editors)} edits this object with FFU precision array " +
                                    "commands - the edit merges at load instead of replacing; it must load after " +
                                    "the versions it edits (Ostrasort keeps FFU mods after non-FFU mods)");
-                continue;
+
+                // A command edit merging at load says nothing about the OTHER
+                // claimants. A loot pool carries its whole payload in one array
+                // field, so a field-level merge just hands it to the last loader:
+                // claimants shipping a plain pool still overwrite one another and
+                // lose items exactly as they would without FFU. Leave such a
+                // collision open (it falls through to the loot path below) so the
+                // patch can union the plain claimants - the command editors load
+                // after the patch and re-apply on top of it.
+                if (col.Type != "loot" || !col.PlainPairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation))
+                {
+                    col.FfuMergedAtLoad = true;
+                    continue;
+                }
             }
 
-            // loot pools get item-level analysis + the patcher; skip them here
-            if (col.Claimants.All(m => m.Claims.TryGetValue((col.Type, col.ObjName), out var l) && l is not null))
+            // loot pools get item-level analysis + the patcher; skip them here.
+            // Judged on the PLAIN claimants: a command editor carries no comparable
+            // pool (its aLoots is a command list, so Claims is null), and letting
+            // that drag the collision into the object path would field-merge aLoots
+            // as if it were an ordinary array.
+            if (col.PlainClaimants is { Count: > 0 } plain &&
+                plain.All(m => m.Claims.TryGetValue((col.Type, col.ObjName), out var l) && l is not null))
                 continue;
 
             // flat-packed "JsonSimple" containers (conditions_simple, strings,

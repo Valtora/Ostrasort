@@ -231,6 +231,56 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void LootPool_PlainClaimantsLoseItems_StillPatchableAlongsideFfuCommandEditor()
+    {
+        // three ship mods each ship a plain copy of one broker pool and overwrite
+        // each other, while a fourth mod appends to it with FFU commands. The
+        // command edit merges at load, but that says NOTHING about the three plain
+        // pools - they still drop each other's ships, so the pool must stay a
+        // conflict and the patch must union the three (never the command editor).
+        WriteJson(Path.Combine(_env.CoreDataDir, "loot", "broker.json"),
+            """[{"strName":"RandomShipBrokerOKLG","aLoots":["ShipVanilla=1.0x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ShipsA", "data", "loot", "broker.json"),
+            """[{"strName":"RandomShipBrokerOKLG","aLoots":["ShipVanilla=1.0x1","IthTug=1.0x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ShipsB", "data", "loot", "broker.json"),
+            """[{"strName":"RandomShipBrokerOKLG","aLoots":["ShipVanilla=1.0x1","FalcOne=1.0x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ShipsC", "data", "loot", "broker.json"),
+            """[{"strName":"RandomShipBrokerOKLG","aLoots":["ShipVanilla=1.0x1","FalcOne=1.0x1","MyShip=1.0x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "FfuFix", "data", "loot", "broker.json"),
+            """[{"strName":"RandomShipBrokerOKLG","aLoots":["--ADD--","ExtraShip=1.0x1"]}]""");
+        File.WriteAllText(_env.LoadingOrderPath,
+            """[{"strName":"Mod Loading Order","aLoadOrder":["core","ShipsA","ShipsB","ShipsC","FfuFix"]}]""");
+
+        var state = Engine.Analyze(_env);
+        var col = state.Analysis.Collisions.Single(c => c.ObjName == "RandomShipBrokerOKLG");
+
+        // one FFU command editor must not declare the whole pool lossless
+        Assert.False(col.FfuMergedAtLoad);
+        Assert.True(CollisionView.NeedsAttention(col));
+        Assert.True(Patcher.IsPatchableLoot(col));
+        Assert.Contains(Patcher.PatchableConflicts(state.Analysis), c => c.ObjName == "RandomShipBrokerOKLG");
+
+        // the command editor is excluded from the merge, the three plain mods are not
+        Assert.Equal(new[] { "ShipsA", "ShipsB", "ShipsC" }, col.PlainClaimants.Select(m => m.Name).ToArray());
+
+        var plan = Patcher.PlanMerge(_env, state.Analysis);
+        Assert.Empty(plan.Unresolved);   // the three agree on every shared entry - nothing to ask
+        Patcher.Generate(_env, plan, state.Analysis, _env.InstalledVersion, "test");
+        var merged = File.ReadAllText(Path.Combine(_env.ModsDir, Patcher.FolderName, "data", "loot", "loot.json"));
+
+        // every mod's ship survives the union, and no raw FFU command leaks into it
+        Assert.Contains("IthTug", merged);
+        Assert.Contains("FalcOne", merged);
+        Assert.Contains("MyShip", merged);
+        Assert.DoesNotContain("--ADD--", merged);
+        Assert.DoesNotContain("ExtraShip", merged);
+
+        // and the patch actually resolves it on the next scan
+        state = Engine.Analyze(_env);
+        Assert.Contains("loot/RandomShipBrokerOKLG", state.Patch.CoveredKeys);
+    }
+
+    [Fact]
     public void Remove_DeletesFolderAndDropsLoadOrderEntry()
     {
         var state = Engine.Analyze(_env);
