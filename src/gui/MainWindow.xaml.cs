@@ -484,6 +484,9 @@ public partial class MainWindow : Window
         var tooltip = m.Dir ?? m.Raw;
         if (m.LogNotes.Count > 0) tooltip += "\n" + string.Join("\n", m.LogNotes.Select(n => "• " + n));
         if (versionNote is not null) tooltip += "\n" + versionNote;
+        // why this row says "FFU mod" in Notes, the marker rather than the Workshop page
+        if (m.IsFfu && m.FfuSignals.Count > 0)
+            tooltip += "\nFFU-dependent, detected from " + string.Join(", ", m.FfuSignals);
         tooltip += "\n(double-click for details)";
         var draggable = m.Registered && m.Kind != EntryKind.Core;
         var (lastUpdated, updText, updBrush) = UpdateInfo(m);

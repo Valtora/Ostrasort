@@ -120,6 +120,17 @@ spaced forms of a name are the same mod. An explicit `LoadGroup="WithVanilla"` i
 the one opt-out — it keeps a mod in the non-FFU block — unless the mod also
 declares a hard `requiredMods` edge, which wins.
 
+Every signal above is recorded per mod, and Ostrasort names the mods whenever it
+says something about FFU: the banner and the framework-missing warning list each
+mod with its **Workshop ID** and the marker that classified it, the mod's row
+tooltip repeats it, and **Mod details** has an **FFU** section with the full list
+of markers found in that mod.
+
+> **None of this comes from the Steam Workshop page.** The "Required items" panel
+> on the right of a Workshop page is hand-curated by the mod author and Ostrasort
+> never reads it. A mod can be genuinely FFU-dependent while listing no required
+> items at all — the markers live in the mod's own `mod_info.json` and data files.
+
 ### Ordering rules
 
 Ostrasort produces the order FFU wants:

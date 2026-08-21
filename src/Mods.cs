@@ -371,7 +371,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 }
             }
             if (anyReference) mod.FfuSignals.Add("strReference clone entries in its data");
-            if (anyCommands) mod.FfuSignals.Add("--ADD--/--DEL--/--MOD--/--INS-- precision array commands");
+            if (anyCommands) mod.FfuSignals.Add("FFU precision array commands (--ADD--, --DEL--, --MOD--, --INS--) in its data");
             mod.UsesElasticApi |= anyReference || anyCommands;
         }
 
@@ -431,7 +431,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 if (mod.RemoveIds.Count > 0)
                 {
                     mod.UsesElasticApi = true;
-                    mod.FfuSignals.Add($"removeIds in mod_info.json ({mod.RemoveIds.Count} entr(y/ies))");
+                    mod.FfuSignals.Add($"removeIds in mod_info.json ({mod.RemoveIds.Count} entr{(mod.RemoveIds.Count == 1 ? "y" : "ies")})");
                 }
             }
             if (root.TryGetProperty("changesMap", out var cm) && cm.ValueKind == JsonValueKind.Object)
@@ -451,7 +451,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                     if (api.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(api.GetString()))
                         mod.RequiredApis.Add(api.GetString()!.Trim());
             if (mod.RequiredApis.Count > 0)
-                mod.FfuSignals.Add($"requiredAPIs in mod_info.json ({string.Join(", ", mod.RequiredApis.Take(3))}) - needs the FFU framework");
+                mod.FfuSignals.Add($"requiredAPIs in mod_info.json ({string.Join(", ", mod.RequiredApis.Take(3))}), which needs the FFU framework");
 
             if (root.TryGetProperty("requiredMods", out var reqMods) && reqMods.ValueKind == JsonValueKind.Array)
                 foreach (var rm in reqMods.EnumerateArray())
@@ -471,7 +471,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
             if (root.TryGetProperty("bFFU", out var ffu) && JsonTrue(ffu))
             {
                 mod.UsesElasticApi = true;
-                mod.FfuSignals.Add("bFFU hint in mod_info.json");
+                mod.FfuSignals.Add("the bFFU hint in mod_info.json");
             }
         }
         catch (JsonException e)

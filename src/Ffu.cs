@@ -275,7 +275,7 @@ public static class FfuAnalysis
                 m.IsFfu = true;
                 m.FfuOverride = true;
                 m.FfuGroup = FfuLoadGroup.AfterFFU;
-                m.FfuSignals.Add("you marked it FFU-dependent (manual override)");
+                m.FfuSignals.Add("a manual FFU-dependent tag you added");
             }
             if (m.Meta?.Group is FfuLoadGroup.FFUCore or FfuLoadGroup.AfterFFU)
             {
@@ -287,7 +287,7 @@ public static class FfuAnalysis
             {
                 m.IsFfu = true;
                 m.FfuGroup = FfuLoadGroup.FFUCore;
-                if (m.FfuSignals.Count == 0) m.FfuSignals.Add("it is Minor Fixes Plus (the FFU core-tier mod)");
+                if (m.FfuSignals.Count == 0) m.FfuSignals.Add("the name Minor Fixes Plus (the FFU core-tier mod)");
             }
             if (m.UsesElasticApi && !m.IsFfu)
             {
@@ -328,7 +328,7 @@ public static class FfuAnalysis
                     if (target?.IsFfu != true && FfuId(dep) != FfuId(MinorFixesPlus)) continue;
                     m.IsFfu = true;
                     m.FfuGroup = FfuLoadGroup.AfterFFU;
-                    m.FfuSignals.Add($"depends on FFU mod '{dep}'");
+                    m.FfuSignals.Add($"a declared dependency on the FFU mod '{dep}'");
                     changed = true;
                     break;
                 }
@@ -384,6 +384,32 @@ public static class FfuAnalysis
             .FirstOrDefault();
     }
 
+    /// <summary>
+    /// One mod named the way a player can act on it: display name, Workshop id
+    /// (or folder), and the marker that made Ostrasort classify it FFU-dependent.
+    /// Nothing in the GUI used to say WHICH mod triggered an FFU warning, and the
+    /// signal that caused it lived only in the JSON report, so a player with a
+    /// long mod list had no way to find the culprit.
+    /// </summary>
+    public static string WhyFfu(ModEntry m)
+    {
+        var name = m.DisplayName ?? m.Name;
+        var where = m.WorkshopId is { Length: > 0 } id ? $"Workshop {id}"
+            : m.Dir is { Length: > 0 } dir ? $"folder {Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar))}"
+            : "no folder on disk";
+        var why = m.FfuSignals.Count > 0 ? m.FfuSignals[0] : "an FFU marker in its files";
+        return $"{name} ({where}). Detected from {why}";
+    }
+
+    /// <summary>The FFU-classified mods as "name (where). Detected from ..." sentences, capped so one warning stays readable.</summary>
+    private static string NameThem(IReadOnlyList<ModEntry> ffuMods, int cap = 6)
+    {
+        var shown = string.Join(" ", ffuMods.Take(cap).Select(m => WhyFfu(m) + "."));
+        return ffuMods.Count > cap
+            ? shown + $" There are {ffuMods.Count - cap} more, each noted as an FFU mod in the mod table."
+            : shown;
+    }
+
     // ------------------------------------------------------------- hygiene ---
 
     private static void Hygiene(GameEnv env, Analysis a, List<ModEntry> mods)
@@ -426,9 +452,17 @@ public static class FfuAnalysis
         }
 
         if (ctx.AnyFfuMods && !ctx.FrameworkPresent)
-            a.Warnings.Add("FFU-dependent mod(s) are installed but the FFU framework (Assembly-CSharp.FFU_*.mm.dll " +
-                           "in BepInEx\\monomod) is missing - their FFU-style data will not load correctly and " +
-                           "partial-object entries would corrupt the objects they touch");
+        {
+            var ffuMods = mods.Where(m => m.IsFfu).ToList();
+            a.Warnings.Add(
+                $"{ffuMods.Count} FFU-dependent mod(s) are installed but the FFU framework " +
+                "(Assembly-CSharp.FFU_*.mm.dll in BepInEx\\monomod) is missing. Their FFU-style data will not " +
+                "load correctly, and partial-object entries would corrupt the objects they touch. " +
+                $"These are the mods, and the marker found in each. {NameThem(ffuMods)} " +
+                "Ostrasort reads each mod's own files for this, so a mod can be FFU-dependent even when its " +
+                "Steam Workshop page lists no required items. Open a mod's details (double-click it) to see " +
+                "every marker found in it.");
+        }
 
         foreach (var p in mods.Where(m => m.IsFfuPatch && m.Registered))
             a.Warnings.Add($"FFU patch mod '{p.DisplayName ?? p.Name}' applies once - " +
@@ -593,6 +627,15 @@ public static class FfuAnalysis
         lines.Add($"{ctx.Summary} detected - Ostrasort applies FFU's ordering rules: all non-FFU mods load first " +
                   "(the Ostrasort Patch closes that block), then Minor Fixes Plus, then FFU mods, dependency-sorted " +
                   "per their Autoload.Meta.toml.");
+
+        // WHICH mods, and why. Players read this banner and reasonably check the
+        // Steam Workshop page's "Required items" panel, which is hand-curated by
+        // the author and has nothing to do with the markers Ostrasort reads.
+        var ffuMods = a.AllMods.Where(m => m.IsFfu && !m.Disabled).ToList();
+        if (ffuMods.Count > 0)
+            lines.Add($"Ostrasort found {ffuMods.Count} FFU-dependent mod(s), with the marker in each. {NameThem(ffuMods)} " +
+                      "That comes from each mod's own files, so a mod can be FFU-dependent even when its Steam " +
+                      "Workshop page lists no required items.");
         if (ctx.FrameworkPresent)
             lines.Add("With FFU installed the game merges same-name objects field-by-field at load (instead of " +
                       "whole-object replacement) - the collision analysis below accounts for that. Plain loot/shop " +

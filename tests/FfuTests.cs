@@ -324,6 +324,47 @@ public class FfuClassifyTests
     }
 
     [Fact]
+    public void FfuModsWithoutFramework_WarningNamesTheModAndItsWorkshopId()
+    {
+        // reported by a player: the warning said "FFU-dependent mod(s) are installed"
+        // and named none of them, so with a long mod list there was no way to find
+        // the culprit - and Steam's hand-curated "Required items" panel listed nothing
+        var m = TestData.Workshop("3738775187", "Sundries Expansion");
+        m.RequiredApis.Add("FFU_BR_Core>=0.6.0");
+        m.FfuSignals.Add("requiredAPIs in mod_info.json (FFU_BR_Core>=0.6.0), which needs the FFU framework");
+
+        var a = Analyze(m);
+
+        var warning = Assert.Single(a.Warnings, w => w.Contains("framework") && w.Contains("missing"));
+        Assert.Contains("Sundries Expansion", warning);
+        Assert.Contains("Workshop 3738775187", warning);
+        Assert.Contains("requiredAPIs", warning);
+        Assert.Contains("Workshop page lists no required items", warning);
+    }
+
+    [Fact]
+    public void Notices_NameEveryFfuMod()
+    {
+        var m = TestData.Workshop("42", "Elastic Guns");
+        m.UsesElasticApi = true;
+        m.FfuSignals.Add("strReference clone entries in its data");
+        var a = Analyze(m);
+
+        var notices = FfuAnalysis.Notices(a);
+        Assert.Contains(notices, n => n.Contains("Elastic Guns") && n.Contains("Workshop 42")
+                                      && n.Contains("strReference"));
+    }
+
+    [Fact]
+    public void WhyFfu_FallsBackToTheFolderWhenThereIsNoWorkshopId()
+    {
+        var m = TestData.Mod("LocalThing");
+        m.FfuSignals.Add("the bFFU hint in mod_info.json");
+        Assert.Equal("LocalThing (folder LocalThing). Detected from the bFFU hint in mod_info.json",
+            FfuAnalysis.WhyFfu(m));
+    }
+
+    [Fact]
     public void FfuGameVersionMismatch_WarnsLoudly()
     {
         // the exact failure seen live: FFU built for 0.15.1.0 on a 0.15.1.6 game
@@ -818,7 +859,7 @@ public class FfuOverrideTests
             Assert.True(glass.IsFfu);
             Assert.True(glass.FfuOverride);
             Assert.Equal(FfuLoadGroup.AfterFFU, glass.FfuGroup);
-            Assert.Contains(glass.FfuSignals, s => s.Contains("marked it FFU-dependent"));
+            Assert.Contains(glass.FfuSignals, s => s.Contains("manual FFU-dependent tag"));
         }
         finally { try { File.Delete(path); } catch { } }
     }

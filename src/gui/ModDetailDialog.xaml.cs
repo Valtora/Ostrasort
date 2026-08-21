@@ -104,6 +104,26 @@ public partial class ModDetailDialog : Window
                  "Change it with right-click > Load priority.", Dim);
         }
 
+        // ---- why this counts as an FFU mod ----
+        // The FFU warnings and the banner name the mods now, and this is where a
+        // player lands from them: the exact markers, and the reminder that none of
+        // it comes from the Workshop page's hand-curated "Required items" panel.
+        if (m.IsFfu)
+        {
+            Section("FFU");
+            Line(m.IsFfuPatch
+                    ? "An FFU patch mod. It applies once, so remove it from the load order after the next game launch."
+                    : m.FfuGroup == FfuLoadGroup.FFUCore
+                        ? "The FFU core tier. It has to load as the first FFU mod."
+                        : "Treated as FFU-dependent, so it loads after every non-FFU mod.", Dim);
+            foreach (var sig in m.FfuSignals) Line("• " + sig, Dim);
+            Line("Ostrasort reads this from the mod's own files. A Steam Workshop page can list no required items " +
+                 "and the mod still be FFU-dependent.", Dim);
+            if (m.FfuOverride)
+                Line("You tagged this one by hand. Right-click it in the mod table to stop treating it as " +
+                     "FFU-dependent.", Dim);
+        }
+
         // ---- status notes ----
         var notes = m.NoteLines(_env.InstalledVersion);
         if (notes.Count > 0)
