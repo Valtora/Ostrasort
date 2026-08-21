@@ -833,10 +833,13 @@ public partial class MainWindow : Window
 
     // ------------------------------------------------------------ drag-drop ---
 
-    private static DataGridRow? RowUnder(DependencyObject? d)
+    private static DataGridRow? RowUnder(DependencyObject? d) => ContainerUnder<DataGridRow>(d);
+
+    /// <summary>The item container of type <typeparamref name="T"/> the click landed in, or null when it landed on the control's own chrome (scrollbar, header, empty space).</summary>
+    private static T? ContainerUnder<T>(DependencyObject? d) where T : DependencyObject
     {
-        while (d is not null and not DataGridRow) d = VisualTreeHelper.GetParent(d);
-        return d as DataGridRow;
+        while (d is not null and not T) d = VisualTreeHelper.GetParent(d);
+        return d as T;
     }
 
     private void ModsGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1878,9 +1881,11 @@ public partial class MainWindow : Window
 
     private void Profiles_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateProfileButtons();
 
+    /// <summary>Switch on a double-clicked ROW only - see <see cref="ModsGrid_MouseDoubleClick"/> for why the chrome has to be excluded.</summary>
     private void Profiles_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (ListProfiles.SelectedItem is ProfileRow) ProfileSwitch_Click(sender, e);
+        if (ContainerUnder<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is not ProfileRow) return;
+        ProfileSwitch_Click(sender, e);
     }
 
     private void ProfileSave_Click(object sender, RoutedEventArgs e)
@@ -1995,9 +2000,19 @@ public partial class MainWindow : Window
     private void OpenGame_Click(object sender, RoutedEventArgs e) => OpenFolder(_env.GameRoot);
     private void OpenMods_Click(object sender, RoutedEventArgs e) => OpenFolder(_env.ModsDir);
 
+    /// <summary>
+    /// Open the details for a double-clicked ROW only. WPF raises
+    /// <c>MouseDoubleClick</c> on the whole control even when the click landed on
+    /// its chrome - Control's MouseDown class handler is registered with
+    /// handledEventsToo, so the scrollbar's repeat buttons handling the click does
+    /// not stop it. Without the row check, a second click on the scroll arrows,
+    /// the thumb, a column header or the empty space below the last row opened the
+    /// details window for whatever row happened to be selected.
+    /// </summary>
     private void ModsGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (ModsGrid.SelectedItem is ModRow row) ShowModDetails(row);
+        if (RowUnder(e.OriginalSource as DependencyObject)?.Item is not ModRow row) return;
+        ShowModDetails(row);
     }
 
     // ---- selected-mod action bar (buttons above the table act on the current
