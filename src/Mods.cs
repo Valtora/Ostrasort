@@ -401,7 +401,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         if (!File.Exists(path)) return;
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(path), Lenient);
+            using var doc = GameJson.Parse(File.ReadAllText(path), Lenient);
             var root = doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0
                 ? doc.RootElement[0]
                 : doc.RootElement;
@@ -559,6 +559,13 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 }
                 catch (JsonException)
                 {
+                    // Repair first what the game's own parser accepts and
+                    // strict JSON does not: an unescaped control character in a
+                    // string, a single-quoted string, a \' escape (see
+                    // GameJson). A file the game loads without complaint is
+                    // never reported as broken. Then judge what is left.
+                    var probe = GameJson.TryRelax(text, out var relaxed) ? relaxed : text;
+
                     // Strict rejects both comments and trailing commas; the game
                     // rejects only trailing commas. Retry allowing comments but not
                     // trailing commas: if THAT parses, the file is game-legal (just
@@ -566,13 +573,13 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                     // trailing-comma tolerance would the game's loader ERROR.
                     try
                     {
-                        doc = JsonDocument.Parse(text, CommentsOnly);   // comments only - game-legal
+                        doc = JsonDocument.Parse(probe, CommentsOnly);   // comments only - game-legal
                     }
                     catch (JsonException)
                     {
                         try
                         {
-                            doc = JsonDocument.Parse(text, Lenient);
+                            doc = JsonDocument.Parse(probe, Lenient);
                             onError($"{relPath}: has a trailing comma - the game load would ERROR");
                         }
                         catch (JsonException e)

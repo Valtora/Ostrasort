@@ -73,6 +73,7 @@ Operational gotchas:
 | `src\GameEnv.cs` | install discovery (Steam registry → `libraryfolders.vdf`), game version |
 | `src\Mods.cs` | mod model + the scanner that classifies and indexes each mod |
 | `src\Analysis.cs` | collision detection, sorting rules, manual-order validation |
+| `src\GameJson.cs` | reads JSON the way the game's own parser does: repairs the unescaped control characters, single-quoted strings and `\'` escapes LitJson accepts and System.Text.Json rejects |
 | `src\FieldDiff.cs` | non-loot collision analysis (drives mergeability via `ObjectMerge`) |
 | `src\ObjectMerge.cs` | the 3-way field-merge engine for non-loot objects |
 | `src\SchemaValidator.cs` | compact draft-07-subset validator for the game's schema files |

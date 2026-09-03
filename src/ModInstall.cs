@@ -358,7 +358,7 @@ public static class ModInstall
         {
             using var s = entry.Open();
             using var reader = new StreamReader(s);
-            using var doc = JsonDocument.Parse(reader.ReadToEnd(), Lenient);
+            using var doc = GameJson.Parse(reader.ReadToEnd(), Lenient);
             var el = doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0
                 ? doc.RootElement[0] : doc.RootElement;
             if (el.ValueKind == JsonValueKind.Object &&

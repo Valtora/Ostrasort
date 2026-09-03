@@ -175,9 +175,16 @@ Surfaced in the same pass.
   direction, a mod that predates the game against one built for a newer game)
 - **`aIgnorePatterns` removals**, which core or mod files the patterns skip
 - **invalid or lenient JSON**, files with a trailing comma (or otherwise invalid
-  JSON), which the game's own loader treats as an ERROR. Comments (`//` and
-  `/* */`) are **not** flagged, since the game accepts them and ships them in its
-  own core data (`tokens/verbs.json`, `conditions_simple/conditions_simple.json`)
+  JSON), which the game's own loader treats as an ERROR. What the game's parser
+  accepts is **not** flagged, because a file it loads without complaint is not a
+  problem the player can see or act on: comments (`//` and `/* */`), which the
+  game ships in its own core data (`tokens/verbs.json`,
+  `conditions_simple/conditions_simple.json`), and the three things LitJson takes
+  that RFC JSON does not: an unescaped control character inside a string (a line
+  break pasted into `strNotes` is the common one), a single-quoted string, and a
+  `\'` escape. Ostrasort repairs those into strict JSON before reading the file
+  (`src\GameJson.cs`), so the mod still gets its name, its objects, and its place
+  in the patch
 - **image overrides**, two mods shipping the same `images\` path (last wins the
   whole file)
 - **BepInEx sanity**, plugins that can never load because the loader is not

@@ -73,6 +73,20 @@ public class ModInstallTests : IDisposable
     }
 
     [Fact]
+    public void StrNameHoldingARawLineBreak_StillNamesTheInstall()
+    {
+        // an unescaped line break in strNotes is game-legal (the game reads its
+        // JSON with LitJson); it must not cost the mod its own name
+        var zip = Zip(
+            ("MyMod/mod_info.json", "[{\"strName\":\"Vanilla Plus Character Generation\",\"strNotes\":\"First line\nSecond line\"}]"),
+            ("MyMod/data/items/x.json", "[]"));
+
+        var plan = ModInstall.Inspect(_env, zip);
+        var c = Assert.Single(plan.Components);
+        Assert.Equal("Vanilla Plus Character Generation", c.Name);
+    }
+
+    [Fact]
     public void GitHubWrapperFolder_IsStripped()
     {
         // GitHub "Download ZIP" wraps everything in <repo>-<branch>\

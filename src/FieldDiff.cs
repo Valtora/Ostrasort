@@ -197,7 +197,7 @@ public static class FieldDiff
             // on first ACCESS, not at Parse - so the whole walk sits in the try
             try
             {
-                var root = JsonNode.Parse(File.ReadAllText(file), null, Lenient);
+                var root = GameJson.ParseNode(File.ReadAllText(file), null, Lenient);
                 var objects = root is JsonArray arr ? arr.ToList() : new List<JsonNode?> { root };
                 foreach (var o in objects)
                     if (o?["strName"]?.GetValue<string>() == strName)

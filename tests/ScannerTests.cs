@@ -152,6 +152,23 @@ public class ScannerTests : IDisposable
     }
 
     [Fact]
+    public void Scan_AcceptsWhatTheGamesParserAccepts_RawLineBreaksAndSingleQuotes()
+    {
+        var mod = MakeMod("GameLegal");
+        // the game reads its data with LitJson, which copies every character
+        // inside a string except " and \, so an unescaped line break loads fine
+        WriteJson(mod.Dir!, @"data\items\rawbreak.json", "[{\"strName\":\"ItmRawBreak\",\"strDesc\":\"First line\nSecond line\"}]");
+        // LitJson also accepts single-quoted strings
+        WriteJson(mod.Dir!, @"data\items\quoted.json", "[{'strName':'ItmSingleQuoted'}]");
+
+        new Scanner(Env(), useCoreCache: false).Scan(mod);
+
+        Assert.True(mod.Claims.ContainsKey(("items", "ItmRawBreak")));
+        Assert.True(mod.Claims.ContainsKey(("items", "ItmSingleQuoted")));
+        Assert.Empty(mod.JsonErrors);   // the game never complains about these, so neither do we
+    }
+
+    [Fact]
     public void Scan_ReadsBFFUHintFromModInfo_AsAnFfuSignal()
     {
         var mod = MakeMod("Fragment");
@@ -176,5 +193,21 @@ public class ScannerTests : IDisposable
 
         Assert.Equal("1.2.3", mod.ModVersion);
         Assert.Equal("0.16.0.5", mod.GameVersion);
+    }
+
+    [Fact]
+    public void Scan_ReadsModInfoWithARawNewlineInsideAString()
+    {
+        var mod = MakeMod("RawNewline");
+        // the game's own parser copies every character inside a string except
+        // " and \, so an unescaped line break loads fine in game
+        WriteJson(mod.Dir!, "mod_info.json",
+            "[{\"strName\":\"Vanilla Plus Character Generation\",\"strNotes\":\"First line\nSecond line\"}]");
+
+        new Scanner(Env(), useCoreCache: false).Scan(mod);
+
+        Assert.Equal("Vanilla Plus Character Generation", mod.DisplayName);
+        Assert.Equal("First line\nSecond line", mod.StrNotes);
+        Assert.Empty(mod.JsonErrors);
     }
 }
