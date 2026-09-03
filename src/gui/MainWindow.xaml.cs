@@ -513,10 +513,11 @@ public partial class MainWindow : Window
     /// <summary>
     /// The mod's Description-column text, as (raw BBCode, single-line plain).
     /// Prefers the live Steam Workshop page description (fetched into
-    /// <see cref="_wsDescription"/> for subscribed Workshop mods) and falls back
-    /// to the mod's own mod_info.json strNotes. The raw BBCode feeds the rich
-    /// hover tooltip (rendered by <see cref="BbCodeInline"/>); the flattened plain
-    /// form feeds the ellipsis-trimmed cell and the search filter.
+    /// <see cref="_wsDescription"/> for every mod that carries a published id,
+    /// subscribed or a local copy) and falls back to the mod's own mod_info.json
+    /// strNotes. The raw BBCode feeds the rich hover tooltip (rendered by
+    /// <see cref="BbCodeInline"/>); the flattened plain form feeds the
+    /// ellipsis-trimmed cell and the search filter.
     /// </summary>
     private (string Raw, string Line) DescribeMod(ModEntry m)
     {
@@ -551,7 +552,10 @@ public partial class MainWindow : Window
     /// Ostranauts pulls the newer files itself on the next launch, so this is
     /// purely informational. Everything else (and any Workshop mod before its
     /// publish time arrives, or while offline) falls back to the folder's own
-    /// last-write time.
+    /// last-write time. A LOCAL copy of a Workshop mod is deliberately in that
+    /// group even though its published time is now fetched for the Description
+    /// column: Steam does not manage that folder, so nothing would act on the
+    /// marker and the player could not clear it.
     /// </summary>
     private (string Date, string Upd, Brush Brush) UpdateInfo(ModEntry m)
     {
@@ -2346,12 +2350,21 @@ public partial class MainWindow : Window
     /// Runs after every render, but a session cache means Steam is only queried
     /// for ids we haven't seen yet, and any failure (offline, rate-limited) is
     /// silent — the folder-date fallback already rendered.
+    /// <para>
+    /// Every mod carrying a published id is looked up, not just the subscribed
+    /// ones: a Workshop mod copied into <c>Mods\</c> keeps the
+    /// <c>strWorkshopID</c> from its <c>mod_info.json</c>, and skipping it left
+    /// its Description column stuck on the author's <c>strNotes</c> forever.
+    /// The publish time is still only ACTED on for a subscribed mod (see
+    /// <see cref="UpdateInfo"/>), since Steam does not manage a local copy and
+    /// an "update available" marker there would be an alarm nobody can clear.
+    /// </para>
     /// </summary>
     private async Task RefreshWorkshopUpdatesAsync()
     {
         var rows = _rows;
         var toFetch = rows
-            .Where(r => r.M.Kind == EntryKind.Workshop && r.M.WorkshopId is { } w
+            .Where(r => r.M.WorkshopId is { } w
                         && long.TryParse(w, out _) && !_wsUpdated.ContainsKey(w))
             .Select(r => r.M.WorkshopId!)
             .Distinct()
@@ -2396,7 +2409,7 @@ public partial class MainWindow : Window
             for (var i = 0; i < rows.Count; i++)
             {
                 var r = rows[i];
-                if (r.M.Kind != EntryKind.Workshop || r.M.WorkshopId is not { } w || !fetched.ContainsKey(w)) continue;
+                if (r.M.WorkshopId is not { } w || !fetched.ContainsKey(w)) continue;
                 var (lu, upd, ub) = UpdateInfo(r.M);
                 var (descRaw, descLine) = DescribeMod(r.M);
                 rows[i] = r with { LastUpdated = lu, UpdateText = upd, UpdateBrush = ub,
