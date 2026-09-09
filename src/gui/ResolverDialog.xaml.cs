@@ -20,8 +20,14 @@ public partial class ResolverDialog : Window
 {
     private static readonly FontFamily Mono = new("Consolas");
 
-    /// <summary>One decision page: the item it decides, its pre-built UI, and its radios (for sync).</summary>
-    private sealed record DecisionPage(MergeItem Item, string SuggestedId, UIElement Content, List<RadioButton> Radios);
+    /// <summary>
+    /// One decision page: the item it decides, its pre-built UI, and its radios
+    /// (for sync). <see cref="Pool"/> and <see cref="Bulk"/> are set for a loot
+    /// item, where one pool can raise a decision per stocked item and the same
+    /// answer usually applies to all of them.
+    /// </summary>
+    private sealed record DecisionPage(MergeItem Item, string SuggestedId, UIElement Content, List<RadioButton> Radios,
+                                       PoolPlan? Pool = null, Button? Bulk = null);
 
     private readonly MergePlan _plan;
     private readonly List<DecisionPage> _pages = new();
@@ -52,12 +58,13 @@ public partial class ResolverDialog : Window
 
     private void BuildDecisionPages()
     {
+        // a pool's pages are emitted contiguously - the bulk answer relies on it
         foreach (var pool in _plan.Pools)
             foreach (var item in pool.AllItems.Where(i => i.Contested))
-                _pages.Add(BuildDecisionPage(pool.Collision, item, isLoot: true));
+                _pages.Add(BuildDecisionPage(pool.Collision, item, isLoot: true, pool));
         foreach (var obj in _plan.Objects)
             foreach (var item in obj.Fields.Where(i => i.Contested))
-                _pages.Add(BuildDecisionPage(obj.Collision, item, isLoot: false));
+                _pages.Add(BuildDecisionPage(obj.Collision, item, isLoot: false, null));
     }
 
     private void ShowPage(int index)
@@ -77,6 +84,7 @@ public partial class ResolverDialog : Window
             TxtPageTitle.Text = "Your decision";
             TxtProgress.Text = $"Decision {index + 1} of {total}";
             SyncRadios(page);
+            UpdateBulk(page);   // its label counts the pages still ahead in this pool
             PageHost.Content = page.Content;
         }
         else
@@ -158,7 +166,7 @@ public partial class ResolverDialog : Window
 
     // ------------------------------------------------------- decision pages ---
 
-    private DecisionPage BuildDecisionPage(Collision c, MergeItem item, bool isLoot)
+    private DecisionPage BuildDecisionPage(Collision c, MergeItem item, bool isLoot, PoolPlan? pool)
     {
         var suggestedId = item.ChosenSourceId
             ?? (item.Options.LastOrDefault(o => o.SourceId != "__union__") ?? item.Options[^1]).SourceId;
@@ -194,7 +202,83 @@ public partial class ResolverDialog : Window
             columns.Children.Add(ExcludeColumn(group, item, radios));
 
         panel.Children.Add(columns);
-        return new DecisionPage(item, suggestedId, panel, radios);
+
+        // One stale copy of a shop pool raises a decision per item it stocks, and
+        // the answer is nearly always the same mod every time (its quantities are
+        // higher, or newer). Offer to carry the pick across the rest of this pool
+        // rather than making the player click through twenty identical pages.
+        Button? bulk = null;
+        if (pool is not null)
+        {
+            bulk = new Button
+            {
+                Padding = new Thickness(10, 4, 10, 4),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 2, 0, 4),
+                Visibility = Visibility.Collapsed,
+                ToolTip = "Answer every remaining item in this inventory the same way and skip ahead. " +
+                          "Items this mod does not stock keep their own page.",
+            };
+            bulk.Click += (_, _) => ApplyToRestOfPool(pool);
+            panel.Children.Add(bulk);
+        }
+
+        var page = new DecisionPage(item, suggestedId, panel, radios, pool, bulk);
+        // the label names the mod currently selected, so it follows the radios
+        foreach (var rb in radios) rb.Checked += (_, _) => UpdateBulk(page);
+        return page;
+    }
+
+    /// <summary>
+    /// Shows the bulk answer when the current pick is a mod's own entry and this
+    /// pool still has pages ahead, and labels it with that mod and the count.
+    /// </summary>
+    private void UpdateBulk(DecisionPage page)
+    {
+        if (page.Bulk is not { } b || page.Pool is null) return;
+        var ahead = PagesAheadInPool(page.Pool);
+        var opt = page.Item.Excluded ? null
+            : page.Item.Options.FirstOrDefault(o => o.SourceId == page.Item.ChosenSourceId);
+        if (ahead == 0 || opt is null)
+        {
+            b.Visibility = Visibility.Collapsed;
+            return;
+        }
+        b.Visibility = Visibility.Visible;
+        b.Content = ahead == 1
+            ? $"Use {opt.SourceLabel}'s amount for the 1 remaining item here"
+            : $"Use {opt.SourceLabel}'s amounts for the {ahead} remaining items here";
+    }
+
+    /// <summary>Decision pages after the current one that belong to the same pool (they are contiguous).</summary>
+    private int PagesAheadInPool(PoolPlan pool) =>
+        _pages.Skip(_index + 1).TakeWhile(p => ReferenceEquals(p.Pool, pool)).Count();
+
+    /// <summary>
+    /// Applies the current page's chosen source to every later item in the same
+    /// pool, then jumps past them. Only forward: a decision the player already
+    /// made on an earlier page is never overwritten. An item the chosen mod does
+    /// not stock has no option to copy, so it keeps its own page.
+    /// </summary>
+    private void ApplyToRestOfPool(PoolPlan pool)
+    {
+        if (_index < 0 || _index >= _pages.Count) return;
+        var from = _pages[_index].Item;
+        if (from.ChosenSourceId is not { } sourceId) return;
+        from.AutoResolved = false;   // pressing this is a deliberate choice, not a suggestion
+
+        var rest = _pages.Skip(_index + 1).TakeWhile(p => ReferenceEquals(p.Pool, pool)).ToList();
+        var skipped = 0;
+        foreach (var p in rest)
+        {
+            if (p.Item.Options.FirstOrDefault(o => o.SourceId == sourceId) is not { } opt) { skipped++; continue; }
+            p.Item.ChosenSourceId = opt.SourceId;
+            p.Item.Excluded = false;
+            p.Item.AutoResolved = false;
+        }
+        // land on the first page the bulk answer could not decide, or past the pool
+        ShowPage(skipped == 0 ? _index + 1 + rest.Count
+            : _index + 1 + rest.FindIndex(p => p.Item.Options.All(o => o.SourceId != sourceId)));
     }
 
     /// <summary>Re-check the page's radios from the item's current state (prior page edits, Choose for me).</summary>
@@ -604,4 +688,22 @@ public partial class ResolverDialog : Window
     /// (this exact regression shipped once).
     /// </summary>
     internal int SelectorsInTree() => _pages.Sum(p => p.Radios.Count);
+
+    /// <summary>
+    /// Self-test hook: runs the pool bulk answer from the first loot decision and
+    /// returns how many later items in that pool it decided. Proves the shortcut
+    /// actually carries the pick across, not just that a button was rendered.
+    /// </summary>
+    internal int SelfTestBulkAnswer()
+    {
+        var idx = _pages.FindIndex(p => p.Pool is not null);
+        if (idx < 0) return 0;
+        ShowPage(idx);
+        var pool = _pages[idx].Pool!;
+        int Pending() => _pages.Skip(idx + 1).TakeWhile(p => ReferenceEquals(p.Pool, pool))
+            .Count(p => p.Item.AutoResolved);
+        var before = Pending();
+        ApplyToRestOfPool(pool);
+        return before - Pending();
+    }
 }

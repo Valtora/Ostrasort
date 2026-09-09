@@ -288,6 +288,14 @@ public static class Program
                 Console.Error.WriteLine("gui-smoke FAIL: synthetic contested plan rendered no selectors.");
                 return 1;
             }
+            // the pool bulk answer must actually carry the pick to the rest of the
+            // pool - the synthetic plan has two contested items in one pool
+            var bulkDecided = synthResolver.SelfTestBulkAnswer();
+            if (bulkDecided == 0)
+            {
+                Console.Error.WriteLine("gui-smoke FAIL: the pool bulk answer decided nothing.");
+                return 1;
+            }
             // verify Fluent dark theming actually applies (not silently swallowed)
             Gui.ThemeManager.Apply("dark");
 #pragma warning disable WPF0001
@@ -300,7 +308,8 @@ public static class Program
                 return 1;
             }
             Console.WriteLine($"gui-smoke ok (windows constructed; resolver selectors={resolver.SelectorsInTree()}; " +
-                              $"synthetic resolver selectors={synthResolver.SelectorsInTree()}; theming ok)");
+                              $"synthetic resolver selectors={synthResolver.SelectorsInTree()}; " +
+                              $"pool bulk answer decided {bulkDecided}; theming ok)");
             return 0;
         }
 
@@ -777,6 +786,18 @@ public static class Program
                 new MergeOption(b.Dir!, b.DisplayName!, "ItmChair01Loose=1.0x9"),
             },
         };
+        // a second contested item in the SAME pool: the shape a stale copy of a
+        // shop inventory produces, and what the bulk "answer the rest of this
+        // pool" shortcut exists for
+        var lootContested2 = new MergeItem
+        {
+            Token = "ItmTable01Loose",
+            Options = new()
+            {
+                new MergeOption(a.Dir!, a.DisplayName!, "ItmTable01Loose=1.0x1"),
+                new MergeOption(b.Dir!, b.DisplayName!, "ItmTable01Loose=1.0x4"),
+            },
+        };
         var lootCarried = new MergeItem
         {
             Token = "ItmLamp01Loose",
@@ -786,7 +807,7 @@ public static class Program
         {
             Collision = new Collision { Type = "loot", ObjName = "CONDStationShop", Claimants = new() { a, b } },
             BaseObject = J("{\"strName\":\"CONDStationShop\"}"),
-            LootItems = new() { lootContested, lootCarried },
+            LootItems = new() { lootContested, lootContested2, lootCarried },
             CoItems = new(),
         };
 
