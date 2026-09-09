@@ -48,6 +48,8 @@ Around those three jobs it is a full mod manager. It can
 
 - turn any mod on or off, remove it, or install one from a `.zip` that never
   came through the Workshop (just drag it onto the window),
+- add newly subscribed mods **turned off** if you subscribe faster than you play,
+  so you can switch them on one at a time and check for conflicts as you go,
 - save your setup as a named **profile** and switch between setups later,
 - manage more than one game install, even on different disks,
 - show each mod's version and last-updated date, and flag a Workshop mod with a

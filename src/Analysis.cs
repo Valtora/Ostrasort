@@ -315,17 +315,23 @@ public sealed class Analysis
         {
             work.Add(m);
             Changes.Add(new Change("add", SuggestedRaw(m),
-                m.IsPatch
-                    ? "the generated Ostrasort Patch exists on disk but is unregistered"
-                    : m.Kind == EntryKind.PluginDir
-                        ? "data mod under BepInEx\\plugins present but unregistered - the game loads only what aLoadOrder lists"
-                        : "local mod folder present but unregistered - invisible to the MODS screen"));
+                m.HoldOnRegister
+                    ? (m.Kind == EntryKind.PluginDir
+                        ? "data mod under BepInEx\\plugins added turned off - tick Active to load it"
+                        : "local mod folder added turned off - tick Active to load it")
+                    : m.IsPatch
+                        ? "the generated Ostrasort Patch exists on disk but is unregistered"
+                        : m.Kind == EntryKind.PluginDir
+                            ? "data mod under BepInEx\\plugins present but unregistered - the game loads only what aLoadOrder lists"
+                            : "local mod folder present but unregistered - invisible to the MODS screen"));
         }
         foreach (var m in UnregisteredWorkshop)
         {
             work.Add(m);
-            Changes.Add(new Change("add", m.Dir!,
-                "subscribed Workshop item not in aLoadOrder (the game will add it on next launch anyway)"));
+            Changes.Add(new Change("add", SuggestedRaw(m),
+                m.HoldOnRegister
+                    ? "subscribed Workshop item added turned off - tick Active to load it"
+                    : "subscribed Workshop item not in aLoadOrder (the game will add it on next launch anyway)"));
         }
 
         // rule 4: clean subset/superset loot collisions load subset-first.
@@ -490,11 +496,19 @@ public sealed class Analysis
     /// generated patch registers plain. Used by the suggestion and by the
     /// single-mod Register action.
     /// </summary>
-    public static string SuggestedRaw(ModEntry m) =>
-        m.Registered ? m.Raw
-        : m.Kind is EntryKind.Workshop or EntryKind.PluginDir ? m.Dir!   // absolute-path registrations
-        : m.IsPatch ? m.Name                 // the patch registers plain, nothing to upload
-        : $"{m.Name}|edit";
+    public static string SuggestedRaw(ModEntry m)
+    {
+        if (m.Registered) return m.Raw;
+        var path = m.Kind is EntryKind.Workshop or EntryKind.PluginDir ? m.Dir!   // absolute-path registrations
+            : m.Name;
+        // held back by "Add new mods turned off": the game's own |disabled marker,
+        // which replaces |edit rather than joining it - the same 2-part entry the
+        // in-game MODS screen and the Active checkbox write
+        if (m.HoldOnRegister) return path + "|disabled";
+        return m.Kind is EntryKind.Workshop or EntryKind.PluginDir || m.IsPatch
+            ? path                           // the patch registers plain, nothing to upload
+            : path + "|edit";
+    }
 
     // ------------------------------------------------------ manual ordering ---
 

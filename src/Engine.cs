@@ -7,8 +7,14 @@ public sealed record EngineState(LoadOrderFile Lo, Scanner Scanner, Analysis Ana
 /// <summary>One full read-only pass over the install - shared by the console paths and the GUI.</summary>
 public static class Engine
 {
+    /// <param name="holdNew">
+    /// Register mods found on disk but missing from aLoadOrder with the game's own
+    /// |disabled marker, so the player ticks them Active when ready. Opt-in: the
+    /// GUI's "Add new mods turned off" checkbox and the console's --hold-new.
+    /// </param>
     public static EngineState Analyze(GameEnv env, bool tidy = false, IgnoreList? ignore = null,
-        FfuOverrideList? ffuOverrides = null, CategoryOverrideList? categoryOverrides = null)
+        FfuOverrideList? ffuOverrides = null, CategoryOverrideList? categoryOverrides = null,
+        bool holdNew = false)
     {
         ignore ??= IgnoreList.LoadDefault();
         ffuOverrides ??= FfuOverrideList.LoadDefault();
@@ -26,6 +32,8 @@ public static class Engine
         scanner.IndexCore();
         foreach (var m in analysis.AllMods) scanner.Scan(m);
 
+        if (holdNew) HoldNewMods(analysis);   // after the scan (it needs each mod's class), before anything reads Disabled
+
         FfuAnalysis.Classify(env, analysis, ffuOverrides);   // FFU block membership, patch targets, FFU hygiene
         CategoryAnalysis.Classify(env, analysis, categoryOverrides);   // game-system category + load-priority tier
         analysis.FindCollisions();
@@ -40,6 +48,33 @@ public static class Engine
         var patch = Patcher.Inspect(env, analysis);   // marks collisions the patch resolves
         analysis.BuildSuggestion(tidy);
         return new EngineState(lo, scanner, analysis, patch);
+    }
+
+    /// <summary>
+    /// "Add new mods turned off": every mod found on disk but missing from
+    /// aLoadOrder registers with the game's own |disabled marker instead of
+    /// loading. Leaving it out of the file is not an option - the game appends a
+    /// subscribed Workshop item itself on the next launch, at the very end, after
+    /// the FFU block and the patch - so the entry has to exist for the game to
+    /// stop re-adding it, and the marker is what keeps it from loading.
+    ///
+    /// Marking Disabled here (rather than in the suggestion) means collisions, the
+    /// FFU block and the category bands all see the mod the way the file will look
+    /// once the suggestion is applied, so a held mod raises no conflicts until it
+    /// is ticked Active.
+    ///
+    /// Two mods are never held: the generated patch (it IS the resolution of a
+    /// conflict, not a mod to try later) and the mod loader (holding
+    /// infrastructure breaks every code mod rather than deferring one).
+    /// </summary>
+    private static void HoldNewMods(Analysis a)
+    {
+        foreach (var m in a.UnregisteredLocal.Where(m => !m.Ignored).Concat(a.UnregisteredWorkshop))
+        {
+            if (m.IsPatch || m.Class == ModClass.Infrastructure) continue;
+            m.HoldOnRegister = true;
+            m.Disabled = true;
+        }
     }
 
     /// <summary>

@@ -15,6 +15,7 @@ public sealed class GuiSettings
     public int Tab { get; set; }
     public string Theme { get; set; } = "system";   // "system" | "light" | "dark"
     public bool TechColumns { get; set; }            // show the diagnostic mod-table columns (Source/Class/Data/Workshop ID)
+    public bool HoldNew { get; set; }                // register mods missing from the load order turned off (the game's |disabled marker)
 
     private static string PathFor() => AppPaths.File("settings.json");
 

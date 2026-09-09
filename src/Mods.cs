@@ -29,7 +29,7 @@ public sealed class ModEntry
     public required string Name { get; init; }       // folder name (local) / workshop item id
     public string? Dir { get; init; }                // resolved mod folder; null = dead entry
     public bool EditMarker { get; init; }            // "<Name>|edit"
-    public bool Disabled { get; init; }              // "<entry>|disabled" - the game keeps the entry but skips it at load
+    public bool Disabled { get; set; }               // "<entry>|disabled" - the game keeps the entry but skips it at load
     public string? DisplayName { get; set; }         // strName from mod_info.json
     public string? GameVersion { get; set; }         // strGameVersion from mod_info.json
     public string? ModVersion { get; set; }          // strModVersion from mod_info.json (the mod's own version)
@@ -37,6 +37,14 @@ public sealed class ModEntry
     public string? StrNotes { get; set; }             // strNotes from mod_info.json - the mod's own description (fallback for the Description column)
     public bool Registered { get; set; } = true;
     public bool Ignored { get; set; }                // user chose to leave it unregistered (see IgnoreList)
+    /// <summary>
+    /// Unregistered mods only: register this one with the game's own |disabled
+    /// marker rather than loading it (the "Add new mods turned off" preference).
+    /// Set by <see cref="Engine"/> once classes are known, and honoured by
+    /// <see cref="Analysis.SuggestedRaw"/> so the whole suggestion agrees on the
+    /// entry string. Never set for the generated patch or the mod loader.
+    /// </summary>
+    public bool HoldOnRegister { get; set; }
 
     /// <summary>Workshop item id: the content folder for subscriptions, strWorkshopID for published local mods.</summary>
     public string? WorkshopId => Kind == EntryKind.Workshop ? Name : PublishedId;

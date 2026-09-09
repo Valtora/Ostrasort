@@ -150,6 +150,9 @@
                 <CheckBox x:Name="ChkTidy" Content="Group suggested order by category" VerticalAlignment="Center"
                           Margin="0,0,18,0" Checked="Tidy_Changed" Unchecked="Tidy_Changed"
                           ToolTip="Only affects the SUGGESTED order (cosmetic, opt-in): groups it as core, infrastructure, code, shells, additive data, overrides, patch. It does not regroup the table below."/>
+                <CheckBox x:Name="ChkHoldNew" Content="Add new mods turned off" VerticalAlignment="Center"
+                          Margin="0,0,18,0" Checked="HoldNew_Changed" Unchecked="HoldNew_Changed"
+                          ToolTip="A mod found on disk but missing from the load order is added with the game's own disabled marker, so it does not load until you tick Active. Its place in the order is still worked out, and the game stops re-adding a subscription at the end of the file. Off by default; never applied to the compatibility patch or the mod loader."/>
                 <CheckBox x:Name="ChkTechCols" Content="Technical columns" VerticalAlignment="Center"
                           Margin="0,0,18,0" Checked="TechCols_Changed" Unchecked="TechCols_Changed"
                           ToolTip="Show the diagnostic columns (Source, Class, Data, Workshop ID). Hidden by default; everything they show is also in reports."/>

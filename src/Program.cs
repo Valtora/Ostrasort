@@ -44,7 +44,7 @@ public static class Program
     {
         AppPaths.MigrateLegacyData();   // one-time move of pre-0.23 data to roaming AppData (no-op after the first run)
 
-        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false;
+        bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false, holdNew = false;
         string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null, installZip = null, markFfu = null, unmarkFfu = null;
         string? markLate = null, markEarly = null, markNormal = null, unpinPriority = null;
         for (var i = 0; i < args.Length; i++)
@@ -55,6 +55,7 @@ public static class Program
                 case "--headless": headless = true; break;
                 case "--json": json = true; break;
                 case "--tidy": tidy = true; break;
+                case "--hold-new": holdNew = true; break;
                 case "--smoke-gui": smokeGui = true; break;   // undocumented: construct windows without showing (CI/self-test)
                 case "--smoke-undo": smokeUndo = true; break; // undocumented: exercise snapshot undo/redo against a fixture
                 case "--dump-collisions": break;              // undocumented: print the collision view as text (handled below)
@@ -172,6 +173,10 @@ public static class Program
 
                           --tidy      opt-in cosmetic grouping in the suggestion: core,
                                       infrastructure, code, shells, additive data, overrides, patch
+                          --hold-new  add mods missing from the load order turned off (the game's own
+                                      disabled marker) so they do not load until you turn them on -
+                                      the GUI's "Add new mods turned off" checkbox. Off by default,
+                                      and never applied to the patch or the mod loader
                           --no-gui    never open a window: contested items fall back to the
                                       later-loaded mod's entry (marked for review in the GUI)
                           --game <p>  path to the Ostranauts folder (default: auto-detect via Steam)
@@ -586,7 +591,7 @@ public static class Program
                 // GUI looks like a hang in a redirected script - refuse instead
                 var lone = new (string Flag, bool Set)[]
                 {
-                    ("--tidy", tidy), ("--fresh", fresh), ("--merge", merge),
+                    ("--tidy", tidy), ("--hold-new", holdNew), ("--fresh", fresh), ("--merge", merge),
                     ("--allow-rival-stack", allowRival),
                     ("--overwrite", args.Contains("--overwrite")), ("--delete", args.Contains("--delete")),
                 }.Where(x => x.Set).Select(x => x.Flag).ToList();
@@ -600,7 +605,7 @@ public static class Program
         }
 
         var env = GameEnv.Locate(gameRoot, modsDir);
-        var state = Engine.Analyze(env, tidy);
+        var state = Engine.Analyze(env, tidy, holdNew: holdNew);
         var performed = new List<string>();
 
         if (apply || patch || unpatch || profileLoad is not null)
@@ -617,7 +622,7 @@ public static class Program
             if (switchPlan.Missing.Count > 0)
                 performed.Add($"{switchPlan.Missing.Count} profile mod(s) not installed, skipped: " +
                               string.Join(", ", switchPlan.Missing.Select(m => m.DisplayName)) + ".");
-            state = Engine.Analyze(env, tidy);
+            state = Engine.Analyze(env, tidy, holdNew: holdNew);
         }
 
         if (unpatch)
@@ -629,7 +634,7 @@ public static class Program
                 GateGameClosed("--unpatch");
                 Patcher.Remove(env);
                 performed.Add("Removed the Ostrasort Patch (folder + load-order entry, .bak kept).");
-                state = Engine.Analyze(env, tidy);
+                state = Engine.Analyze(env, tidy, holdNew: holdNew);
             }
         }
 
@@ -664,7 +669,7 @@ public static class Program
                 performed.Add($"Generated the Ostrasort Patch (registered after everything it merges): {string.Join("; ", result.Merged)}");
                 foreach (var w in result.SchemaWarnings)
                     performed.Add($"  schema warning (best-effort merge, verify in game): {w}");
-                state = Engine.Analyze(env, tidy);
+                state = Engine.Analyze(env, tidy, holdNew: holdNew);
             }
         }
 
@@ -673,7 +678,7 @@ public static class Program
             GateGameClosed("--apply");
             state.Lo.Write(state.Analysis.SuggestedOrder);
             performed.Add("Applied the suggested load order. Previous file saved as loading_order.json.bak.");
-            state = Engine.Analyze(env, tidy);
+            state = Engine.Analyze(env, tidy, holdNew: holdNew);
         }
 
         // attribute the game's last-launch log issues to the final mod set (report only)

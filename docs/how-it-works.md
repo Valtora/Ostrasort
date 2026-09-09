@@ -27,6 +27,15 @@ Membership matters too.
   collision and FFU analysis, since they do not load.
 - The **BepInEx Workshop bridge reads `loading_order.json`** to locate subscribed
   code mods' plugins, so even code-only mods need to be there.
+- The **game adds subscribed Workshop items itself**, appending them to the end of
+  `aLoadOrder` on the next launch. So declining to register one is not a stable
+  state: skip it and the game adds it anyway, in the worst slot in the file, after
+  the FFU block and the patch. This is why **Add new mods turned off** registers a
+  newly found mod and marks it `|disabled` rather than leaving it out. The entry
+  exists, so the game stops re-adding it; the marker is what keeps it from
+  loading; and the in-game MODS screen lists it as off until the player turns it
+  on. A held mod is left out of collision and FFU analysis, exactly as any
+  disabled mod is, so it raises nothing until it is turned on.
 - `loading_order.json` can also carry **`aIgnorePatterns`**, global substring
   patterns matched against every data file's path, in core **and** every mod.
   Matching files are skipped entirely (this is the vanilla way to *remove* data

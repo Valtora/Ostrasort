@@ -101,6 +101,7 @@ public partial class MainWindow : Window
         SingleInstance.OnActivate = () => Dispatcher.Invoke(BringToFront);
         Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
+        ChkHoldNew.IsChecked = _settings.HoldNew;
         ChkTechCols.IsChecked = _settings.TechColumns;
         ApplyTechColumns();
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
@@ -120,7 +121,8 @@ public partial class MainWindow : Window
             _manualDirty = false;
             _arrUndo.Clear();
             _arrRedo.Clear();
-            _state = Engine.Analyze(_env, ChkTidy.IsChecked == true, _ignore, _ffuOverrides, _categoryOverrides);
+            _state = Engine.Analyze(_env, ChkTidy.IsChecked == true, _ignore, _ffuOverrides, _categoryOverrides,
+                                    holdNew: ChkHoldNew.IsChecked == true);
             LogCorrelation.Annotate(_state.Analysis, GameEnv.PlayerLogPath, _env.BepInExLogPath);   // attribute last-launch log issues
             RenderState(_state);
         }
@@ -253,8 +255,15 @@ public partial class MainWindow : Window
             HealthBanner.BorderBrush = ThemeManager.BannerGoodBorder;
             TxtHealthTitle.Text = "Your mods are set up correctly. Nothing to do.";
             TxtHealthTitle.Foreground = Good;
-            var active = a.Registered.Count(m => m.Kind != EntryKind.Core && !m.Disabled);
-            TxtHealthDetail.Text = active == 1 ? "1 mod active." : $"{active} mods active.";
+            // a mod turned off is a choice, not a problem, so it never colours the
+            // card - but a count keeps it from being forgotten about
+            var content = a.Registered.Where(m => m.Kind != EntryKind.Core).ToList();
+            var active = content.Count(m => !m.Disabled);
+            var off = content.Count - active;
+            TxtHealthDetail.Text = (active == 1 ? "1 mod active." : $"{active} mods active.")
+                                   + (off == 0 ? ""
+                                      : off == 1 ? " 1 more is installed but turned off."
+                                      : $" {off} more are installed but turned off.");
             TxtHealthDetail.Foreground = Dim;
             BtnHealthFix.Visibility = Visibility.Collapsed;
             BtnHealthLog.Visibility = Visibility.Collapsed;
@@ -1080,6 +1089,18 @@ public partial class MainWindow : Window
     private void Tidy_Changed(object sender, RoutedEventArgs e)
     {
         _settings.Tidy = ChkTidy.IsChecked == true;
+        if (_state is not null && !_manualDirty) Rescan();
+    }
+
+    /// <summary>
+    /// "Add new mods turned off": a mod found on disk but missing from the load
+    /// order is registered with the game's own disabled marker instead of loading.
+    /// Rescans, because it changes the suggestion and takes held mods out of the
+    /// collision analysis.
+    /// </summary>
+    private void HoldNew_Changed(object sender, RoutedEventArgs e)
+    {
+        _settings.HoldNew = ChkHoldNew.IsChecked == true;
         if (_state is not null && !_manualDirty) Rescan();
     }
 
@@ -2128,6 +2149,7 @@ public partial class MainWindow : Window
             _settings.Width = Width; _settings.Height = Height;
         }
         _settings.Tidy = ChkTidy.IsChecked == true;
+        _settings.HoldNew = ChkHoldNew.IsChecked == true;
         _settings.Tab = Tabs.SelectedIndex;
         _settings.Save();
     }

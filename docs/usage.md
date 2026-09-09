@@ -174,6 +174,28 @@ you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
   the permanent warning and the "add it" suggestion for a folder you deliberately
   keep parked. **Stop ignoring** brings both back. The preference is remembered
   per install.
+
+### Adding new mods turned off
+
+By default a mod that turns up on disk but is missing from the load order is
+added ready to load. If you subscribe to mods faster than you play them, tick
+**Add new mods turned off** above the table. Every mod added from then on carries
+the game's own disabled marker, so it is listed on the in-game MODS screen as off
+and does not load until you tick its **Active** box. Its place in the order is
+still worked out, and a mod that is turned off raises no conflicts, so you can
+turn one on, rescan, and see exactly what it collides with before adding the
+next.
+
+The mod is still added to `loading_order.json` rather than left out of it. That
+is deliberate: the game appends a subscribed Workshop item to the file itself on
+the next launch, at the very end of the list, ready to load. Leaving it out is
+not a stable state, so the entry has to exist for the game to stop re-adding it,
+and the disabled marker is what keeps it from loading.
+
+Two things are never held back: the generated compatibility patch (it is the
+resolution of a conflict, not a mod to try later) and the mod loader (holding
+that breaks every code mod rather than deferring one). The setting is remembered,
+and from a terminal it is `--hold-new`.
 - **Mark as FFU-dependent (load after Minor Fixes Plus)** (right-click any mod)
   tags an FFU mod that Ostrasort can't auto-detect, so it sorts into the FFU
   block after Minor Fixes Plus instead of before it. Use it for a Steam Workshop
@@ -382,6 +404,10 @@ Ostrasort.exe --profile-load <name>   switch to a saved profile: Replace by defa
                           reported), or add --merge to keep current mods it omits, appended
                           at the end. Mutually exclusive with --apply
 Ostrasort.exe --tidy      opt-in cosmetic grouping in the suggested order
+Ostrasort.exe --hold-new  add mods missing from the load order turned off (the game's own
+                          disabled marker) so they do not load until you turn them on, the
+                          GUI's "Add new mods turned off" checkbox. Off by default, and
+                          never applied to the patch or the mod loader
 Ostrasort.exe --no-gui    never open a window: alone it acts like --report; with --patch,
                           contested items fall back to the later-loaded mod's entry,
                           marked for review
