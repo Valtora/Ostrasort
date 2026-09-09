@@ -90,6 +90,21 @@ entries the author removed (the vanilla ships a deterministic start is meant to
 exclude). The collision shows on the **Handled automatically** tab, not as a
 conflict.
 
+**How far the late tier reaches.** Detection claims final say only over
+**character-generation objects**. A pin you set by hand claims it over everything
+the mod touches, because you said so. That distinction matters, because a content
+mod can ship a couple of `CGEnc*` life events for its own career and be detected
+late for them, bringing its ordinary shop pools along for the ride. If such a mod
+also ships a stale copy of another mod's kiosk inventory, the late slot decides
+that pool by accident, and no ordering fixes it: the sort will not move a superset
+past a final-say mod, and moving it would only be undone by the load-priority
+bands on the same pass. So Ostrasort does not report it as a wrong order you can
+press a button to fix. It marks the pool as decided by the tier and hands it to
+the **compatibility patch**, whose per-item union restores the missing items while
+keeping the later mod's quantities. Curation is still untouched: a
+character-generation pool under a final-say mod, and anything under a mod you
+pinned late yourself, is still resolved by load order and never merged.
+
 **Load priority (aCOs).** Character-generation pools route their choices through
 the `aCOs` field (a parallel weighted list) rather than `aLoots`, so the collision
 analysis compares both, unioning their referenced entries. A pool whose only

@@ -61,6 +61,18 @@ public static class CollisionView
                                        or Relation.NonLoot);            // object: last-wins drops a version, nothing to merge
     }
 
+    /// <summary>
+    /// A collision reordering alone would fix: some pair of plain claimants is a
+    /// subset violation and nothing else already handles it. This is the promise
+    /// behind "press Fix automatically to reorder them", so it must agree with
+    /// what <see cref="Analysis.BuildSuggestion"/> will really do - hence the
+    /// <see cref="Collision.OrderLocked"/> exclusion, which is precisely the case
+    /// where rule 4 declines the move.
+    /// </summary>
+    public static bool FixableByReorder(Collision c) =>
+        !c.ResolvedByPatch && !c.FfuMergedAtLoad && !c.ResolvedByOrder && !c.OrderLocked
+        && c.PlainPairs.Any(p => p.Rel == Relation.SubsetViolation);
+
     /// <summary>Stable key for the set of mods in a collision, used to group the display.</summary>
     private static string GroupKey(Collision c) =>
         string.Join("|", c.Claimants.Select(m => m.Kind == EntryKind.Workshop ? m.Name : "local:" + m.Name));
@@ -129,8 +141,10 @@ public static class CollisionView
             // a merge for a pool PatchableConflicts skips
             var anyLootConflict = cols.Any(c => !c.ResolvedByPatch && Patcher.IsPatchableLoot(c));
             var anyMergeableObj = cols.Any(c => !c.ResolvedByPatch && c.ObjectMergeable);
-            var anyWrongOrder = cols.Any(c => !c.ResolvedByPatch && !c.FfuMergedAtLoad && !c.ResolvedByOrder
-                                              && c.PlainPairs.Any(p => p.Rel == Relation.SubsetViolation));
+            // "fixable by reordering" must mean the sort will actually move
+            // something - the same discipline as fixableByPatch above, which asks
+            // the patcher rather than re-deriving it
+            var anyWrongOrder = cols.Any(FixableByReorder);
             var anyResolved = cols.Any(c => c.ResolvedByPatch);
             var anyFfuMerged = cols.Any(c => !c.ResolvedByPatch && c.FfuMergedAtLoad);
             var anyAdditive = cols.Any(c => !c.ResolvedByPatch && c.AdditiveAtLoad);

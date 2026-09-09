@@ -108,8 +108,9 @@ public static class Patcher
     /// <summary>
     /// True for a loot pool --patch can merge: at least two PLAIN claimants (see
     /// <see cref="Collision.PlainClaimants"/>), each with an aLoots, and some pair
-    /// between two of them is a partial overlap. A claimant editing via FFU
-    /// precision commands is never folded into the union (that would write raw
+    /// between two of them is a partial overlap, or a subset violation no load
+    /// order can fix (<see cref="Collision.OrderLocked"/>). A claimant editing via
+    /// FFU precision commands is never folded into the union (that would write raw
     /// <c>--ADD--</c> tokens into the patch) but no longer blocks the merge either:
     /// it loads after the patch and re-applies its commands on top.
     /// </summary>
@@ -121,7 +122,11 @@ public static class Patcher
         !c.ResolvedByOrder &&
         c.PlainClaimants.Count >= 2 &&
         c.PlainClaimants.All(m => m.Claims.TryGetValue((c.Type, c.ObjName), out var l) && l is not null) &&
-        c.PlainPairs.Any(p => p.Rel == Relation.Partial);
+        // OrderLocked is only ever set on a subset violation the sort refuses to
+        // reorder, and the mod holding the late slot did not earn final say over
+        // this object, so merging it re-adds a real loss rather than undoing
+        // curation
+        (c.PlainPairs.Any(p => p.Rel == Relation.Partial) || c.OrderLocked);
 
     /// <summary>Every loot pool --patch can merge.</summary>
     public static List<Collision> PatchableConflicts(Analysis a) =>

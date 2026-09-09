@@ -183,6 +183,111 @@ public class CategoryTests
         Assert.False(col.ResolvedByOrder);   // ship (not the CG mod) is the last claimant
     }
 
+    // ------------------------------------------- late tier over a plain pool ---
+
+    /// <summary>
+    /// Dez's Merchants + NewVentsandPumps. A content mod ships two CGEnc* life
+    /// events for its merchant career, so it is detected late and sorts to the end
+    /// of the content block. It also ships a stale copy of a kiosk inventory that
+    /// drops one item the other mod stocks. That pool is nothing to do with
+    /// character generation, so the late slot decides it by accident: rule 4
+    /// refuses to reorder around a late mod, and rule 4.5 would undo the move
+    /// anyway. Reporting it as "press Fix automatically to reorder them" sent the
+    /// player after a move that never came.
+    /// </summary>
+    private static (Analysis A, Collision Pool) DezShape(bool manualPin = false)
+    {
+        var core = Core();
+        var vents = Mod("NewVentsandPumps");
+        vents.Claims[("loot", "ItmKioskVentandpumpShopInv")] =
+            new[] { "ItmN2FilterC=1.0x1", "ItmCO2FilterC=1.0x1", "ItmFilter01Loose=1.0x1" };
+        var dez = Mod("Dez's Merchants", LoadTier.Late);
+        dez.CategoryManual = manualPin;
+        dez.Claims[("lifeevents", "CGEncVentMerchantEvent")] = null;   // why it is detected late
+        dez.Claims[("loot", "ItmKioskVentandpumpShopInv")] =
+            new[] { "ItmCO2FilterC=1.0x2-3", "ItmFilter01Loose=1.0x2-10" };   // strict subset: N2 filter dropped
+        var a = new Analysis { Registered = new() { core, vents, dez } };
+
+        a.FindCollisions();
+        a.MarkOrderResolved();
+        return (a, a.Collisions.Single(c => c.ObjName == "ItmKioskVentandpumpShopInv"));
+    }
+
+    [Fact]
+    public void OrderLocked_DetectedLateModOverPlainPool_IsPatchedNotReordered()
+    {
+        var (a, pool) = DezShape();
+
+        Assert.Contains(pool.Pairs, p => p.Rel == Relation.SubsetViolation);
+        Assert.True(pool.OrderLocked);
+        Assert.False(pool.ResolvedByOrder);            // nothing here is decided by design - an item is lost
+        Assert.True(CollisionView.NeedsAttention(pool));
+        Assert.False(CollisionView.FixableByReorder(pool));   // the sort will not move it, so do not promise that
+        Assert.True(Patcher.IsPatchableLoot(pool));            // the per-item union is what actually fixes it
+    }
+
+    [Fact]
+    public void OrderLocked_SuggestionMakesNoMoveItCannotKeep()
+    {
+        // the invariant the dead end broke: anything the view calls reorder-fixable
+        // must produce a real move, and anything it does not must produce none
+        var (a, pool) = DezShape();
+
+        a.BuildSuggestion();
+
+        Assert.False(CollisionView.FixableByReorder(pool));
+        Assert.DoesNotContain(a.Changes, c => c.Reason.Contains("superset"));
+        Assert.Equal(new[] { "core", "NewVentsandPumps", "Dez's Merchants" }, a.SuggestedOrder);
+    }
+
+    [Fact]
+    public void OrderLocked_ManualLatePin_StillWinsWholesale()
+    {
+        // a tier the user pinned by hand claims final say over everything the mod
+        // touches, so the pool stays resolved by order and out of the patch
+        var (a, pool) = DezShape(manualPin: true);
+
+        Assert.True(pool.ResolvedByOrder);
+        Assert.False(pool.OrderLocked);
+        Assert.False(CollisionView.NeedsAttention(pool));
+        Assert.False(Patcher.IsPatchableLoot(pool));
+    }
+
+    [Fact]
+    public void OrderLocked_ViewOffersTheMergeNotTheReorder()
+    {
+        var (a, _) = DezShape();
+
+        var text = string.Join("\n", CollisionView.BuildActive(a).Select(l => l.Text));
+
+        Assert.Contains("merge them so nothing is lost", text);
+        Assert.DoesNotContain("reorder them", text);
+        Assert.Contains("loads late because it owns new-game / start content", text);
+    }
+
+    [Fact]
+    public void SubsetViolation_BetweenOrdinaryMods_IsStillFixedByReordering()
+    {
+        // the other half of the invariant: with no late tier in play the sort does
+        // move the superset last, so the reorder promise stays true
+        var core = Core();
+        var superset = Mod("Superset");
+        superset.Claims[("loot", "ItmShopInv")] = new[] { "a=1x1", "b=1x1" };
+        var subset = Mod("Subset");
+        subset.Claims[("loot", "ItmShopInv")] = new[] { "a=1x1" };
+        var a = new Analysis { Registered = new() { core, superset, subset } };
+
+        a.FindCollisions();
+        a.MarkOrderResolved();
+        var pool = Assert.Single(a.Collisions);
+        a.BuildSuggestion();
+
+        Assert.False(pool.OrderLocked);
+        Assert.True(CollisionView.FixableByReorder(pool));
+        Assert.Contains(a.Changes, c => c.Reason.Contains("superset"));
+        Assert.Equal(new[] { "core", "Subset", "Superset" }, a.SuggestedOrder);
+    }
+
     // -------------------------------------------------- manual override store ---
 
     [Fact]

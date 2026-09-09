@@ -26,6 +26,14 @@ public sealed class Collision
     public bool FfuMergedAtLoad { get; set; }                 // the FFU loader merges this at load - no action needed
     public bool NothingLost { get; set; }                     // non-loot: identical overrides, or the last mod includes every change - lossless, no action
     public bool ResolvedByOrder { get; set; }                 // a final-say (late-tier) mod curates this object and loads last, so its version wins by design - do NOT patch-merge (that would re-add what it removed)
+    /// <summary>
+    /// A subset violation no load order can fix: the later claimant holds a late
+    /// (final say) slot it did NOT earn over this object, so the sort refuses to
+    /// move the superset past it (see <see cref="Analysis.OrderLockedPair"/>).
+    /// Nothing is decided by design here, so unlike <see cref="ResolvedByOrder"/>
+    /// this is a real loss - the patch is what resolves it.
+    /// </summary>
+    public bool OrderLocked { get; set; }
     public bool AdditiveAtLoad { get; set; }                  // flat-packed simple-container type: the game merges its records key-by-key at load, never whole-object replace
     public string? FriendlyName { get; set; }                 // loot pools: a readable description of the internal id (e.g. "OKLG embassy kiosk inventory")
     public string Key => $"{Type}/{ObjName}";
@@ -171,18 +179,46 @@ public sealed class Analysis
             if (c.Claimants.Count < 2) continue;
             var last = c.Claimants[^1];   // Claimants are in effective load order
             if (last.Tier != LoadTier.Late) continue;
+
             // auto-detection claims final say only over character-generation
             // objects; a manual late pin claims it over everything the mod touches
-            if (!last.CategoryManual && !CategoryAnalysis.IsCharacterGenClaim(c.Type, c.ObjName)) continue;
-            // only where the order actually resolves a would-be loss
-            if (!c.Pairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation or Relation.NonLoot)) continue;
+            if (last.CategoryManual || CategoryAnalysis.IsCharacterGenClaim(c.Type, c.ObjName))
+            {
+                // only where the order actually resolves a would-be loss
+                if (!c.Pairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation or Relation.NonLoot)) continue;
 
-            c.ResolvedByOrder = true;
-            c.ObjectMergeable = false;   // final say wins wholesale - do not offer a field merge
-            c.FieldNotes.Add($"{last.DisplayName ?? last.Name} owns this and loads last for final say, " +
-                             "so its version wins by design - the other mod's version is intentionally replaced, not merged");
+                c.ResolvedByOrder = true;
+                c.ObjectMergeable = false;   // final say wins wholesale - do not offer a field merge
+                c.FieldNotes.Add($"{last.DisplayName ?? last.Name} owns this and loads last for final say, " +
+                                 "so its version wins by design - the other mod's version is intentionally replaced, not merged");
+                continue;
+            }
+
+            // Final say the mod did NOT earn over this object: a content mod that
+            // ships a couple of CGEnc* life events is detected late for those, and
+            // its ordinary shop pools come along for the ride. The late slot still
+            // blocks the reorder (OrderLockedPair, honoured by BuildSuggestion's
+            // rule 4), so promising "press Fix automatically to reorder them" would
+            // send the player after a move that never happens. Mark it instead, so
+            // the report says what is really going on and the patch picks it up.
+            if (!c.PlainPairs.Any(OrderLockedPair)) continue;
+            c.OrderLocked = true;
+            c.FieldNotes.Add($"{last.DisplayName ?? last.Name} loads late because it owns new-game / start content, " +
+                             "so no load order keeps both versions - the Ostrasort Patch merges them instead");
         }
     }
+
+    /// <summary>
+    /// True for a subset violation reordering cannot fix: the later claimant sits
+    /// in the late (final say) band and the earlier one does not, so moving the
+    /// superset below it would only be undone by the category-band rule on the
+    /// same pass. The single source of truth for that decision - rule 4 skips
+    /// these, and <see cref="MarkOrderResolved"/> flags them for the report and
+    /// the patcher, so the sorter and the report can never disagree about whether
+    /// a reorder is coming.
+    /// </summary>
+    internal static bool OrderLockedPair(PairRelation p) =>
+        p.Rel == Relation.SubsetViolation && Tier(p.Later) == LoadTier.Late && Tier(p.Earlier) < LoadTier.Late;
 
     /// <summary>
     /// Any collision still needing the user's eyes - the same predicate the GUI
@@ -301,8 +337,11 @@ public sealed class Analysis
                 // a final-say (late-tier) mod deliberately curates its pool - a
                 // smaller set loading last is intended, not a violation. Never
                 // move a lower-tier superset below it: that would push the
-                // final-say mod toward the top and undo its override.
-                if (Tier(pair.Later) == LoadTier.Late && Tier(pair.Earlier) < LoadTier.Late) continue;
+                // final-say mod toward the top and rule 4.5 would undo the move
+                // on this same pass. MarkOrderResolved has already flagged these
+                // (ResolvedByOrder when the mod owns the object, OrderLocked when
+                // it does not and the patch has to resolve it instead).
+                if (OrderLockedPair(pair)) continue;
                 int from = work.IndexOf(pair.Earlier), to = work.IndexOf(pair.Later);
                 if (from < 0 || to < 0 || from > to) continue;
                 work.RemoveAt(from);
