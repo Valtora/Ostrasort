@@ -151,9 +151,136 @@ public class LogCorrelationTests
         try
         {
             LogCorrelation.Annotate(a, log);
-            Assert.Contains(a.Warnings, w => w.Contains("Evil Mod") && w.Contains("last game launch"));
+            // log issues live apart from the structural warnings so the health card
+            // can drop them on dismissal, but every report still prints both
+            Assert.Contains(a.LogWarnings, w => w.Contains("Evil Mod") && w.Contains("last game launch"));
+            Assert.Empty(a.Warnings);
+            Assert.Contains(a.AllWarnings, w => w.Contains("Evil Mod"));
             Assert.NotEmpty(mod.LogNotes);
         }
         finally { File.Delete(log); }
+    }
+
+    // ------------------------------------------------------------ dismissal ---
+
+    private static Analysis WithEvilMod() =>
+        With(Mod("Evil Mod", dataFiles: new[] { "condowners/evil.json" }));
+
+    private const string EvilLine = "#Error# Failed to parse condowners/evil.json";
+
+    [Fact]
+    public void Fingerprint_IsStableWhileTheLogIsUntouched()
+    {
+        // a dismissal has to survive every rescan, or it would clear itself
+        var log = Path.Combine(Path.GetTempPath(), "OstraLog_" + Guid.NewGuid().ToString("N") + ".log");
+        File.WriteAllText(log, EvilLine);
+        try
+        {
+            var first = WithEvilMod();
+            LogCorrelation.Annotate(first, log);
+            var second = WithEvilMod();
+            LogCorrelation.Annotate(second, log);
+
+            Assert.NotNull(first.LogFingerprint);
+            Assert.Equal(first.LogFingerprint, second.LogFingerprint);
+        }
+        finally { File.Delete(log); }
+    }
+
+    [Fact]
+    public void Fingerprint_ChangesWhenTheGameRewritesTheLog()
+    {
+        // the point of "until it happens again": the game overwrites Player.log at
+        // every launch, so the SAME error next time is a fresh occurrence
+        var log = Path.Combine(Path.GetTempPath(), "OstraLog_" + Guid.NewGuid().ToString("N") + ".log");
+        File.WriteAllText(log, EvilLine);
+        try
+        {
+            var first = WithEvilMod();
+            LogCorrelation.Annotate(first, log);
+
+            File.SetLastWriteTimeUtc(log, DateTime.UtcNow.AddMinutes(5));   // a later launch
+            var second = WithEvilMod();
+            LogCorrelation.Annotate(second, log);
+
+            Assert.NotEqual(first.LogFingerprint, second.LogFingerprint);
+        }
+        finally { File.Delete(log); }
+    }
+
+    [Fact]
+    public void Fingerprint_IsNullWhenTheLogsReportedNothing()
+    {
+        var log = Path.Combine(Path.GetTempPath(), "OstraLog_" + Guid.NewGuid().ToString("N") + ".log");
+        File.WriteAllText(log, "all fine here");
+        try
+        {
+            var a = WithEvilMod();
+            LogCorrelation.Annotate(a, log);
+            Assert.Null(a.LogFingerprint);   // nothing to dismiss
+        }
+        finally { File.Delete(log); }
+    }
+}
+
+/// <summary>The persisted "stop showing me the last launch's problems" preference.</summary>
+public class LogDismissalTests : IDisposable
+{
+    private readonly string _path = Path.Combine(Path.GetTempPath(), "OstraDism_" + Guid.NewGuid().ToString("N") + ".json");
+
+    public void Dispose() { if (File.Exists(_path)) File.Delete(_path); }
+
+    private static GameEnv Env(string root) => new()
+    {
+        GameRoot = root, DiscoveredVia = "test",
+        CoreDataDir = Path.Combine(root, "data"), ModsDir = Path.Combine(root, "Mods"),
+    };
+
+    private static Analysis Fp(string? fingerprint) =>
+        new() { Registered = new(), LogFingerprint = fingerprint };
+
+    [Fact]
+    public void DismissedSetIsRememberedAcrossRuns()
+    {
+        var env = Env(@"C:\game-one");
+        var a = Fp("ABC123");
+
+        var list = new LogDismissal(_path);
+        Assert.False(list.IsDismissed(env, a));
+        list.Dismiss(env, a);
+
+        Assert.True(new LogDismissal(_path).IsDismissed(env, a));
+    }
+
+    [Fact]
+    public void ADifferentSetOfIssuesIsNotDismissed()
+    {
+        // the same problem happening again reads as a new fingerprint, so the alarm
+        // comes back rather than staying hidden for good
+        var env = Env(@"C:\game-one");
+        var list = new LogDismissal(_path);
+        list.Dismiss(env, Fp("ABC123"));
+
+        Assert.False(list.IsDismissed(env, Fp("DEF456")));
+    }
+
+    [Fact]
+    public void OneInstallNeverDismissesAnother()
+    {
+        var list = new LogDismissal(_path);
+        list.Dismiss(Env(@"C:\game-one"), Fp("ABC123"));
+
+        Assert.False(list.IsDismissed(Env(@"D:\game-two"), Fp("ABC123")));
+    }
+
+    [Fact]
+    public void NothingToDismissIsANoOp()
+    {
+        var env = Env(@"C:\game-one");
+        var list = new LogDismissal(_path);
+        list.Dismiss(env, Fp(null));
+
+        Assert.False(list.IsDismissed(env, Fp(null)));
+        Assert.False(File.Exists(_path));
     }
 }

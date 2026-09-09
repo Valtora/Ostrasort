@@ -94,7 +94,7 @@ public static class JsonReport
                 ["toolVersion"] = s.Patch.ToolVersion,
                 ["excludedCount"] = s.Patch.ExcludedCount,
             },
-            ["warnings"] = new JsonArray(a.Warnings.Select(w => (JsonNode)w).ToArray()),
+            ["warnings"] = new JsonArray(a.AllWarnings.Select(w => (JsonNode)w).ToArray()),
             ["orderChanged"] = a.OrderChanged,
             ["suggestedOrder"] = new JsonArray(a.SuggestedOrder.Select(e => (JsonNode)e).ToArray()),
             ["changes"] = new JsonArray(a.Changes.Select(c => (JsonNode)new JsonObject

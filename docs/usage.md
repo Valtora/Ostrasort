@@ -63,7 +63,11 @@ Ostrasort, uninstall it from **Apps & features** (or delete that folder).
    (`loading_order.json.bak`).
 5. **What went wrong?** appears on the card when the game itself reported
    problems from a mod on its last launch. It names the mod and offers the
-   obvious next steps.
+   obvious next steps. Once you have dealt with them, **dismiss** next to the
+   buttons (or **Dismiss these** inside that window) clears them from the card.
+   They stay on the Warnings and Logs tabs and against each mod, and the card
+   raises them again the moment the game reports something different, including
+   the same problem happening again on a later launch.
 6. **Undo anything** with Ctrl+Z.
 7. **Launch the game** (there is a button) and check the in-game MODS screen.
 

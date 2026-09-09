@@ -9,6 +9,9 @@
             <TextBlock VerticalAlignment="Center" Margin="0,0,14,0">
                 <Hyperlink Click="OpenLog_Click" ToolTip="Open the game's own log file (Player.log).">Open the game log</Hyperlink>
             </TextBlock>
+            <Button x:Name="BtnDismiss" Content="Dismiss these" Padding="16,6" Margin="0,0,8,0"
+                    Visibility="Collapsed" Click="Dismiss_Click"
+                    ToolTip="Stop leading with these on the health card. They stay here, on the Warnings and Logs tabs and against each mod, and the banner comes back the moment the game reports something different, including the same problem happening again on a later launch."/>
             <Button Content="Close" Padding="16,6" IsDefault="True" IsCancel="True"/>
         </StackPanel>
         <ScrollViewer VerticalScrollBarVisibility="Auto">

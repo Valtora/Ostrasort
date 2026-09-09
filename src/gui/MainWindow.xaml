@@ -191,6 +191,11 @@
                         <Button x:Name="BtnHealthShow" Content="Show me" Padding="14,6" Margin="8,0,0,0"
                                 Visibility="Collapsed" Click="HealthShow_Click"
                                 ToolTip="Open the tab that explains these issues."/>
+                        <TextBlock x:Name="LnkHealthDismiss" VerticalAlignment="Center" Margin="12,0,0,0"
+                                   Visibility="Collapsed">
+                            <Hyperlink Click="HealthDismissLog_Click"
+                                       ToolTip="Stop showing the last launch's problems here. They stay on the Warnings and Logs tabs and against each mod, and this banner comes back the moment the game reports something different, including the same problem happening again on a later launch.">dismiss</Hyperlink>
+                        </TextBlock>
                     </StackPanel>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock x:Name="TxtHealthTitle" FontWeight="SemiBold" FontSize="14"/>

@@ -96,10 +96,10 @@ public static class MarkdownReport
         sb.AppendLine();
 
         var jsonErrMods = a.AllMods.Where(m => m.JsonErrors.Count > 0).ToList();
-        sb.AppendLine($"## Warnings ({a.Warnings.Count + jsonErrMods.Sum(m => m.JsonErrors.Count)})");
+        sb.AppendLine($"## Warnings ({a.AllWarnings.Count() + jsonErrMods.Sum(m => m.JsonErrors.Count)})");
         sb.AppendLine();
-        if (a.Warnings.Count == 0 && jsonErrMods.Count == 0) sb.AppendLine("None.");
-        foreach (var w in a.Warnings) sb.AppendLine($"- {Md(w)}");
+        if (!a.AllWarnings.Any() && jsonErrMods.Count == 0) sb.AppendLine("None.");
+        foreach (var w in a.AllWarnings) sb.AppendLine($"- {Md(w)}");
         foreach (var m in jsonErrMods)
             foreach (var e in m.JsonErrors) sb.AppendLine($"- {Md(m.DisplayName ?? m.Name)}: {Md(e)}");
         sb.AppendLine();

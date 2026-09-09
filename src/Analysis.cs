@@ -74,6 +74,26 @@ public sealed class Analysis
     public List<string> Warnings { get; } = new();
 
     /// <summary>
+    /// Warnings read out of the game's own logs from its last launch, kept apart
+    /// from <see cref="Warnings"/> so the health card can drop them when the
+    /// player dismisses that alarm. Everything that reports the full picture
+    /// (every report format, the Warnings tab) uses <see cref="AllWarnings"/>.
+    /// </summary>
+    public List<string> LogWarnings { get; } = new();
+
+    /// <summary>
+    /// Identity of the last-launch log issues, for "dismiss until it happens
+    /// again". Covers both the issues themselves and the logs' write stamps: the
+    /// game rewrites Player.log on every launch, so the same error occurring
+    /// again produces a different fingerprint and the alarm returns. Null when
+    /// the logs reported nothing.
+    /// </summary>
+    public string? LogFingerprint { get; set; }
+
+    /// <summary>Every warning, structural and from the game's logs. What the reports print.</summary>
+    public IEnumerable<string> AllWarnings => Warnings.Concat(LogWarnings);
+
+    /// <summary>
     /// Install-level FFU state, or null on a plain Workshop install. FFU is a
     /// supported framework (ordering rules + merge semantics applied); only
     /// <see cref="FfuContext.AutoloaderActive"/> gates writes. See <see cref="FfuContext"/>.

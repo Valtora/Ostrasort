@@ -35,17 +35,22 @@ public static class LogCorrelation
     private static readonly HashSet<string> Framework =
         new(new[] { "BepInEx", "Unity", "Mono", "HarmonyX", "Harmony", "Doorstop", "Preloader" }, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Reads each existing log file and records attributed issues as warnings + per-mod notes.</summary>
+    /// <summary>Reads each existing log file and records attributed issues as log warnings + per-mod notes.</summary>
     public static void Annotate(Analysis a, params string[] logPaths)
     {
         // each log is scanned separately so a "Loading json:" context from one
         // file can never leak into the next one's lines
         var files = new List<IReadOnlyList<string>>();
+        var stamps = new List<string>();
         foreach (var path in logPaths)
         {
             try
             {
-                if (File.Exists(path)) files.Add(File.ReadLines(path).ToList());
+                if (!File.Exists(path)) continue;
+                files.Add(File.ReadLines(path).ToList());
+                // the launch stamp: the game overwrites Player.log every run, so a
+                // fresh occurrence of the same error still reads as a new one
+                stamps.Add($"{path}@{File.GetLastWriteTimeUtc(path):O}");
             }
             catch { /* an unreadable log is not fatal - just no correlation */ }
         }
@@ -59,7 +64,7 @@ public static class LogCorrelation
         {
             var errs = g.Count(i => i.Severity is "Error" or "Fatal");
             var note = $"logged {Count(errs, g.Count() - errs)} at the last game launch: “{Truncate(g.First().Line)}”";
-            a.Warnings.Add($"'{Name(g.Key)}' {note}");
+            a.LogWarnings.Add($"'{Name(g.Key)}' {note}");
             g.Key.LogNotes.Add(note);
         }
 
@@ -71,9 +76,27 @@ public static class LogCorrelation
             var sample = rest[0];
             var cand = sample.Candidates.Count > 0
                 ? $" (maybe {string.Join(", ", sample.Candidates.Select(Name))})" : "";
-            a.Warnings.Add($"the game log shows {Count(errs, rest.Count - errs)} load issue(s) at the last launch " +
-                           $"not tied to a specific mod: “{Truncate(sample.Line)}”{cand} (see the Logs tab)");
+            a.LogWarnings.Add($"the game log shows {Count(errs, rest.Count - errs)} load issue(s) at the last launch " +
+                              $"not tied to a specific mod: “{Truncate(sample.Line)}”{cand} (see the Logs tab)");
         }
+
+        a.LogFingerprint = Fingerprint(stamps, issues);
+    }
+
+    /// <summary>
+    /// Identity of this set of log issues, for the health card's "dismiss until it
+    /// happens again". Built from the logs' write stamps AND the issue lines, so a
+    /// relaunch that reproduces the identical error un-dismisses it (new stamp),
+    /// and so does removing one of several offending mods (different issue set).
+    /// </summary>
+    private static string Fingerprint(IEnumerable<string> stamps, IEnumerable<LogIssue> issues)
+    {
+        var parts = stamps.Concat(issues
+            .Select(i => $"{i.Severity}|{i.Mod?.Name ?? "-"}|{i.Line}")
+            .OrderBy(x => x, StringComparer.Ordinal));
+        return Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(string.Join("\n", parts))));
     }
 
     /// <summary>Parses raw log lines into attributed issues (no I/O - the testable core).</summary>

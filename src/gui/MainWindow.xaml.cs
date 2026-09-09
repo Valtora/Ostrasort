@@ -57,6 +57,7 @@ public partial class MainWindow : Window
     private readonly IgnoreList _ignore = IgnoreList.LoadDefault();
     private readonly FfuOverrideList _ffuOverrides = FfuOverrideList.LoadDefault();
     private readonly CategoryOverrideList _categoryOverrides = CategoryOverrideList.LoadDefault();
+    private readonly LogDismissal _logDismissed = LogDismissal.LoadDefault();
     private EngineState? _state;
     private System.Collections.ObjectModel.ObservableCollection<ModRow> _rows = new();
     private bool _manualDirty;
@@ -231,8 +232,15 @@ public partial class MainWindow : Window
     {
         var a = s.Analysis;
         var attention = a.Collisions.Count(CollisionView.NeedsAttention);
-        var logMods = a.AllMods.Where(m => m.LogNotes.Count > 0).ToList();
-        var warnCount = a.Warnings.Count + a.AllMods.Sum(m => m.JsonErrors.Count);
+        // a dismissed set of log issues stays visible everywhere it is evidence
+        // (the mod rows, the Warnings tab, every report) and only stops driving
+        // the alarm here, until the logs say something different
+        var logDismissed = _logDismissed.IsDismissed(_env, a);
+        var logMods = logDismissed
+            ? new List<ModEntry>()
+            : a.AllMods.Where(m => m.LogNotes.Count > 0).ToList();
+        var warnCount = a.Warnings.Count + a.AllMods.Sum(m => m.JsonErrors.Count)
+                        + (logDismissed ? 0 : a.LogWarnings.Count);
         var fixable = a.OrderChanged || Patcher.HasWork(a) || s.Patch.Stale || s.Patch.Obsolete;
 
         var issues = new List<string>();
@@ -268,6 +276,7 @@ public partial class MainWindow : Window
             BtnHealthFix.Visibility = Visibility.Collapsed;
             BtnHealthLog.Visibility = Visibility.Collapsed;
             BtnHealthShow.Visibility = Visibility.Collapsed;
+            LnkHealthDismiss.Visibility = Visibility.Collapsed;
         }
         else
         {
@@ -282,6 +291,7 @@ public partial class MainWindow : Window
             BtnHealthFix.Visibility = fixable ? Visibility.Visible : Visibility.Collapsed;
             BtnHealthLog.Visibility = logMods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             BtnHealthShow.Visibility = Visibility.Visible;
+            LnkHealthDismiss.Visibility = logMods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         HealthBanner.Visibility = Visibility.Visible;
 
@@ -333,6 +343,24 @@ public partial class MainWindow : Window
         RunStatus.Foreground = Good;
     }
 
+    /// <summary>
+    /// Clears the last-launch alarm from the health card until the game reports
+    /// something different. Nothing is deleted: the issues stay on the Warnings
+    /// and Logs tabs, in the reports, and against each mod. A later launch
+    /// rewrites the log, so the same problem recurring raises the banner again.
+    /// </summary>
+    private void HealthDismissLog_Click(object sender, RoutedEventArgs e) => DismissLogIssues();
+
+    private void DismissLogIssues()
+    {
+        if (_state is null || _state.Analysis.LogFingerprint is null) return;
+        _logDismissed.Dismiss(_env, _state.Analysis);
+        OpLog.Add("Dismissed the last launch's game-log issues (they return if the game reports them again).");
+        RenderHealth(_state);
+        RunStatus.Text = "Last launch's problems dismissed. They return if the game reports them again.  ";
+        RunStatus.Foreground = Good;
+    }
+
     /// <summary>Open the tab that explains the current issues, most pressing first.</summary>
     private void HealthShow_Click(object sender, RoutedEventArgs e)
     {
@@ -354,13 +382,17 @@ public partial class MainWindow : Window
         if (_state is null) return;
         _busy = true;
         ModEntry? toDisable;
+        bool dismiss;
         try
         {
             var dlg = new LogIssuesDialog(_state.Analysis) { Owner = this };
             dlg.ShowDialog();
             toDisable = dlg.ToDisable;
+            dismiss = dlg.Dismissed;
         }
         finally { _busy = false; }
+
+        if (dismiss) DismissLogIssues();
 
         if (toDisable is not null)
         {
@@ -612,11 +644,16 @@ public partial class MainWindow : Window
         ListPatch.ItemsSource = pat;
 
         var warn = new List<LineVm>();
-        foreach (var w in a.Warnings) warn.Add(L(w, Warn));
+        foreach (var w in a.AllWarnings) warn.Add(L(w, Warn));
         foreach (var m in a.AllMods.Where(m => m.JsonErrors.Count > 0))
             foreach (var e in m.JsonErrors)
                 warn.Add(L($"{m.Label}: {e}", Warn));
         var warnCount = warn.Count;
+        // dismissed log issues stay listed here as evidence, but stop counting as
+        // something to act on - otherwise the tab keeps shouting about the very
+        // thing the player just said they had dealt with
+        var warnAttentionCount = warnCount
+                                 - (_logDismissed.IsDismissed(_env, a) ? a.LogWarnings.Count : 0);
         if (warn.Count == 0) warn.Add(L("No warnings.", Good));
         ListWarnings.ItemsSource = warn;
 
@@ -628,7 +665,7 @@ public partial class MainWindow : Window
         var collAttention = a.Collisions.Any(CollisionView.NeedsAttention);
         var orderAttention = a.OrderChanged;
         var patchAttention = s.Patch.Stale || s.Patch.Obsolete;
-        var warnAttention = warnCount > 0;
+        var warnAttention = warnAttentionCount > 0;
 
         var attentionColl = a.Collisions.Count(CollisionView.NeedsAttention);
         var handledColl = a.Collisions.Count - attentionColl;   // benign + patch-merged + FFU/additive handled

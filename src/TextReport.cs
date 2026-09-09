@@ -66,10 +66,10 @@ public static class TextReport
         sb.AppendLine();
 
         var jsonErrMods = a.AllMods.Where(m => m.JsonErrors.Count > 0).ToList();
-        var warnTotal = a.Warnings.Count + jsonErrMods.Sum(m => m.JsonErrors.Count);
+        var warnTotal = a.AllWarnings.Count() + jsonErrMods.Sum(m => m.JsonErrors.Count);
         sb.AppendLine($"WARNINGS ({warnTotal})");
         if (warnTotal == 0) sb.AppendLine("  none");
-        foreach (var w in a.Warnings) sb.AppendLine($"  ! {w}");
+        foreach (var w in a.AllWarnings) sb.AppendLine($"  ! {w}");
         foreach (var m in jsonErrMods)
             foreach (var e in m.JsonErrors) sb.AppendLine($"  ! {m.DisplayName ?? m.Name}: {e}");
         sb.AppendLine();

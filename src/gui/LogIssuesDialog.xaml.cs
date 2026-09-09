@@ -21,6 +21,13 @@ public partial class LogIssuesDialog : Window
     /// <summary>Set when the user pressed "Disable this mod" on a card.</summary>
     public ModEntry? ToDisable { get; private set; }
 
+    /// <summary>
+    /// Set when the user pressed "Dismiss these" - they have read the problems and
+    /// want the health card to stop leading with them. The caller records it; the
+    /// issues themselves are kept everywhere else.
+    /// </summary>
+    public bool Dismissed { get; private set; }
+
     public LogIssuesDialog(Analysis analysis)
     {
         _analysis = analysis;
@@ -35,7 +42,7 @@ public partial class LogIssuesDialog : Window
         foreach (var m in attributed) Body.Children.Add(ModCard(m));
 
         // the honest un-attributed remainder (worded by LogCorrelation)
-        var unattributed = analysis.Warnings.Where(w => w.Contains("not tied to a specific mod")).ToList();
+        var unattributed = analysis.LogWarnings.Where(w => w.Contains("not tied to a specific mod")).ToList();
         if (unattributed.Count > 0)
         {
             Body.Children.Add(new TextBlock
@@ -69,6 +76,15 @@ public partial class LogIssuesDialog : Window
                 Text = "No problems were found in the last launch's logs.",
                 Foreground = ThemeManager.Good,
             });
+
+        // the natural moment to clear the alarm is right after reading what it is
+        BtnDismiss.Visibility = analysis.LogFingerprint is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void Dismiss_Click(object sender, RoutedEventArgs e)
+    {
+        Dismissed = true;
+        DialogResult = true;
     }
 
     private Border ModCard(ModEntry m)
