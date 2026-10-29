@@ -109,6 +109,15 @@ public partial class MainWindow : Window
         PopulateInstallations();
         OpLog.Add($"Ostrasort v{Program.Version} opened ({_env.GameRoot}).");
         Rescan();
+        // not from here: the constructor runs before app.Run starts the dispatcher,
+        // so there is no synchronization context yet and the await inside would
+        // resume on a thread-pool thread and throw on the first UI touch
+        Loaded += StartLaunchUpdateCheck;
+    }
+
+    private void StartLaunchUpdateCheck(object? sender, RoutedEventArgs e)
+    {
+        Loaded -= StartLaunchUpdateCheck;
         _ = CheckForUpdateAsync();
     }
 
@@ -2259,8 +2268,9 @@ public partial class MainWindow : Window
             try
             {
                 // CheckAndDownloadAsync awaits with ConfigureAwait(false) inside, but
-                // this method was invoked on the UI thread and does not, so the
-                // continuation below is back on the dispatcher for the UI touches.
+                // this method does not, so the continuation below returns to the
+                // dispatcher for the UI touches. That holds only once the dispatcher
+                // is running: callers start it from Loaded or a click, never the ctor.
                 info = await _updater.CheckAndDownloadAsync();
             }
             catch (Exception ex)
