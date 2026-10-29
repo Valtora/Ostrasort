@@ -263,8 +263,8 @@ public static class ModInstall
             .ToList();
         if (registerDirs.Count == 0) return new();
 
-        var registered = new List<string>();
         var state = Engine.Analyze(env);
+        var toRegister = new List<ModEntry>();
         foreach (var m in state.Analysis.UnregisteredLocal.ToList())
         {
             if (m.Dir is null) continue;
@@ -278,10 +278,12 @@ public static class ModInstall
             // loading_order.json write refusals, silently leaving the mod
             // installed-but-invisible with a success exit code
             if (m.Kind == EntryKind.Core || m.IsPatch) continue;
-            var r = ModRegistration.Register(env, m, state.Analysis);
-            if (!r.AlreadyRegistered) registered.Add(r.Entry);
+            toRegister.Add(m);
         }
-        return registered;
+        if (toRegister.Count == 0) return new();
+        // one write for the whole archive, so the backups keep the pre-install order
+        return ModRegistration.RegisterMany(env, toRegister, state.Analysis)
+            .Where(r => !r.AlreadyRegistered).Select(r => r.Entry).ToList();
     }
 
     // --------------------------------------------------------------- detection ---

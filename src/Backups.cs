@@ -25,6 +25,11 @@ public static class Backups
         {
             var dir = DirFor(loPath);
             Directory.CreateDirectory(dir);
+            // an identical copy of the newest snapshot adds no restore point, and
+            // keeping it would prune a real one - skip it
+            var newest = Directory.GetFiles(dir, "loading_order-*.json")
+                .OrderByDescending(f => f, StringComparer.Ordinal).FirstOrDefault();
+            if (newest is not null && File.ReadAllText(newest) == previousText) return;
             // UTC so a DST fall-back / clock change can never make a newer
             // snapshot sort as older (prune would then delete the freshest
             // restore point); the trailing sequence keeps same-millisecond

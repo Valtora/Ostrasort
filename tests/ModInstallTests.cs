@@ -336,4 +336,22 @@ public class ModInstallTests : IDisposable
         Assert.Empty(again);
         Assert.Equal(new[] { "core", "RegMod|edit" }, LoadOrderFile.Read(_env.LoadingOrderPath).Order);
     }
+
+    [Fact]
+    public void RegisterInstalled_MultiModArchive_WritesOnceSoTheBakHoldsThePreInstallOrder()
+    {
+        var before = File.ReadAllText(_env.LoadingOrderPath);
+        var zip = Zip(
+            ("A/mod_info.json", """[{"strName":"A"}]"""), ("A/data/items/a.json", "[]"),
+            ("B/mod_info.json", """[{"strName":"B"}]"""), ("B/data/items/b.json", "[]"),
+            ("C/mod_info.json", """[{"strName":"C"}]"""), ("C/data/items/c.json", "[]"),
+            ("D/mod_info.json", """[{"strName":"D"}]"""), ("D/data/items/d.json", "[]"));
+
+        var result = ModInstall.Execute(_env, ModInstall.Inspect(_env, zip));
+        var registered = ModInstall.RegisterInstalled(_env, result);
+
+        Assert.Equal(4, registered.Count);
+        Assert.Equal(5, LoadOrderFile.Read(_env.LoadingOrderPath).Order.Count);
+        Assert.Equal(before, File.ReadAllText(_env.LoadingOrderPath + ".bak"));
+    }
 }
