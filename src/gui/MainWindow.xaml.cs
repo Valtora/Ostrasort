@@ -61,6 +61,7 @@ public partial class MainWindow : Window
     private EngineState? _state;
     private System.Collections.ObjectModel.ObservableCollection<ModRow> _rows = new();
     private bool _manualDirty;
+    private bool _scanErrorShowing;   // a scan-failure box is open (Window_Activated must not rescan under it)
     private bool _busy;
     private bool _ffuBannerDismissed;
     private int _attentionCount;
@@ -142,7 +143,11 @@ public partial class MainWindow : Window
         }
         catch (Exception e)
         {
-            MessageBox.Show(this, e.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            // closing the box reactivates the window: Window_Activated must not
+            // rescan meanwhile, or it fails again and reopens the box on top
+            _scanErrorShowing = true;
+            try { MessageBox.Show(this, e.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error); }
+            finally { _scanErrorShowing = false; }
             // everything on screen is now the PREVIOUS scan - say so instead of
             // letting a stale table masquerade as current
             RunStatus.Text = "Scan FAILED — showing the last successful scan. Fix the problem, then Rescan.  ";
@@ -2217,7 +2222,7 @@ public partial class MainWindow : Window
     /// <summary>Rescan when the window regains focus (e.g. after closing the game) - debounced and never over a manual arrangement.</summary>
     private void Window_Activated(object sender, EventArgs e)
     {
-        if (_busy || _manualDirty || _state is null) return;
+        if (_busy || _manualDirty || _scanErrorShowing || _state is null) return;
         if ((DateTime.Now - _lastScan).TotalSeconds < 5) return;
         Rescan();
     }
