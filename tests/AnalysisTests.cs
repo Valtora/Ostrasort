@@ -103,6 +103,51 @@ public class AnalysisTests
     }
 
     [Fact]
+    public void SupersetPinnedEarly_IsNotMovedBelowANormalSubset_AndGoesToThePatch()
+    {
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var early = Registered("Early", EntryKind.Local, "Early");
+        early.Tier = LoadTier.Early;
+        var normal = Registered("Normal", EntryKind.Local, "Normal");
+        early.Claims[("loot", "P")] = new[] { "x=1x1", "y=1x1" };
+        normal.Claims[("loot", "P")] = new[] { "x=1x1" };
+        var an = WithOrder(core, early, normal);
+
+        an.FindCollisions();
+        an.MarkOrderResolved();
+        an.BuildSuggestion();
+
+        Assert.False(an.OrderChanged);
+        Assert.DoesNotContain(an.Changes, ch => ch.Action == "move");
+        var col = Assert.Single(an.Collisions);
+        Assert.True(col.OrderLocked);
+        Assert.False(CollisionView.FixableByReorder(col));
+        Assert.True(Patcher.IsPatchableLoot(col));
+    }
+
+    [Fact]
+    public void SupersetBeforeAnFfuSubset_PromisesNeitherAReorderNorThePatch()
+    {
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var plain = Registered("Plain", EntryKind.Local, "Plain");
+        var ffu = Registered("Ffu", EntryKind.Local, "Ffu");
+        ffu.IsFfu = true;
+        plain.Claims[("loot", "P")] = new[] { "x=1x1", "y=1x1" };
+        ffu.Claims[("loot", "P")] = new[] { "x=1x1" };
+        var an = WithOrder(core, plain, ffu);
+
+        an.FindCollisions();
+        an.MarkOrderResolved();
+        an.BuildSuggestion();
+
+        Assert.DoesNotContain(an.Changes, ch => ch.Action == "move" && ch.Entry == "Plain");
+        var col = Assert.Single(an.Collisions);
+        Assert.False(CollisionView.FixableByReorder(col));
+        Assert.False(Patcher.IsPatchableLoot(col));
+        Assert.Contains(col.FieldNotes, n => n.Contains("FFU-dependent"));
+    }
+
+    [Fact]
     public void IgnoredMod_NeverClaimsAnything()
     {
         // an ignored mod is never registered, so the game never loads it - an

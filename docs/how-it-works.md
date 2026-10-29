@@ -141,7 +141,11 @@ item in it, not just the first.
 
 - The later pool contains the earlier one, so the **order is correct** ✔.
 - The later pool is a subset of the earlier one, so the **order is wrong** and
-  the superset is moved to load last.
+  the superset is moved to load last. When that move could never stick (the
+  superset is pinned early, the subset holds a later tier, or the same two mods
+  are each a superset of the other on another pool), the pool goes to the
+  compatibility patch instead. When the subset is FFU-dependent it loads after
+  the patch too, so the report says neither can keep both and the choice is yours.
 - **Partial overlap** is a **conflict** where no load order can keep both mods'
   items. This is what the patch generator fixes (see below).
 - Identical item sets are just a note (only the quantities differ, and the last

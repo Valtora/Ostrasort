@@ -237,23 +237,38 @@ public sealed class Analysis
                              "so no load order keeps both versions - the Ostrasort Patch merges them instead");
         }
 
-        // two mods that are each a superset of the other on different pools: no
-        // order satisfies both, so the pool rule 4 would reorder goes to the patch
+        // every other pair the sort will not reorder: say why, and hand it to the
+        // patch where the patch can win (it cannot against a later FFU mod)
         foreach (var c in Collisions.Where(c => !c.ResolvedByOrder && !c.OrderLocked))
         {
-            var p = c.PlainPairs.FirstOrDefault(p => c.ReorderLockedPairs.Contains(p) && !OrderLockedPair(p));
-            if (p is null) continue;
-            c.OrderLocked = true;
-            c.FieldNotes.Add($"{p.Earlier.DisplayName ?? p.Earlier.Name} and {p.Later.DisplayName ?? p.Later.Name} each stock " +
-                             "more than the other on different pools, so no load order keeps both versions - " +
-                             "the Ostrasort Patch merges them instead");
+            var locked = c.PlainPairs.Where(c.ReorderLockedPairs.Contains).ToList();
+            if (locked.Count == 0) continue;
+            static string N(ModEntry m) => m.DisplayName ?? m.Name;
+            if (locked.FirstOrDefault(p => !FfuLockedPair(p)) is { } p)
+            {
+                c.OrderLocked = true;
+                c.FieldNotes.Add((OrderLockedPair(p)
+                    ? Tier(p.Earlier) == LoadTier.Early
+                        ? $"{N(p.Earlier)} is pinned to load early, so it cannot move after {N(p.Later)}"
+                        : $"{N(p.Later)} loads late (final say), so {N(p.Earlier)} cannot move after it"
+                    : $"{N(p.Earlier)} and {N(p.Later)} each stock more than the other on different pools") +
+                    " - no load order keeps both versions, so the Ostrasort Patch merges them instead");
+            }
+            else
+            {
+                var f = locked[0];
+                c.FieldNotes.Add($"{N(f.Later)} is FFU-dependent, so it loads after every non-FFU mod, the Ostrasort Patch " +
+                                 $"included - its version wins and {N(f.Earlier)}'s extra items are lost. Neither a reorder " +
+                                 "nor the patch can keep both, so choose which mod to keep");
+            }
         }
     }
 
     /// <summary>
     /// Works out which subset-violation pairs rule 4 must NOT reorder, because
-    /// the move could never stick: the later claimant holds a final-say slot the
-    /// earlier one does not (<see cref="OrderLockedPair"/>), or the same two mods
+    /// the move could never stick: the later claimant holds a later tier band than
+    /// the earlier one (<see cref="OrderLockedPair"/>), it is FFU and the earlier
+    /// one is not (<see cref="FfuLockedPair"/>), or the same two mods
     /// are each a strict superset of the other on different pools, where fixing
     /// one pool breaks the other and the suggestion would flip on every apply.
     /// Idempotent; run before the sort and before the report reads the flags.
@@ -274,22 +289,31 @@ public sealed class Analysis
         {
             c.ReorderLockedPairs.Clear();
             foreach (var p in c.PlainPairs.Where(p => p.Rel == Relation.SubsetViolation))
-                if (OrderLockedPair(p) || supersets.Contains((p.Later, p.Earlier)))
+                if (OrderLockedPair(p) || FfuLockedPair(p) || supersets.Contains((p.Later, p.Earlier)))
                     c.ReorderLockedPairs.Add(p);
         }
     }
 
     /// <summary>
-    /// True for a subset violation reordering cannot fix: the later claimant sits
-    /// in the late (final say) band and the earlier one does not, so moving the
+    /// True for a subset violation reordering cannot fix because of the load
+    /// tiers: the later claimant sits in a later band than the earlier one (late
+    /// final say over normal, or normal over a mod pinned early), so moving the
     /// superset below it would only be undone by the category-band rule on the
-    /// same pass. The single source of truth for that decision - rule 4 skips
-    /// these, and <see cref="MarkOrderResolved"/> flags them for the report and
-    /// the patcher, so the sorter and the report can never disagree about whether
-    /// a reorder is coming.
+    /// same pass. Rule 4 skips these, and <see cref="MarkOrderResolved"/> flags
+    /// them for the report and the patcher, so the sorter and the report can
+    /// never disagree about whether a reorder is coming.
     /// </summary>
     internal static bool OrderLockedPair(PairRelation p) =>
-        p.Rel == Relation.SubsetViolation && Tier(p.Later) == LoadTier.Late && Tier(p.Earlier) < LoadTier.Late;
+        p.Rel == Relation.SubsetViolation && !p.Earlier.IsFfu && !p.Later.IsFfu && Tier(p.Earlier) < Tier(p.Later);
+
+    /// <summary>
+    /// True for a subset violation where the later (subset) claimant is FFU and
+    /// the earlier one is not: rule 5 keeps every FFU mod after every non-FFU
+    /// mod, so the superset can never move past it. The patch cannot help either,
+    /// since it closes the non-FFU block and the FFU mod loads after it.
+    /// </summary>
+    internal static bool FfuLockedPair(PairRelation p) =>
+        p.Rel == Relation.SubsetViolation && !p.Earlier.IsFfu && p.Later.IsFfu;
 
     /// <summary>
     /// Any collision still needing the user's eyes - the same predicate the GUI
