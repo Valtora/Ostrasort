@@ -77,6 +77,32 @@ public class AnalysisTests
     }
 
     [Fact]
+    public void OppositeSupersetsOnTwoPools_DoNotFlipTheOrder_AndGoToThePatch()
+    {
+        // A stocks more than B on P1, B stocks more than A on P2: fixing one pool
+        // breaks the other, so the suggestion must not reorder (it used to flip on
+        // every apply) and the reversed pool is the patch's to merge
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var a = Registered("A", EntryKind.Local, "A");
+        var b = Registered("B", EntryKind.Local, "B");
+        a.Claims[("loot", "P1")] = new[] { "x=1x1", "y=1x1" };
+        b.Claims[("loot", "P1")] = new[] { "x=1x1" };
+        a.Claims[("loot", "P2")] = new[] { "x=1x1" };
+        b.Claims[("loot", "P2")] = new[] { "x=1x1", "z=1x1" };
+        var an = WithOrder(core, a, b);
+
+        an.FindCollisions();
+        an.MarkOrderResolved();
+        an.BuildSuggestion();
+
+        Assert.False(an.OrderChanged);
+        var p1 = an.Collisions.Single(c => c.ObjName == "P1");
+        Assert.True(p1.OrderLocked);
+        Assert.False(CollisionView.FixableByReorder(p1));
+        Assert.True(Patcher.IsPatchableLoot(p1));
+    }
+
+    [Fact]
     public void IgnoredMod_NeverClaimsAnything()
     {
         // an ignored mod is never registered, so the game never loads it - an

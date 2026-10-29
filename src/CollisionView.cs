@@ -71,7 +71,7 @@ public static class CollisionView
     /// </summary>
     public static bool FixableByReorder(Collision c) =>
         !c.ResolvedByPatch && !c.FfuMergedAtLoad && !c.ResolvedByOrder && !c.OrderLocked
-        && c.PlainPairs.Any(p => p.Rel == Relation.SubsetViolation);
+        && c.PlainPairs.Any(p => p.Rel == Relation.SubsetViolation && !c.ReorderLockedPairs.Contains(p));
 
     /// <summary>Stable key for the set of mods in a collision, used to group the display.</summary>
     private static string GroupKey(Collision c) =>

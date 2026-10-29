@@ -34,6 +34,12 @@ public sealed class Collision
     /// this is a real loss - the patch is what resolves it.
     /// </summary>
     public bool OrderLocked { get; set; }
+    /// <summary>
+    /// Subset-violation pairs no reorder can fix (see
+    /// <see cref="Analysis.ComputeReorderLocks"/>). The sort leaves them alone and
+    /// the report never promises a reorder for them.
+    /// </summary>
+    public HashSet<PairRelation> ReorderLockedPairs { get; } = new(ReferenceEqualityComparer.Instance);
     public bool AdditiveAtLoad { get; set; }                  // flat-packed simple-container type: the game merges its records key-by-key at load, never whole-object replace
     public string? FriendlyName { get; set; }                 // loot pools: a readable description of the internal id (e.g. "OKLG embassy kiosk inventory")
     public string Key => $"{Type}/{ObjName}";
@@ -197,6 +203,7 @@ public sealed class Analysis
     /// </summary>
     public void MarkOrderResolved()
     {
+        ComputeReorderLocks();
         foreach (var c in Collisions)
         {
             if (c.Claimants.Count < 2) continue;
@@ -228,6 +235,47 @@ public sealed class Analysis
             c.OrderLocked = true;
             c.FieldNotes.Add($"{last.DisplayName ?? last.Name} loads late because it owns new-game / start content, " +
                              "so no load order keeps both versions - the Ostrasort Patch merges them instead");
+        }
+
+        // two mods that are each a superset of the other on different pools: no
+        // order satisfies both, so the pool rule 4 would reorder goes to the patch
+        foreach (var c in Collisions.Where(c => !c.ResolvedByOrder && !c.OrderLocked))
+        {
+            var p = c.PlainPairs.FirstOrDefault(p => c.ReorderLockedPairs.Contains(p) && !OrderLockedPair(p));
+            if (p is null) continue;
+            c.OrderLocked = true;
+            c.FieldNotes.Add($"{p.Earlier.DisplayName ?? p.Earlier.Name} and {p.Later.DisplayName ?? p.Later.Name} each stock " +
+                             "more than the other on different pools, so no load order keeps both versions - " +
+                             "the Ostrasort Patch merges them instead");
+        }
+    }
+
+    /// <summary>
+    /// Works out which subset-violation pairs rule 4 must NOT reorder, because
+    /// the move could never stick: the later claimant holds a final-say slot the
+    /// earlier one does not (<see cref="OrderLockedPair"/>), or the same two mods
+    /// are each a strict superset of the other on different pools, where fixing
+    /// one pool breaks the other and the suggestion would flip on every apply.
+    /// Idempotent; run before the sort and before the report reads the flags.
+    /// </summary>
+    internal void ComputeReorderLocks()
+    {
+        // (superset mod, subset mod) for every clean subset relation, whichever
+        // way round the pair currently loads
+        var supersets = new HashSet<(ModEntry Sup, ModEntry Sub)>();
+        foreach (var c in Collisions)
+            foreach (var p in c.PlainPairs)
+            {
+                if (p.Rel == Relation.SubsetViolation) supersets.Add((p.Earlier, p.Later));
+                else if (p.Rel == Relation.SupersetOk) supersets.Add((p.Later, p.Earlier));
+            }
+
+        foreach (var c in Collisions)
+        {
+            c.ReorderLockedPairs.Clear();
+            foreach (var p in c.PlainPairs.Where(p => p.Rel == Relation.SubsetViolation))
+                if (OrderLockedPair(p) || supersets.Contains((p.Later, p.Earlier)))
+                    c.ReorderLockedPairs.Add(p);
         }
     }
 
@@ -360,6 +408,7 @@ public sealed class Analysis
         // rule 4: clean subset/superset loot collisions load subset-first.
         // A SubsetViolation means the pair is reversed: the earlier claimant is
         // the superset. Move it to just after the later (subset) claimant.
+        ComputeReorderLocks();
         foreach (var col in Collisions)
             foreach (var pair in col.Pairs.Where(p => p.Rel == Relation.SubsetViolation))
             {
@@ -369,8 +418,9 @@ public sealed class Analysis
                 // final-say mod toward the top and rule 4.5 would undo the move
                 // on this same pass. MarkOrderResolved has already flagged these
                 // (ResolvedByOrder when the mod owns the object, OrderLocked when
-                // it does not and the patch has to resolve it instead).
-                if (OrderLockedPair(pair)) continue;
+                // it does not and the patch has to resolve it instead). The same
+                // goes for a pair whose relation flips on another pool.
+                if (col.ReorderLockedPairs.Contains(pair)) continue;
                 int from = work.IndexOf(pair.Earlier), to = work.IndexOf(pair.Later);
                 if (from < 0 || to < 0 || from > to) continue;
                 work.RemoveAt(from);
