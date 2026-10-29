@@ -27,20 +27,27 @@ public sealed class LoadOrderFile
     /// sanitizes them (DataHandler.PathSanitize).
     /// </summary>
     public required List<string> IgnorePatterns { get; init; }
+    /// <summary>
+    /// True when <see cref="RawText"/> is what was on disk at <see cref="Read"/>.
+    /// Write then refuses if the file changed since, instead of overwriting
+    /// another writer's change. False for text parsed from a snapshot (undo, a
+    /// backup restore), which replaces whatever is there on purpose.
+    /// </summary>
+    public bool FromDisk { get; init; }
 
     public static LoadOrderFile Read(string path)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException(
                 $"loading_order.json not found at '{path}'. Launch the game once so it generates one.", path);
-        return Parse(path, File.ReadAllText(path));
+        return Parse(path, File.ReadAllText(path), fromDisk: true);
     }
 
     /// <summary>
     /// Parses raw loading_order.json text (the same validation Read applies).
     /// Lets a restore path route snapshot TEXT through Write's full ritual.
     /// </summary>
-    public static LoadOrderFile Parse(string path, string raw)
+    public static LoadOrderFile Parse(string path, string raw, bool fromDisk = false)
     {
         if (!raw.TrimStart().StartsWith('['))
             throw new InvalidDataException(
@@ -63,7 +70,7 @@ public sealed class LoadOrderFile
                     p.GetValue<string>() is { Length: > 0 } s)
                     patterns.Add(s.Replace('\\', '/').Replace("//", "/"));
 
-        return new LoadOrderFile { Path = path, RawText = raw, Root = root, Order = order, IgnorePatterns = patterns };
+        return new LoadOrderFile { Path = path, RawText = raw, Root = root, Order = order, IgnorePatterns = patterns, FromDisk = fromDisk };
     }
 
     public void Write(IReadOnlyList<string> newOrder)
@@ -112,13 +119,18 @@ public sealed class LoadOrderFile
                     $"Round-trip check failed: {count} entries serialized, expected {newOrder.Count}.");
         }
 
-        // back up what is on disk NOW, not the text captured at Read: if another
-        // process wrote between our Read and this Write (Read happens outside
-        // the lock), the intermediate version must survive in the backups even
-        // though this write replaces it
+        // what is on disk NOW, under the lock. Read happens outside it, so another
+        // writer (a second Ostrasort, a background registration) may have changed
+        // the file since: a write planned from the older text would undo theirs,
+        // so refuse rather than lose it. A snapshot restore (FromDisk false)
+        // replaces the file on purpose, and backs up whatever it replaces.
         var previous = RawText;
         try { if (File.Exists(Path)) previous = File.ReadAllText(Path); }
         catch (IOException) { } catch (UnauthorizedAccessException) { }
+        if (FromDisk && previous != RawText)
+            throw new InvalidOperationException(
+                "loading_order.json changed on disk after Ostrasort read it (another tool or Ostrasort window wrote to it) - " +
+                "nothing was written, so that change is kept. Rescan and try again.");
 
         AtomicFile.WriteAllText(Path + ".bak", previous);  // the text this write replaces (never truncated)
         Backups.Snapshot(Path, previous);            // rolling history (the .bak only survives one write)

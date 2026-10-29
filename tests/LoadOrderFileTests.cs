@@ -30,6 +30,30 @@ public class LoadOrderFileTests : IDisposable
     }
 
     [Fact]
+    public void Write_RefusesWhenTheFileChangedSinceItWasRead()
+    {
+        var lo = LoadOrderFile.Read(_path);
+        // another writer registers a mod in between
+        var theirs = """[{"strName":"Mod Loading Order","aLoadOrder":["core","A","B","C"]}]""";
+        Write(theirs);
+
+        Assert.Throws<InvalidOperationException>(() => lo.Write(new[] { "core", "B", "A" }));
+        Assert.Equal(theirs, File.ReadAllText(_path));   // their change survives
+    }
+
+    [Fact]
+    public void Write_FromSnapshotText_ReplacesWhateverIsOnDisk()
+    {
+        // a restore parses snapshot text, not the disk - it overwrites on purpose
+        var snap = LoadOrderFile.Parse(_path, """[{"strName":"Mod Loading Order","aLoadOrder":["core","B"]}]""");
+        Write("""[{"strName":"Mod Loading Order","aLoadOrder":["core","A","B","C"]}]""");
+
+        snap.Write(snap.Order);
+
+        Assert.Equal(new[] { "core", "B" }, LoadOrderFile.Read(_path).Order);
+    }
+
+    [Fact]
     public void Write_DropsExactDuplicates()
     {
         LoadOrderFile.Read(_path).Write(new[] { "core", "A", "B", "A", "core" });
