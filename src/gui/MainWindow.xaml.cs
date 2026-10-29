@@ -2200,6 +2200,15 @@ public partial class MainWindow : Window
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        SaveSettings();
+    }
+
+    /// <summary>
+    /// Persists the window and preference state. Called on close, and before an
+    /// update restart, which exits the process without raising Closing.
+    /// </summary>
+    private void SaveSettings()
+    {
         _settings.Maximized = WindowState == WindowState.Maximized;
         if (WindowState == WindowState.Normal)
         {
@@ -2321,6 +2330,7 @@ public partial class MainWindow : Window
         try
         {
             OpLog.Add($"Applying update v{ver} and restarting.");
+            SaveSettings();   // ApplyAndRestart exits at once - Window_Closing never runs
             _updater.ApplyAndRestart(_pendingUpdate);   // closes this process and relaunches into the new build
         }
         catch (Exception ex)
