@@ -123,7 +123,12 @@ public partial class MainWindow : Window
 
     // ---------------------------------------------------------------- scan ---
 
-    private void Rescan()
+    private EngineState Analyze(GameEnv env) =>
+        Engine.Analyze(env, ChkTidy.IsChecked == true, _ignore, _ffuOverrides, _categoryOverrides,
+                       holdNew: ChkHoldNew.IsChecked == true);
+
+    /// <param name="scanned">A scan of <see cref="_env"/> already taken (an install switch), rendered instead of rescanning.</param>
+    private void Rescan(EngineState? scanned = null)
     {
         Mouse.OverrideCursor = Cursors.Wait;
         try
@@ -131,8 +136,7 @@ public partial class MainWindow : Window
             _manualDirty = false;
             _arrUndo.Clear();
             _arrRedo.Clear();
-            _state = Engine.Analyze(_env, ChkTidy.IsChecked == true, _ignore, _ffuOverrides, _categoryOverrides,
-                                    holdNew: ChkHoldNew.IsChecked == true);
+            _state = scanned ?? Analyze(_env);
             LogCorrelation.Annotate(_state.Analysis, GameEnv.PlayerLogPath, _env.BepInExLogPath);   // attribute last-launch log issues
             RenderState(_state);
         }
@@ -173,11 +177,22 @@ public partial class MainWindow : Window
     private void SwitchInstall(string? name)
     {
         GameEnv env;
+        EngineState scanned;
         var inst = _installs.Find(name);
-        try { env = GameEnv.Locate(inst?.Game, inst?.Mods); }
+        // scan the new install BEFORE switching to it: on a failure nothing
+        // changes, instead of the old install's table sitting over the new
+        // install's folders for every action to mix up
+        try
+        {
+            env = GameEnv.Locate(inst?.Game, inst?.Mods);
+            Mouse.OverrideCursor = Cursors.Wait;
+            try { scanned = Analyze(env); }
+            finally { Mouse.OverrideCursor = null; }
+        }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"Could not open installation '{name ?? "Auto-detect"}', so Ostrasort stayed on the current one.\n\n{ex.Message}",
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
             PopulateInstallations();   // snap the combo back to the still-active install
             return;
         }
@@ -194,7 +209,7 @@ public partial class MainWindow : Window
         _installs.Active = name;
         _installs.Save();
         OpLog.Add($"Switched to installation '{name ?? "Auto-detect"}' ({_env.GameRoot}).");
-        Rescan();
+        Rescan(scanned);
     }
 
     private void ManageInstalls_Click(object sender, RoutedEventArgs e)
