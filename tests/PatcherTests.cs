@@ -212,6 +212,41 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void LootPool_PipeRowsAndRepeatedRows_SurviveTheMerge()
+    {
+        // rows that differ only after their first item must not collapse, and a
+        // row one mod repeats (two rolls) must stay repeated
+        WriteJson(Path.Combine(_env.CoreDataDir, "loot", "pool.json"),
+            """[{"strName":"PoolP","aLoots":["A=1.0x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "loot", "pool.json"),
+            """[{"strName":"PoolP","aLoots":["A=1.0x1","S=0.5x1","S=0.5x1","R=0.5x1|Y=0.5x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "loot", "pool.json"),
+            """[{"strName":"PoolP","aLoots":["A=1.0x1","B=1.0x1","R=0.5x1|Z=0.5x1"]}]""");
+
+        var state = Engine.Analyze(_env);
+        var col = state.Analysis.Collisions.Single(c => c.ObjName == "PoolP");
+        Assert.True(CollisionView.NeedsAttention(col));
+
+        var pool = Patcher.PlanMerge(_env, state.Analysis).Pools.Single(p => p.Collision.ObjName == "PoolP");
+        Assert.DoesNotContain(pool.LootItems, i => i.NeedsDecision);
+        Assert.Equal(new[] { "A=1.0x1", "S=0.5x1", "S=0.5x1", "R=0.5x1|Y=0.5x1", "B=1.0x1", "R=0.5x1|Z=0.5x1" },
+            pool.LootItems.Select(i => i.Resolved.Entry));
+    }
+
+    [Fact]
+    public void LootPool_PipeRowsDifferingAfterTheFirstItem_AreNotEqual()
+    {
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "loot", "pool.json"),
+            """[{"strName":"PoolQ","aLoots":["Suit=0.6x1|SuitA=0.4x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "loot", "pool.json"),
+            """[{"strName":"PoolQ","aLoots":["Suit=0.6x1|SuitB=0.4x1"]}]""");
+
+        var col = Engine.Analyze(_env).Analysis.Collisions.Single(c => c.ObjName == "PoolQ");
+
+        Assert.True(CollisionView.NeedsAttention(col));
+    }
+
+    [Fact]
     public void LootPool_WithFfuCommandsInAnyArray_IsNotPatchable()
     {
         // ModA's pool carries FFU precision commands in aCOs (aLoots plain);

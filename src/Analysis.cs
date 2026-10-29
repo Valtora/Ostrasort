@@ -158,8 +158,11 @@ public sealed class Analysis
         // granularity, unioning both pools. Some pools (character-generation
         // ship/intro routing) carry an empty aLoots and route everything through
         // aCOs, so ignoring aCOs would read those overrides as identical-empty.
+        // a pipe-joined row ("A=0.7x1|B=0.3x1") holds several items - compare
+        // every one of them, not just the first
         static HashSet<string> Items(string[] entries) =>
-            entries.Select(l => l.Split('=')[0]).ToHashSet(StringComparer.Ordinal);
+            entries.SelectMany(l => l.Split('|')).Where(s => s.Length > 0)
+                .Select(l => l.Split('=')[0]).ToHashSet(StringComparer.Ordinal);
         static HashSet<string> PoolItems(ModEntry m, string type, string name)
         {
             var set = Items(m.Claims[(type, name)]!);

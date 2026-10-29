@@ -177,7 +177,7 @@ public partial class ResolverDialog : Window
         var head = c.FriendlyName is { Length: > 0 } f ? $"“{f}” ({c.ObjName})" : c.ObjName;
         Para(panel,
             isLoot
-                ? $"Both mods stock “{item.Token}” in the {CollisionView.TypeLabel(c.Type)} {head}."
+                ? $"Both mods stock “{LootLabel(item.Token)}” in the {CollisionView.TypeLabel(c.Type)} {head}."
                 : $"Both mods change “{FriendlyField(item.Token)}” of the {CollisionView.TypeLabel(c.Type)} {head}.",
             ThemeManager.Normal, 13.5, semiBold: true);
         Para(panel, (isLoot ? "Stocked by " : "Edited by ") + ModList(c) + ". Which should the game use?",
@@ -418,7 +418,7 @@ public partial class ResolverDialog : Window
 
         foreach (var item in items.Where(i => i.Contested))
         {
-            var label = isLoot ? item.Token : FriendlyField(item.Token);
+            var label = isLoot ? LootLabel(item.Token) : FriendlyField(item.Token);
             var outcome = item.Excluded
                 ? (isLoot ? "not stocked" : "kept at the vanilla value")
                 : item.Resolved.SourceId == "__union__" ? "union of both mods"
@@ -560,7 +560,7 @@ public partial class ResolverDialog : Window
         foreach (var item in carried)
         {
             var opt = item.Resolved;
-            var label = isLoot ? item.Token : FriendlyField(item.Token);
+            var label = isLoot ? LootLabel(item.Token) : FriendlyField(item.Token);
             var value = isLoot ? LootEntryPretty(opt.Entry)
                                : (opt.Node is null ? "(removed)" : ShortValue(opt.Node));
             var cb = new CheckBox
@@ -626,6 +626,19 @@ public partial class ResolverDialog : Window
     };
 
     private static readonly string[] Prefixes = { "json", "pair", "map", "arr", "str", "a", "n", "b", "f", "e" };
+
+    /// <summary>
+    /// A pool merge key for display: "A|B" (one pipe-joined row) reads "A or B",
+    /// and a repeated row's "#n" suffix reads "(entry n)".
+    /// </summary>
+    internal static string LootLabel(string token)
+    {
+        var hash = token.LastIndexOf('#');
+        var nth = hash > 0 && int.TryParse(token[(hash + 1)..], out var n) ? n : 1;
+        var row = nth > 1 ? token[..hash] : token;
+        var items = row.Replace("|", " or ");
+        return nth > 1 ? $"{items} (entry {nth})" : items;
+    }
 
     internal static string FriendlyField(string token)
     {

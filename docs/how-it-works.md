@@ -135,7 +135,9 @@ who claims it and what the outcome is.
 
 **Loot pools** (shop and kiosk inventories and similar `loot`-type objects) are
 compared at **item granularity**, the token before `=` in each
-`"Item=weight x count"` entry.
+`"Item=weight x count"` entry. A pipe-joined entry
+(`"ItmSuitDmg=0.7x1|ItmSuit=0.3x1"`, one roll between alternatives) counts every
+item in it, not just the first.
 
 - The later pool contains the earlier one, so the **order is correct** ✔.
 - The later pool is a subset of the earlier one, so the **order is wrong** and
@@ -300,7 +302,9 @@ loads last. It merges two kinds of conflict.
 
 A loot pool's `aLoots` is an additive list, so merging two versions is the
 per-item union. Every mod's wares survive, and where two mods stock the same item
-with different quantities, you pick which wins (or exclude it).
+with different quantities, you pick which wins (or exclude it). The union works on
+whole entries: a pipe-joined entry is kept as one entry, and an entry a mod lists
+twice (two rolls of the same item) stays listed twice.
 
 **A pool can mix plain mods with FFU array editors.** A mod using FFU's `--ADD--`
 / `--DEL--` commands *edits* a pool rather than replacing it, and using that API

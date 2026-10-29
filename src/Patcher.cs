@@ -329,11 +329,20 @@ public static class Patcher
                                 Dictionary<string, List<MergeOption>> options)
     {
         if (array is not JsonArray ja) return;
+        // a merge key is a whole ROW, not its first item: a pipe-joined row
+        // ("A=0.7x1|B=0.3x1") keys on all its items, so rows that differ after
+        // the first item stay distinct; and a row a mod repeats (two rolls of
+        // the same scrap) keys by occurrence, so the repeat survives. Each mod
+        // therefore offers at most one option per key. The first occurrence of
+        // a single-item row keys as the bare item, as older markers stored it.
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var n in ja)
         {
             if (n?.GetValueKind() != JsonValueKind.String) continue;
             var entry = n.GetValue<string>();
-            var token = entry.Split('=')[0];
+            var row = RowKey(entry);
+            var nth = seen[row] = seen.GetValueOrDefault(row) + 1;
+            var token = nth == 1 ? row : $"{row}#{nth}";
             if (!options.TryGetValue(token, out var list))
             {
                 options[token] = list = new List<MergeOption>();
@@ -342,6 +351,10 @@ public static class Patcher
             list.Add(new MergeOption(SourceId(source), source.DisplayName ?? source.Name, entry));
         }
     }
+
+    /// <summary>The item names of a loot row, pipe-joined: "A=0.7x1|B=0.3x1" -> "A|B".</summary>
+    internal static string RowKey(string entry) =>
+        string.Join('|', entry.Split('|').Select(p => p.Split('=')[0]));
 
     /// <summary>Marker key prefix separating aCOs decisions from aLoots decisions in a pool.</summary>
     private const string CoPrefix = "co:";
