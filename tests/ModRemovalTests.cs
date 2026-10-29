@@ -45,6 +45,21 @@ public class ModRemovalTests : IDisposable
     }
 
     [Fact]
+    public void Park_Again_KeepsTheEarlierPark()
+    {
+        var earlier = Path.Combine(_env.ModsDir, "ModA.disabled");
+        Directory.CreateDirectory(earlier);
+        File.WriteAllText(Path.Combine(earlier, "v1.txt"), "v1");
+
+        var result = ModRemoval.RemoveLocal(_env, ModA(), delete: false);
+
+        Assert.True(File.Exists(Path.Combine(earlier, "v1.txt")));
+        var second = Assert.Single(result.Affected);
+        Assert.Equal(Path.Combine(_env.ModsDir, "ModA (2).disabled"), second);
+        Assert.True(File.Exists(Path.Combine(second, "mod_info.json")));
+    }
+
+    [Fact]
     public void Park_PluginsDirMod_MovesItOutOfThePluginsTree()
     {
         // BepInEx loads DLLs anywhere under plugins, so the park must leave it

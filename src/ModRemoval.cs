@@ -17,6 +17,14 @@ public static class ModRemoval
     /// <summary>Where a parked BepInEx\plugins mod goes: a sibling of plugins, which BepInEx never scans.</summary>
     public const string ParkedPluginsFolder = "plugins.disabled";
 
+    /// <summary>The first of "{stem}{suffix}", "{stem} (2){suffix}", ... that does not exist yet.</summary>
+    private static string FreePath(string stem, string suffix)
+    {
+        var path = stem + suffix;
+        for (var n = 2; Directory.Exists(path) || File.Exists(path); n++) path = $"{stem} ({n}){suffix}";
+        return path;
+    }
+
     public static Result RemoveLocal(GameEnv env, ModEntry m, bool delete)
     {
         if (m.Kind is not (EntryKind.Local or EntryKind.PluginDir))
@@ -46,10 +54,11 @@ public static class ModRemoval
                 // a plugins-dir mod parks OUTSIDE BepInEx\plugins: BepInEx loads every
                 // DLL under plugins recursively, so a renamed folder left in there
                 // would keep running its code. Everything else parks in place.
+                // an earlier park of the same mod is never overwritten - parking is
+                // the reversible choice, so a second park gets a numbered name
                 var target = m.Kind == EntryKind.PluginDir
-                    ? Path.Combine(env.BepInExDir, ParkedPluginsFolder, Path.GetRelativePath(parent, dir))
-                    : dir + ".disabled";
-                if (Directory.Exists(target)) FileSystemUtil.RobustDeleteDirectory(target);   // clear a stale park first
+                    ? FreePath(Path.Combine(env.BepInExDir, ParkedPluginsFolder, Path.GetRelativePath(parent, dir)), "")
+                    : FreePath(dir, ".disabled");
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 Directory.Move(dir, target);                          // rename works even on ReadOnly folders
                 affected.Add(target);
