@@ -1,0 +1,9 @@
+// Ostrasort community rules. Keys are Steam Workshop item ids.
+// Format and contribution notes: docs/community-rules.md
+// Every entry must be checked against the mod itself before it is added.
+{
+  "version": 1,
+  "updated": "2026-10-29",
+  "mods": {
+  }
+}

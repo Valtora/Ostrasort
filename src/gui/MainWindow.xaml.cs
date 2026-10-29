@@ -120,6 +120,23 @@ public partial class MainWindow : Window
     {
         Loaded -= StartLaunchUpdateCheck;
         _ = CheckForUpdateAsync();
+        _ = RefreshCommunityRulesAsync();
+    }
+
+    /// <summary>
+    /// Fetches the live community rules (at most once a day) and rescans when
+    /// they changed, unless the player is mid-way through something a rescan
+    /// would throw away.
+    /// </summary>
+    private async Task RefreshCommunityRulesAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        bool changed;
+        try { changed = await CommunityRules.RefreshAsync(Http, cts.Token); }
+        catch (Exception ex) { OpLog.Add($"Community rules refresh failed: {ex.Message}"); return; }
+        if (!changed) return;
+        OpLog.Add("Community rules updated.");
+        if (!_busy && !_manualDirty && !GameEnv.IsGameRunning()) Rescan();
     }
 
     // ---------------------------------------------------------------- scan ---

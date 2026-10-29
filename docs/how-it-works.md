@@ -250,6 +250,16 @@ Surfaced in the same pass.
   only their hashes, so Ostrasort cannot carry a mod's edits forward onto the
   new version
 
+## Community rules
+
+`rules/community-rules.json` in the repository carries knowledge no mod states
+about itself, keyed by Workshop id: load-after edges, incompatible pairs, game
+builds a mod is broken on, replacements, and FFU or final-say tags (see
+[community-rules.md](community-rules.md) for the format). The GUI fetches the
+live file at most once a day into `%APPDATA%\Ostrasort` and rescans when it
+changed; the console uses the stored or built-in copy and never fetches. The
+player's own pins always win.
+
 ## FFU support and the OstraAutoloader
 
 **FFU (Fight for Universe, Beyond Reach)** patches the game with **MonoMod**
