@@ -42,6 +42,7 @@ public static class Engine
         foreach (var c in analysis.Collisions.Where(c => c.Type == "loot"))
             c.FriendlyName = scanner.LootNames.Describe(c.ObjName);   // readable name for the raw pool id
         FieldDiff.Annotate(env, analysis);
+        OverrideAudit.Annotate(env, analysis);   // overrides that undo the last game update, or match the game exactly
         analysis.MarkOrderResolved();   // final-say (late-tier) mods that win by loading last - after FieldDiff so it overrides "mergeable"
         CheckImages(analysis);
         CheckBepInEx(env, analysis);

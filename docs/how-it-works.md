@@ -235,6 +235,20 @@ Surfaced in the same pass.
   it or turn it off. After a launch, a `MissingMethodException` that names a
   flagged member is attributed to that mod. The check cannot see string lookups
   such as `AccessTools.Method("Name")`, and it does not check MonoMod patches
+- **overrides after a game update** (`src\CoreHistory.cs`, `src\OverrideAudit.cs`).
+  Ostrasort keeps a hash of every top-level field of every core object for the
+  current game version and the one before it (about 1.6 MB each, in
+  `%APPDATA%\Ostrasort\core-history`). A new snapshot only pushes the old one
+  out when the content differs, so a Steam file verify does not erase the real
+  previous version. A mod whose copy of an object still holds a field's value
+  from before the update undoes that update's change, and is listed on the
+  Warnings tab. Without FFU the game replaces the whole object, so a field the
+  update added and the copy lacks counts too. With FFU it merges field by
+  field, so only fields the mod sets count. A copy identical to the game's own
+  object changes nothing; that is noted in the mod's detail panel only, since
+  it is harmless and the author's to clean up. Old core objects are not kept,
+  only their hashes, so Ostrasort cannot carry a mod's edits forward onto the
+  new version
 
 ## FFU support and the OstraAutoloader
 

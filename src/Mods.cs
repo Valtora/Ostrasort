@@ -89,6 +89,12 @@ public sealed class ModEntry
     public List<string> JsonErrors { get; } = new();
     public List<string> LogNotes { get; } = new();          // issues attributed to this mod from the game's Player.log / BepInEx log at the last launch
     public List<string> MissingGameCode { get; } = new();   // game code its plugins use that the installed build lacks (CodeModCheck)
+    /// <summary>Field hashes of each core object this mod ships its own copy of (see <see cref="CoreHistory"/>).</summary>
+    public Dictionary<(string Type, string Name), Dictionary<string, string>> CoreOverrideFields { get; } = new();
+    /// <summary>Core objects this mod copies with values identical to the installed game: they change nothing.</summary>
+    public List<string> RedundantOverrides { get; } = new();
+    /// <summary>"object: field, field" where this mod still carries the value the last game update changed.</summary>
+    public List<string> RevertedChanges { get; } = new();
     /// <summary>Condition names this mod defines via conditions_simple (they land in the conditions namespace).</summary>
     public HashSet<string> SimpleConditionNames { get; } = new(StringComparer.Ordinal);
     /// <summary>Data files of this mod skipped by loading_order.json's aIgnorePatterns (rel path, pattern).</summary>
@@ -322,17 +328,33 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
             var entries = new List<CoreIndexCache.Entry>();
             var lootRefs = new List<CoreIndexCache.LootRef>();
             var problems = 0;
+            var history = useCoreCache ? NewHistory(fingerprint) : null;
             // count only files the game's own loader would reject (trailing
             // commas); // and /* */ comments are game-legal and parse silently
-            foreach (var d in EnumerateDataObjects(env.CoreDataDir, wantLoot: false, _ => problems++))
+            foreach (var d in EnumerateDataObjects(env.CoreDataDir, wantLoot: false, _ => problems++, wantHashes: history is not null))
             {
                 entries.Add(new CoreIndexCache.Entry(d.Type, d.Name, d.RelPath));
+                if (history is not null && d.Fields is not null) history.Objects[CoreHistory.Key(d.Type, d.Name)] = d.Fields;
                 if (d.Friendly is { Length: > 0 } friendly && d.LootPoolRefs is { Length: > 0 })
                     foreach (var pool in d.LootPoolRefs)
                         lootRefs.Add(new CoreIndexCache.LootRef(pool, friendly));
             }
             snap = new CoreIndexCache.Snapshot(entries, problems, lootRefs);
             if (useCoreCache) CoreIndexCache.Save(env.CoreDataDir, snap, fingerprint);
+            if (history is not null) CoreHistory.Record(env.CoreDataDir, history);
+        }
+        else
+        {
+            // the index came from the cache, but the override audit has no
+            // snapshot of this core yet (first run of this Ostrasort version)
+            var fingerprint = CoreIndexCache.FingerprintOf(env.CoreDataDir);
+            if (CoreHistory.NeedsRecord(env.CoreDataDir, CoreHistory.FingerprintText(fingerprint)))
+            {
+                var history = NewHistory(fingerprint);
+                foreach (var d in EnumerateDataObjects(env.CoreDataDir, wantLoot: false, _ => { }, wantHashes: true))
+                    if (d.Fields is not null) history.Objects[CoreHistory.Key(d.Type, d.Name)] = d.Fields;
+                CoreHistory.Record(env.CoreDataDir, history);
+            }
         }
         CoreProblemFiles = snap.ProblemFiles;
         LootNames = new LootPoolNames(snap.LootRefs);
@@ -352,6 +374,9 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         }
         CoreTypes = types.Count;
     }
+
+    private CoreHistory.Snapshot NewHistory((long Count, long Bytes, long MaxTicks) fingerprint) =>
+        new() { Version = env.InstalledVersion, Fingerprint = CoreHistory.FingerprintText(fingerprint) };
 
     public void Scan(ModEntry mod)
     {
@@ -378,14 +403,19 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
             bool anyReference = false, anyCommands = false;
             var ignoredFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var d in EnumerateDataObjects(dataDir, wantLoot: true, mod.JsonErrors.Add,
-                         _ignore, (file, pat) => { if (ignoredFiles.Add(file)) mod.IgnoredFiles.Add((file, pat)); }))
+                         _ignore, (file, pat) => { if (ignoredFiles.Add(file)) mod.IgnoredFiles.Add((file, pat)); },
+                         wantHashes: true))
             {
                 mod.Claims[(d.Type, d.Name)] = d.Loots;
                 if (d.Cos is { Length: > 0 }) mod.CoClaims[(d.Type, d.Name)] = d.Cos;
                 mod.DataFiles.Add(d.RelPath.Replace('\\', '/'));   // for Player.log error attribution
                 mod.DataObjects++;
                 if (d.FromSimple) mod.SimpleConditionNames.Add(d.Name);
-                if (CoreIndex.Contains((d.Type, d.Name))) mod.CoreOverrides++;
+                if (CoreIndex.Contains((d.Type, d.Name)))
+                {
+                    mod.CoreOverrides++;
+                    if (d.Fields is not null && !d.FromSimple) mod.CoreOverrideFields[(d.Type, d.Name)] = d.Fields;
+                }
                 anyReference |= d.HasReference;
                 if (d.ArrayCommands)
                 {
@@ -513,7 +543,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
     internal readonly record struct DataObject(
         string Type, string Name, string[]? Loots, bool HasReference, bool ArrayCommands,
         string RelPath, bool FromSimple = false, string? Friendly = null, string[]? LootPoolRefs = null,
-        string[]? Cos = null);
+        string[]? Cos = null, Dictionary<string, string>? Fields = null);
 
     /// <summary>Object fields that name a loot pool - drives the core loot-pool reverse index.</summary>
     private static readonly string[] LootRefFields = { "strLoot", "strCondLoot" };
@@ -538,7 +568,8 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
     /// </summary>
     internal static IEnumerable<DataObject> EnumerateDataObjects(
         string dataDir, bool wantLoot, Action<string> onError,
-        IReadOnlyList<string>? ignorePatterns = null, Action<string, string>? onIgnored = null)
+        IReadOnlyList<string>? ignorePatterns = null, Action<string, string>? onIgnored = null,
+        bool wantHashes = false)
     {
         if (!Directory.Exists(dataDir)) yield break;
         foreach (var typeDir in Directory.EnumerateDirectories(dataDir))
@@ -671,7 +702,8 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                             }
                         }
                         yield return new DataObject(type, nameEl.GetString()!, loots, hasReference, commands, relPath,
-                            Friendly: friendly, LootPoolRefs: poolRefs?.ToArray(), Cos: cos);
+                            Friendly: friendly, LootPoolRefs: poolRefs?.ToArray(), Cos: cos,
+                            Fields: wantHashes ? CoreHistory.HashFields(obj) : null);
 
                         // each 7-tuple in a conditions_simple container defines one
                         // condition in the CONDITIONS namespace (ParseConditionsSimple)

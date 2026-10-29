@@ -114,7 +114,9 @@ actions right there. Below the table sits a row of tabs.
   **Resolve conflicts & generate patch**, **Rebuild from scratch** and **Remove
   patch** buttons.
 - **Warnings** lists dead entries, unregistered mods, version lag, broken JSON,
-  image overrides, BepInEx problems, code mods broken by a game update (their
+  image overrides, BepInEx problems, mods whose copies of game objects undo the
+  last game update's changes (an updated version of the mod usually fixes
+  this), code mods broken by a game update (their
   plugin uses game code the installed version no longer has, which also gets
   its own line on the health card and a section in the mod's detail panel, so
   you can update the mod or turn it off before the game crashes on it), and any

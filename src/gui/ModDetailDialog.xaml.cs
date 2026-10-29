@@ -143,6 +143,23 @@ public partial class ModDetailDialog : Window
             if (m.MissingGameCode.Count > 12) Line($"• and {m.MissingGameCode.Count - 12} more", Dim);
         }
 
+        // ---- core objects it copies, measured against the game's own versions ----
+        if (m.RevertedChanges.Count > 0)
+        {
+            Section("Undoes the last game update");
+            Line("It ships its own copy of these game objects, and the copy still holds values from before the last game update, " +
+                 "so the update's changes to them are lost while it is active. An updated version of the mod may fix this.", Warn);
+            foreach (var x in m.RevertedChanges.Take(12)) Line("• " + x, Dim);
+            if (m.RevertedChanges.Count > 12) Line($"• and {m.RevertedChanges.Count - 12} more", Dim);
+        }
+        if (m.RedundantOverrides.Count > 0)
+        {
+            Section("Copies that change nothing");
+            Line($"{m.RedundantOverrides.Count} of its objects are identical to the game's own, so they have no effect " +
+                 "(often a leftover from an older game version). Harmless, but worth telling the author.", Dim);
+            Line("• " + string.Join(", ", m.RedundantOverrides.Take(10)) + (m.RedundantOverrides.Count > 10 ? ", ..." : ""), Dim);
+        }
+
         // ---- JSON problems ----
         if (m.JsonErrors.Count > 0)
         {
