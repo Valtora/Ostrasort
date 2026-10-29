@@ -365,8 +365,9 @@ presented for you to verify in game. Objects with **no base-game version** (two
 mods adding the *same* brand-new object) have no common ancestor, so they degrade
 to a **two-way merge** against an empty base. A field only one mod sets is kept
 automatically, and a field both mods set differently is a conflict you resolve,
-the same resolver and the same schema validation. Because there is no vanilla
-base, only a source mod changing (not a game update) can make such a merge stale.
+the same resolver and the same schema validation. Such a merge goes stale when a
+source mod changes, or when a game update adds a vanilla version of the object,
+since the merge was built without it.
 
 The patch is wholly owned by Ostrasort. A marker file records exactly which
 objects it merged, their content hashes, **the hash of the base-game object each

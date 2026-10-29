@@ -155,6 +155,14 @@ public class PatcherTests : IDisposable
         state = Engine.Analyze(_env);
         Assert.False(state.Patch.Stale);
         Assert.Contains("condowners/NewCO", state.Patch.CoveredKeys);
+
+        // ...until a game update adds a vanilla NewCO: the merge was built
+        // without it and would wipe its fields
+        WriteJson(Path.Combine(_env.CoreDataDir, "condowners", "co.json"),
+            """[{"strName":"NewCO","strDesc":"vanilla","fMass":9}]""");
+        state = Engine.Analyze(_env);
+        Assert.True(state.Patch.Stale);
+        Assert.Contains(state.Patch.StaleReasons, r => r.Contains("now has its own version"));
     }
 
     [Fact]

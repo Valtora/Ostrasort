@@ -269,12 +269,18 @@ public static class Patcher
             }
             // object merges overlay core - a changed core base (game update)
             // invalidates the merge even when every source mod is unchanged.
-            // Markers from older Ostrasort versions have no coreHash: skip.
-            if (mergeableObjects.Contains(c) && entry.CoreHash is { Length: > 0 } coreHash
+            // An empty coreHash records a mod-added object (no vanilla version
+            // at generation): if a game update has since added one, the merge
+            // was built without it and would wipe its fields. Markers from older
+            // Ostrasort versions have no coreHash at all (null): skip.
+            if (mergeableObjects.Contains(c) && entry.CoreHash is { } coreHash
                 && coreHash != CoreSig(env, c, a.IgnorePatterns))
             {
-                info.StaleReasons.Add($"{c.Key}: the BASE GAME's version changed since generation (game update?) - " +
-                                      "the merge overlays an outdated vanilla object");
+                info.StaleReasons.Add(coreHash.Length == 0
+                    ? $"{c.Key}: the BASE GAME now has its own version of this object (game update?) - " +
+                      "the merge was built without it"
+                    : $"{c.Key}: the BASE GAME's version changed since generation (game update?) - " +
+                      "the merge overlays an outdated vanilla object");
                 continue;
             }
             info.CoveredKeys.Add(c.Key);
