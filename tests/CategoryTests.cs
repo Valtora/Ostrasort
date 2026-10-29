@@ -101,6 +101,31 @@ public class CategoryTests
     }
 
     [Fact]
+    public void TwoFinalSayModsOnOnePool_AreAConflictToChoose_NotResolvedByOrder()
+    {
+        // two character-generation mods both curate the starting-ship pool: load
+        // order picks one curation and drops the other, so it must be raised -
+        // and neither reordered by item count nor union-merged
+        var core = Core();
+        var cg1 = Mod("CharGenOne", LoadTier.Late);
+        cg1.Claims[("loot", "CGEncShipbreakerShipEvents")] = new[] { "a=1x1", "b=1x1" };
+        var cg2 = Mod("CharGenTwo", LoadTier.Late);
+        cg2.Claims[("loot", "CGEncShipbreakerShipEvents")] = new[] { "a=1x1", "c=1x1" };
+        var a = new Analysis { Registered = new() { core, cg1, cg2 } };
+
+        a.FindCollisions();
+        a.MarkOrderResolved();
+        a.BuildSuggestion();
+
+        var col = Assert.Single(a.Collisions);
+        Assert.False(col.ResolvedByOrder);
+        Assert.True(col.CurationClash);
+        Assert.True(CollisionView.NeedsAttention(col));
+        Assert.False(Patcher.IsPatchableLoot(col));
+        Assert.False(a.OrderChanged);
+    }
+
+    [Fact]
     public void Suggestion_ManualEarlyPin_MovesModToFrontOfContent()
     {
         var core = Core();

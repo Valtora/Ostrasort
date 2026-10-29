@@ -40,6 +40,13 @@ public sealed class Collision
     /// the report never promises a reorder for them.
     /// </summary>
     public HashSet<PairRelation> ReorderLockedPairs { get; } = new(ReferenceEqualityComparer.Instance);
+    /// <summary>
+    /// Two or more claimants each have final say over this object (both curate
+    /// it), so load order decides between curations rather than resolving one.
+    /// A real conflict for the player: never reordered by item count, and never
+    /// union-merged, since a union would undo both mods' curation.
+    /// </summary>
+    public bool CurationClash { get; set; }
     public bool AdditiveAtLoad { get; set; }                  // flat-packed simple-container type: the game merges its records key-by-key at load, never whole-object replace
     public string? FriendlyName { get; set; }                 // loot pools: a readable description of the internal id (e.g. "OKLG embassy kiosk inventory")
     public string Key => $"{Type}/{ObjName}";
@@ -212,10 +219,24 @@ public sealed class Analysis
 
             // auto-detection claims final say only over character-generation
             // objects; a manual late pin claims it over everything the mod touches
-            if (last.CategoryManual || CategoryAnalysis.IsCharacterGenClaim(c.Type, c.ObjName))
+            if (OwnsFinalSay(last, c))
             {
                 // only where the order actually resolves a would-be loss
                 if (!c.Pairs.Any(p => p.Rel is Relation.Partial or Relation.SubsetViolation or Relation.NonLoot)) continue;
+
+                // another claimant has final say here too: the order picks one
+                // curation and drops the other, which is the player's call
+                var rival = c.Pairs.FirstOrDefault(p => p.Later == last && OwnsFinalSay(p.Earlier, c)
+                    && p.Rel is Relation.Partial or Relation.SubsetViolation or Relation.NonLoot)?.Earlier;
+                if (rival is not null)
+                {
+                    c.CurationClash = true;
+                    c.ObjectMergeable = false;   // a merge would undo both curations
+                    c.FieldNotes.Add($"{rival.DisplayName ?? rival.Name} and {last.DisplayName ?? last.Name} both have final say " +
+                                     $"over this, so only the later one's version is used and {rival.DisplayName ?? rival.Name}'s " +
+                                     "choices are lost - choose which mod to keep");
+                    continue;
+                }
 
                 c.ResolvedByOrder = true;
                 c.ObjectMergeable = false;   // final say wins wholesale - do not offer a field merge
@@ -239,7 +260,7 @@ public sealed class Analysis
 
         // every other pair the sort will not reorder: say why, and hand it to the
         // patch where the patch can win (it cannot against a later FFU mod)
-        foreach (var c in Collisions.Where(c => !c.ResolvedByOrder && !c.OrderLocked))
+        foreach (var c in Collisions.Where(c => !c.ResolvedByOrder && !c.OrderLocked && !c.CurationClash))
         {
             var locked = c.PlainPairs.Where(c.ReorderLockedPairs.Contains).ToList();
             if (locked.Count == 0) continue;
@@ -289,7 +310,8 @@ public sealed class Analysis
         {
             c.ReorderLockedPairs.Clear();
             foreach (var p in c.PlainPairs.Where(p => p.Rel == Relation.SubsetViolation))
-                if (OrderLockedPair(p) || FfuLockedPair(p) || supersets.Contains((p.Later, p.Earlier)))
+                if (OrderLockedPair(p) || FfuLockedPair(p) || supersets.Contains((p.Later, p.Earlier))
+                    || (OwnsFinalSay(p.Earlier, c) && OwnsFinalSay(p.Later, c)))   // item count never picks between curations
                     c.ReorderLockedPairs.Add(p);
         }
     }
@@ -312,6 +334,14 @@ public sealed class Analysis
     /// mod, so the superset can never move past it. The patch cannot help either,
     /// since it closes the non-FFU block and the FFU mod loads after it.
     /// </summary>
+    /// <summary>
+    /// Whether this mod has final say over the collision's object: it loads late,
+    /// and either the player pinned it (final say over everything it touches) or
+    /// the object is character-generation content (what auto-detection claims).
+    /// </summary>
+    internal static bool OwnsFinalSay(ModEntry m, Collision c) =>
+        Tier(m) == LoadTier.Late && (m.CategoryManual || CategoryAnalysis.IsCharacterGenClaim(c.Type, c.ObjName));
+
     internal static bool FfuLockedPair(PairRelation p) =>
         p.Rel == Relation.SubsetViolation && !p.Earlier.IsFfu && p.Later.IsFfu;
 

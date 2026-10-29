@@ -97,7 +97,9 @@ the other mod's is intentionally replaced. Ostrasort does **not** fold such a po
 into the compatibility patch, because a per-item union would re-add exactly the
 entries the author removed (the vanilla ships a deterministic start is meant to
 exclude). The collision shows on the **Handled automatically** tab, not as a
-conflict.
+conflict. The exception is two final-say mods curating the same object: load order
+then picks one curation and drops the other, so it is raised as a conflict for you
+to choose which mod to keep. It is neither reordered by item count nor merged.
 
 **How far the late tier reaches.** Detection claims final say only over
 **character-generation objects**. A pin you set by hand claims it over everything

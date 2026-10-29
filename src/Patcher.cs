@@ -139,6 +139,8 @@ public static class Patcher
         // per-item union would re-add exactly the entries it removed, so it is
         // resolved by load order, not by merging
         !c.ResolvedByOrder &&
+        // two final-say mods: a union would undo both curations - their call
+        !c.CurationClash &&
         c.PlainClaimants.Count >= 2 &&
         c.PlainClaimants.All(m => m.Claims.TryGetValue((c.Type, c.ObjName), out var l) && l is not null) &&
         // OrderLocked is only ever set on a subset violation the sort refuses to
