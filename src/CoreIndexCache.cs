@@ -17,7 +17,7 @@ namespace Ostrasort;
 /// </summary>
 public static class CoreIndexCache
 {
-    private const int FormatVersion = 3;   // v3: also caches the loot-pool reverse index (LootRefs)
+    private const int FormatVersion = 4;   // v3: also caches the loot-pool reverse index (LootRefs); v4: keyed on GameJson.ParserVersion
     private const int MaxCacheFiles = 8;   // fixture/--game runs get their own files; prune the rest
 
     public sealed record Entry(string Type, string Name, string RelPath);
@@ -69,6 +69,7 @@ public static class CoreIndexCache
 
             var root = JsonNode.Parse(File.ReadAllText(path));
             if (root?["v"]?.GetValue<int>() != FormatVersion) return null;
+            if (root["parser"]?.GetValue<int>() != GameJson.ParserVersion) return null;   // built by another parser
             var (count, bytes, maxTicks) = Fingerprint(coreDataDir);
             if (root["count"]?.GetValue<long>() != count ||
                 root["bytes"]?.GetValue<long>() != bytes ||
@@ -107,6 +108,7 @@ public static class CoreIndexCache
             var root = new JsonObject
             {
                 ["v"] = FormatVersion,
+            ["parser"] = GameJson.ParserVersion,
                 ["dir"] = coreDataDir,
                 ["count"] = count,
                 ["bytes"] = bytes,

@@ -27,6 +27,13 @@ namespace Ostrasort;
 /// </summary>
 public static class GameJson
 {
+    /// <summary>
+    /// Bump whenever what the repair accepts changes: the core index cache keys on
+    /// it, so a parser change rebuilds the cache instead of keeping objects the old
+    /// parser could not read out of the index until the next game update.
+    /// </summary>
+    public const int ParserVersion = 1;
+
     private static readonly char[] LineEnds = ['\n', '\r'];
 
     /// <summary>
