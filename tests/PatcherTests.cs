@@ -82,6 +82,24 @@ public class PatcherTests : IDisposable
         Assert.Contains(state.Patch.StaleReasons, r => r.Contains("BASE GAME"));
     }
 
+    [Theory]
+    [InlineData("OstrasortPatch|disabled")]
+    [InlineData(null)]   // the patch entry removed from aLoadOrder
+    public void PatchTheGameDoesNotLoad_CoversNothing(string? patchEntry)
+    {
+        var state = Engine.Analyze(_env);
+        var plan = Patcher.PlanMerge(_env, state.Analysis);
+        Patcher.Generate(_env, plan, state.Analysis, _env.InstalledVersion, "test");
+
+        var order = patchEntry is null ? "\"core\",\"ModA\",\"ModB\"" : $"\"core\",\"ModA\",\"ModB\",\"{patchEntry}\"";
+        File.WriteAllText(_env.LoadingOrderPath, $$"""[{"strName":"Mod Loading Order","aLoadOrder":[{{order}}]}]""");
+        state = Engine.Analyze(_env);
+
+        Assert.True(state.Patch.Stale);
+        Assert.Empty(state.Patch.CoveredKeys);
+        Assert.False(Assert.Single(state.Analysis.Collisions).ResolvedByPatch);
+    }
+
     [Fact]
     public void ModAddedObject_NoCoreAncestor_TwoWayMerges()
     {

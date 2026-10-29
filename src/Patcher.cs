@@ -213,6 +213,16 @@ public static class Patcher
         }
         info.ToolVersion = root?["toolVersion"]?.GetValue<string>();
 
+        // a patch the game does not load covers nothing, however fresh its marker
+        var patchEntry = a.Registered.FirstOrDefault(m => m.IsPatch);
+        if (patchEntry is null || patchEntry.Disabled)
+        {
+            info.StaleReasons.Add(patchEntry is null
+                ? "the patch is not in the load order, so the game does not load it - regenerate the patch to register it"
+                : "the patch is turned off in the load order, so the game does not load it - tick it Active");
+            return info;
+        }
+
         // marker pool key -> the ordered (id, hash) sources it was generated
         // from, plus (object merges only) the hash of the core base it overlaid
         var markerPools = new Dictionary<string, (List<(string Id, string Hash)> Sources, string? CoreHash)>(StringComparer.Ordinal);
