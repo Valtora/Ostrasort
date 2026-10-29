@@ -312,6 +312,19 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void UndoRestore_RefusesASnapshotFromAnotherInstall()
+    {
+        var snap = UndoOps.Capture(_env, "test") with
+        {
+            LoadingOrderPath = Path.Combine(_root, "OtherInstall", "Mods", "loading_order.json"),
+        };
+        var before = File.ReadAllText(_env.LoadingOrderPath);
+
+        Assert.Throws<InvalidOperationException>(() => UndoOps.Restore(_env, snap));
+        Assert.Equal(before, File.ReadAllText(_env.LoadingOrderPath));
+    }
+
+    [Fact]
     public void Remove_RefusesAFolderItDidNotGenerate()
     {
         // a folder named like the patch but WITHOUT the marker must not be deleted

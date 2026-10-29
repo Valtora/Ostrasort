@@ -16,13 +16,18 @@ public partial class InstallationsDialog : Window
 {
     private readonly InstallationStore _store;
     private readonly ObservableCollection<Installation> _items;
+    private readonly Dictionary<Installation, string> _originalNames = new(ReferenceEqualityComparer.Instance);
     private bool _loading;
+
+    /// <summary>After Save: old name -> new name for every saved install that was renamed.</summary>
+    public Dictionary<string, string> Renames { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public InstallationsDialog(InstallationStore store, string? errorMessage)
     {
         _store = store;
         _items = new ObservableCollection<Installation>(
             store.Items.Select(i => new Installation { Name = i.Name, GameRoot = i.GameRoot, ModsDir = i.ModsDir }));
+        foreach (var i in _items) _originalNames[i] = i.Name;
         InitializeComponent();
         if (!string.IsNullOrWhiteSpace(errorMessage))
         {
@@ -98,6 +103,10 @@ public partial class InstallationsDialog : Window
                 "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+        foreach (var (item, original) in _originalNames)
+            if (_items.Contains(item) && !string.IsNullOrWhiteSpace(item.Name)
+                && !string.Equals(item.Name.Trim(), original, StringComparison.OrdinalIgnoreCase))
+                Renames[original] = item.Name.Trim();
         _store.Items = cleaned;
         DialogResult = true;
     }

@@ -7,9 +7,12 @@ namespace Ostrasort;
 /// full contents of the generated patch folder (null = no patch existed).
 /// Together those cover every mutation Ostrasort performs - order changes,
 /// patch generation/refresh (including the player's merge decisions, which
-/// live in the marker), patch removal, and .bak restores.
+/// live in the marker), patch removal, and .bak restores. LoadingOrderPath
+/// identifies the install it was taken from, so a snapshot can never be
+/// restored into a different install.
 /// </summary>
-public sealed record OpSnapshot(string Label, string LoadingOrderText, Dictionary<string, byte[]>? PatchFiles);
+public sealed record OpSnapshot(string Label, string LoadingOrderText, Dictionary<string, byte[]>? PatchFiles,
+    string LoadingOrderPath);
 
 public static class UndoOps
 {
@@ -24,7 +27,7 @@ public static class UndoOps
             foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
                 patch[Path.GetRelativePath(dir, f)] = File.ReadAllBytes(f);
         }
-        return new OpSnapshot(label, lo, patch);
+        return new OpSnapshot(label, lo, patch, Path.GetFullPath(env.LoadingOrderPath));
     }
 
     /// <summary>Puts the install back exactly as the snapshot recorded it.</summary>
@@ -32,6 +35,9 @@ public static class UndoOps
     {
         // EVERY validation runs before ANY write, so a refusal leaves the
         // install untouched instead of half-restored.
+        if (!string.Equals(Path.GetFullPath(env.LoadingOrderPath), snap.LoadingOrderPath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"This undo step belongs to a different installation ({snap.LoadingOrderPath}) - refusing to restore it here.");
         var parsed = LoadOrderFile.Parse(env.LoadingOrderPath, snap.LoadingOrderText);
 
         var dir = Path.Combine(env.ModsDir, Patcher.FolderName);

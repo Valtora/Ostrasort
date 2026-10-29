@@ -172,6 +172,14 @@ public partial class MainWindow : Window
             PopulateInstallations();   // snap the combo back to the still-active install
             return;
         }
+        // undo history describes the install it was captured on - never carry it
+        // across to a different one (UndoOps.Restore also refuses, as a backstop)
+        if (!string.Equals(Path.GetFullPath(env.LoadingOrderPath), Path.GetFullPath(_env.LoadingOrderPath),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _undo.Clear();
+            _redo.Clear();
+        }
         _env = env;
         _activeInstall = name;
         _installs.Active = name;
@@ -182,13 +190,17 @@ public partial class MainWindow : Window
 
     private void ManageInstalls_Click(object sender, RoutedEventArgs e)
     {
-        if (new InstallationsDialog(_installs, null) { Owner = this }.ShowDialog() != true)
+        var dlg = new InstallationsDialog(_installs, null) { Owner = this };
+        if (dlg.ShowDialog() != true)
         {
             PopulateInstallations();   // discard any visual edits the dialog made to the list
             return;
         }
         _installs.Save();
-        if (_installs.Find(_activeInstall) is null) _activeInstall = null;   // active was renamed/removed
+        // follow a rename of the active install instead of reading it as a removal
+        if (_activeInstall is not null && dlg.Renames.TryGetValue(_activeInstall, out var renamed))
+            _activeInstall = renamed;
+        if (_installs.Find(_activeInstall) is null) _activeInstall = null;   // active was removed
         PopulateInstallations();
         SwitchInstall(_activeInstall);   // re-resolve in case the active install's folders changed
     }
