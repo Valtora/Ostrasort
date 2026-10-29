@@ -513,6 +513,37 @@ public sealed class Analysis
                         : "you pinned it to load early (yields to other mods)"));
         }
 
+        // rule 4.6: a non-FFU mod loads after the mods its requiredMods (or
+        // Autoload.Meta.toml) names - FFU drops a mod whose dependency loads
+        // after it. FFU dependents are ordered inside the FFU block (rule 5).
+        // A move never crosses a load-priority band; when the bands keep a
+        // dependent ahead of its dependency, say so instead.
+        var plain = work.Where(m => !m.IsFfu && !m.IsPatch && m.Kind != EntryKind.Core).ToList();
+        var bandWarned = new HashSet<(ModEntry, ModEntry)>();
+        for (var pass = 0; pass <= plain.Count; pass++)
+        {
+            var moved = false;
+            foreach (var m in plain.Where(m => m.HasFfuDeps))
+                foreach (var dep in m.FfuDeps.Select(n => ResolveDep(plain, n)).OfType<ModEntry>().Where(d => d != m))
+                {
+                    int mi = work.IndexOf(m), di = work.IndexOf(dep);
+                    if (di < mi) continue;
+                    if (Tier(dep) != Tier(m))
+                    {
+                        if (bandWarned.Add((m, dep)))
+                            Warnings.Add($"'{m.DisplayName ?? m.Name}' requires '{dep.DisplayName ?? dep.Name}' but its load " +
+                                         "priority keeps it loading first (FFU skips a mod whose dependency loads after it) - change one of their load priorities");
+                        continue;
+                    }
+                    work.RemoveAt(mi);
+                    work.Insert(work.IndexOf(dep) + 1, m);
+                    Changes.Add(new Change("move", SuggestedRaw(m),
+                        $"requires {dep.DisplayName ?? dep.Name}, which must load first"));
+                    moved = true;
+                }
+            if (!moved) break;
+        }
+
         // rule 5 (FFU): FFU-dependent mods form a block AFTER every non-FFU mod:
         // the FFU core tier (Minor Fixes Plus) first, then FFU mods dependency-
         // sorted per their Autoload.Meta.toml, patch-style mods pinned to their
@@ -572,11 +603,7 @@ public sealed class Analysis
     {
         var ordered = ffu.OrderBy(m => m.FfuGroup == FfuLoadGroup.FFUCore ? 0 : 1).ToList();   // stable
 
-        ModEntry? Resolve(string strName) =>
-            ordered.FirstOrDefault(m => string.Equals(m.DisplayName, strName, StringComparison.OrdinalIgnoreCase))
-            ?? ordered.FirstOrDefault(m => string.Equals(m.Name, strName, StringComparison.OrdinalIgnoreCase))
-            ?? ordered.FirstOrDefault(m => FfuAnalysis.FfuId(m.DisplayName) == FfuAnalysis.FfuId(strName)
-                                        || FfuAnalysis.FfuId(m.Name) == FfuAnalysis.FfuId(strName));
+        ModEntry? Resolve(string strName) => ResolveDep(ordered, strName);
 
         // bubble dependents after their dependencies (bounded - a cycle can't loop forever)
         for (var pass = 0; pass <= ffu.Count; pass++)
@@ -619,6 +646,16 @@ public sealed class Analysis
                 "FFU block ordered: Minor Fixes Plus tier first, then dependency order per Autoload.Meta.toml"));
         return ordered;
     }
+
+    /// <summary>
+    /// The mod a dependency name refers to: by strName, then folder name, then
+    /// FFU's own id rule (spaces become underscores).
+    /// </summary>
+    private static ModEntry? ResolveDep(IReadOnlyList<ModEntry> mods, string strName) =>
+        mods.FirstOrDefault(m => string.Equals(m.DisplayName, strName, StringComparison.OrdinalIgnoreCase))
+        ?? mods.FirstOrDefault(m => string.Equals(m.Name, strName, StringComparison.OrdinalIgnoreCase))
+        ?? mods.FirstOrDefault(m => FfuAnalysis.FfuId(m.DisplayName) == FfuAnalysis.FfuId(strName)
+                                 || FfuAnalysis.FfuId(m.Name) == FfuAnalysis.FfuId(strName));
 
     internal static string IdentityOf(ModEntry m) =>
         m.Kind == EntryKind.Local ? $"local:{m.Name}"

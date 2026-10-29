@@ -461,6 +461,34 @@ public class FfuOrderTests
     }
 
     [Fact]
+    public void RequiredMods_BetweenTwoNonFfuMods_LoadsTheDependencyFirst()
+    {
+        var x = Local("X");
+        x.RequiredMods.Add("Y");
+        var y = Local("Y");
+        var a = new Analysis { Registered = [Core(), x, y] };
+
+        a.BuildSuggestion();
+
+        Assert.Equal(new[] { "core", "Y", "X" }, a.SuggestedOrder);
+    }
+
+    [Fact]
+    public void RequiredMods_HeldApartByLoadPriority_WarnsInsteadOfMoving()
+    {
+        var x = Local("X");
+        x.RequiredMods.Add("Y");
+        x.Tier = LoadTier.Early;
+        var y = Local("Y");
+        var a = new Analysis { Registered = [Core(), x, y] };
+
+        a.BuildSuggestion();
+
+        Assert.Equal(new[] { "core", "X", "Y" }, a.SuggestedOrder);
+        Assert.Contains(a.Warnings, w => w.Contains("requires 'Y'"));
+    }
+
+    [Fact]
     public void FfuPatchMod_SitsRightAfterItsTarget()
     {
         var target = Local("CoolGuns", ffu: true);
