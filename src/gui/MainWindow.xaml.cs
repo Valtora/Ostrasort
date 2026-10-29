@@ -176,6 +176,7 @@ public partial class MainWindow : Window
 
     private void SwitchInstall(string? name)
     {
+        if (!ConfirmDiscardArrangement()) { PopulateInstallations(); return; }
         GameEnv env;
         EngineState scanned;
         var inst = _installs.Find(name);
@@ -1020,13 +1021,32 @@ public partial class MainWindow : Window
 
     // --------------------------------------------------------------- actions ---
 
-    private bool GateRunning()
+    /// <summary>
+    /// The gate every write passes: refuses while the game runs, then - because
+    /// every write rescans, which drops a pending drag arrangement - asks before
+    /// discarding one. Apply passes <paramref name="appliesArrangement"/>, since
+    /// writing the arrangement is the point of it.
+    /// </summary>
+    private bool GateRunning(bool appliesArrangement = false)
     {
-        if (!GameEnv.IsGameRunning()) return true;
-        MessageBox.Show(this, "Ostranauts is running — close it first. Nothing was written.",
-            "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
-        Rescan();
-        return false;
+        if (GameEnv.IsGameRunning())
+        {
+            MessageBox.Show(this, "Ostranauts is running — close it first. Nothing was written.",
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            if (!_manualDirty) Rescan();   // refresh the running state, never over a pending arrangement
+            return false;
+        }
+        return appliesArrangement || ConfirmDiscardArrangement();
+    }
+
+    /// <summary>True when there is no pending manual arrangement, or the player agrees to discard it.</summary>
+    private bool ConfirmDiscardArrangement()
+    {
+        if (!_manualDirty) return true;
+        return MessageBox.Show(this,
+            "Your manual arrangement is not applied yet, and this action reloads the list, which discards it.\n\n" +
+            "Discard the arrangement and continue? Choose No to go back and apply it first.",
+            "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
     }
 
     /// <summary>
@@ -1210,7 +1230,7 @@ public partial class MainWindow : Window
     /// <summary>Writes a pending manual (drag) arrangement. The suggested order goes through HealthFix_Click.</summary>
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || !_manualDirty || !GateRunning() || !GateRival() || !ConfirmLoadOrderCurrent()) return;
+        if (_state is null || !_manualDirty || !GateRunning(appliesArrangement: true) || !GateRival() || !ConfirmLoadOrderCurrent()) return;
         _busy = true;
         try
         {
@@ -1865,7 +1885,7 @@ public partial class MainWindow : Window
     /// <summary>Persists "leave this folder unregistered" (no game files touched).</summary>
     private void SetIgnored(bool ignored)
     {
-        if (ModsGrid.SelectedItem is not ModRow row) return;
+        if (ModsGrid.SelectedItem is not ModRow row || !ConfirmDiscardArrangement()) return;
         var key = IgnoreList.KeyFor(_env, row.M);
         if (ignored) _ignore.Add(key); else _ignore.Remove(key);
         OpLog.Add(ignored
@@ -1881,7 +1901,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void SetFfuOverride(bool ffu)
     {
-        if (ModsGrid.SelectedItem is not ModRow row) return;
+        if (ModsGrid.SelectedItem is not ModRow row || !ConfirmDiscardArrangement()) return;
         var name = row.M.DisplayName ?? row.M.Name;
         var key = FfuOverrideList.KeyFor(_env, row.M);
         if (ffu) _ffuOverrides.Add(key); else _ffuOverrides.Remove(key);
@@ -1903,7 +1923,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void SetLoadPriority(LoadTier? tier)
     {
-        if (ModsGrid.SelectedItem is not ModRow row) return;
+        if (ModsGrid.SelectedItem is not ModRow row || !ConfirmDiscardArrangement()) return;
         var name = row.M.DisplayName ?? row.M.Name;
         var key = CategoryOverrideList.KeyFor(_env, row.M);
         if (tier is { } t) _categoryOverrides.Set(key, t); else _categoryOverrides.Clear(key);
