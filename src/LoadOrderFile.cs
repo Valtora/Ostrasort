@@ -120,7 +120,7 @@ public sealed class LoadOrderFile
         try { if (File.Exists(Path)) previous = File.ReadAllText(Path); }
         catch (IOException) { } catch (UnauthorizedAccessException) { }
 
-        File.WriteAllText(Path + ".bak", previous);  // the text this write replaces
+        AtomicFile.WriteAllText(Path + ".bak", previous);  // the text this write replaces (never truncated)
         Backups.Snapshot(Path, previous);            // rolling history (the .bak only survives one write)
         AtomicFile.WriteAllText(Path, json);         // never leave a truncated live file
     }

@@ -1371,23 +1371,19 @@ public partial class MainWindow : Window
         _busy = true;
         try
         {
-            var bakText = File.ReadAllText(bak);
-            if (!bakText.TrimStart().StartsWith('['))
-            {
-                MessageBox.Show(this, "The .bak is not a top-level JSON array — refusing to restore it.",
-                    "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
+            // validate up front with the same parser every write uses: a damaged
+            // or truncated .bak is refused before anything is asked or written
+            if (TryParseRestore(live, File.ReadAllText(bak), ".bak") is not { } parsed) return;
             if (MessageBox.Show(this,
                     $"Swap loading_order.json with the backup from {File.GetLastWriteTime(bak):yyyy-MM-dd HH:mm:ss}?\n\n" +
                     "The current file becomes the new .bak, so restoring is reversible.",
                     "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
             CaptureOp("restore .bak");
-            var liveText = File.ReadAllText(live);
-            Backups.Snapshot(live, liveText);
-            AtomicFile.WriteAllText(live, bakText);
-            File.WriteAllText(bak, liveText);
+            // the guarded write: lock, strict round-trip, atomic swap, and the
+            // current file becomes the new .bak (plus a rolling backup), so the
+            // restore is reversible
+            parsed.Write(parsed.Order);
             OpLog.Add("Restored loading_order.json from the .bak (swapped).");
             Rescan();
         }
@@ -1404,24 +1400,15 @@ public partial class MainWindow : Window
         _busy = true;
         try
         {
-            var text = File.ReadAllText(backupPath);
-            if (!text.TrimStart().StartsWith('['))
-            {
-                MessageBox.Show(this, "That backup is not a top-level JSON array — refusing to restore it.",
-                    "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
+            var live = _env.LoadingOrderPath;
+            if (TryParseRestore(live, File.ReadAllText(backupPath), "backup") is not { } parsed) return;
             if (MessageBox.Show(this,
                     $"Restore loading_order.json from the backup written {File.GetLastWriteTime(backupPath):yyyy-MM-dd HH:mm:ss}?\n\n" +
                     "The current file becomes the new .bak first, so this is reversible.",
                     "Ostrasort", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
             CaptureOp("restore backup");
-            var live = _env.LoadingOrderPath;
-            var liveText = File.ReadAllText(live);
-            File.WriteAllText(live + ".bak", liveText);
-            Backups.Snapshot(live, liveText);
-            AtomicFile.WriteAllText(live, text);
+            parsed.Write(parsed.Order);   // guarded write; the current file becomes the new .bak
             OpLog.Add($"Restored loading_order.json from backup {Path.GetFileName(backupPath)}.");
             Rescan();
         }
@@ -1430,6 +1417,18 @@ public partial class MainWindow : Window
             MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { _busy = false; }
+    }
+
+    /// <summary>Parses restore text with the load-order validator, or explains the refusal and returns null.</summary>
+    private LoadOrderFile? TryParseRestore(string live, string text, string what)
+    {
+        try { return LoadOrderFile.Parse(live, text); }
+        catch (Exception ex) when (ex is InvalidDataException or System.Text.Json.JsonException)
+        {
+            MessageBox.Show(this, $"That {what} is not a valid loading_order.json, so it was not restored.\n\n{ex.Message}",
+                "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            return null;
+        }
     }
 
     private void Launch_Click(object sender, RoutedEventArgs e)
