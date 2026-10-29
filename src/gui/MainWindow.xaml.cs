@@ -398,7 +398,9 @@ public partial class MainWindow : Window
         if (_state is null || _state.Analysis.LogFingerprint is null) return;
         _logDismissed.Dismiss(_env, _state.Analysis);
         OpLog.Add("Dismissed the last launch's game-log issues (they return if the game reports them again).");
+        RenderTabs(_state);        // the Warnings tab count drops them too
         RenderHealth(_state);
+        UpdateActionBar(_state);   // and so does the "need attention" total
         RunStatus.Text = "Last launch's problems dismissed. They return if the game reports them again.  ";
         RunStatus.Foreground = Good;
     }
