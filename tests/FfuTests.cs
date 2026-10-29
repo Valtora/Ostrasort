@@ -475,6 +475,30 @@ public class FfuOrderTests
     }
 
     [Fact]
+    public void FfuPatchMod_NeverPinsAheadOfItsOtherRequiredMods()
+    {
+        // the patch targets Better Ships but also requires More Weapons, which
+        // loads later: pinning it straight after Better Ships would make FFU drop it
+        var bs = Local("Better_Ships", ffu: true);
+        var mw = Local("More_Weapons", ffu: true);
+        var patch = Local("Better_Ships_Patch", ffu: true);
+        patch.RequiredMods.Add("Better_Ships");
+        patch.RequiredMods.Add("More_Weapons");
+        patch.IsFfuPatch = true;
+        patch.FfuPatchTarget = bs;
+        var core = Core();
+        var a = new Analysis { Registered = [core, bs, patch, mw] };
+
+        a.BuildSuggestion();
+
+        var order = a.SuggestedOrder;
+        Assert.True(order.IndexOf("Better_Ships_Patch") > order.IndexOf("More_Weapons"),
+            $"the patch must load after every mod it requires. Order: {string.Join(", ", order)}");
+        var byRaw = new[] { core, bs, patch, mw }.ToDictionary(m => m.Raw);
+        Assert.DoesNotContain(Analysis.ValidateOrder(order.Select(e => byRaw[e]).ToList()), i => i.Contains("More_Weapons"));
+    }
+
+    [Fact]
     public void GeneratedPatch_ClosesTheNonFfuBlock()
     {
         // the Ostrasort Patch is identified via its marker file - build a real one

@@ -535,15 +535,22 @@ public sealed class Analysis
             if (!moved) break;
         }
 
-        // FFU patch mods: immediately after the mod they patch (when it is in this block)
+        // FFU patch mods: right after the mod they patch (when it is in this block),
+        // but never ahead of anything else they require - FFU drops a mod that
+        // loads before one of its requiredMods, so the pin lands after the LATEST
+        // of the target and every dependency
         foreach (var p in ordered.Where(m => m is { IsFfuPatch: true, FfuPatchTarget: not null }).ToList())
         {
-            var ti = ordered.IndexOf(p.FfuPatchTarget!);
-            if (ti < 0 || ordered.IndexOf(p) == ti + 1) continue;
-            ordered.Remove(p);
-            ordered.Insert(ordered.IndexOf(p.FfuPatchTarget!) + 1, p);
+            if (!ordered.Contains(p.FfuPatchTarget!)) continue;
+            var anchors = p.FfuDeps.Select(Resolve).OfType<ModEntry>()
+                .Append(p.FfuPatchTarget!).Where(d => d != p && ordered.Contains(d)).ToList();
+            var was = ordered.IndexOf(p);
+            ordered.RemoveAt(was);
+            var at = anchors.Max(d => ordered.IndexOf(d)) + 1;
+            ordered.Insert(at, p);
+            if (at == was) continue;   // already in place
             Changes.Add(new Change("move", SuggestedRaw(p),
-                $"FFU patch mods load immediately after their target ({p.FfuPatchTarget!.DisplayName ?? p.FfuPatchTarget.Name}) - and should be removed after one game launch"));
+                $"FFU patch mods load right after their target ({p.FfuPatchTarget!.DisplayName ?? p.FfuPatchTarget.Name}) and anything else they require - and should be removed after one game launch"));
         }
 
         if (!ordered.SequenceEqual(ffu))

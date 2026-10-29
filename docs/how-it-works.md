@@ -263,7 +263,8 @@ Ostrasort treats all of that as a **supported ordering contract**.
 - The sort keeps every FFU mod **after all non-FFU mods** (the game loads non-FFU
   content first, which is FFU's own rule), with the **Minor Fixes Plus** tier
   leading the FFU block and dependencies before dependents.
-- FFU **"Patch" mods** are pinned immediately after their target and flagged
+- FFU **"Patch" mods** are pinned right after their target (and after anything
+  else their `requiredMods` names) and flagged
   "applies once, remove after one game launch".
 - FFU data mods under `BepInEx\plugins\` are indexed and registered by absolute
   path.

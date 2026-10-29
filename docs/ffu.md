@@ -140,7 +140,8 @@ Ostrasort produces the order FFU wants:
 - Inside the FFU block, the **Minor Fixes Plus tier leads**, then FFU mods
   **dependency-sorted** (a mod loads after everything in its `requiredMods` /
   meta dependencies).
-- **FFU "Patch" mods** are pinned immediately after the mod they patch, with a
+- **FFU "Patch" mods** are pinned right after the mod they patch (never ahead of
+  another mod their `requiredMods` names), with a
   one-use reminder to remove them after the next launch.
 - The generated **Ostrasort Patch** closes the **non-FFU** block (FFU mods
   field-merge on top of it) rather than loading absolute-last.
