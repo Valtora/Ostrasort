@@ -1521,7 +1521,10 @@ public partial class MainWindow : Window
         var zips = DroppedZips(e);
         if (zips.Length == 0) return;
         e.Handled = true;
-        foreach (var z in zips) InstallFromZip(z);
+        // return from the drop first: Explorer waits on the OLE drop until this
+        // handler returns, so installing in here (confirm dialog included) would
+        // freeze the Explorer window for as long as Ostrasort's dialogs stay open
+        Dispatcher.BeginInvoke(() => { foreach (var z in zips) InstallFromZip(z); });
     }
 
     /// <summary>
