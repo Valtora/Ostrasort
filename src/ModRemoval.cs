@@ -14,6 +14,9 @@ public static class ModRemoval
 {
     public sealed record Result(List<string> Affected, List<string> Unregistered, bool Deleted);
 
+    /// <summary>Where a parked BepInEx\plugins mod goes: a sibling of plugins, which BepInEx never scans.</summary>
+    public const string ParkedPluginsFolder = "plugins.disabled";
+
     public static Result RemoveLocal(GameEnv env, ModEntry m, bool delete)
     {
         if (m.Kind is not (EntryKind.Local or EntryKind.PluginDir))
@@ -40,8 +43,14 @@ public static class ModRemoval
             }
             else
             {
-                var target = dir + ".disabled";
+                // a plugins-dir mod parks OUTSIDE BepInEx\plugins: BepInEx loads every
+                // DLL under plugins recursively, so a renamed folder left in there
+                // would keep running its code. Everything else parks in place.
+                var target = m.Kind == EntryKind.PluginDir
+                    ? Path.Combine(env.BepInExDir, ParkedPluginsFolder, Path.GetRelativePath(parent, dir))
+                    : dir + ".disabled";
                 if (Directory.Exists(target)) FileSystemUtil.RobustDeleteDirectory(target);   // clear a stale park first
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 Directory.Move(dir, target);                          // rename works even on ReadOnly folders
                 affected.Add(target);
             }

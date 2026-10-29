@@ -45,6 +45,24 @@ public class ModRemovalTests : IDisposable
     }
 
     [Fact]
+    public void Park_PluginsDirMod_MovesItOutOfThePluginsTree()
+    {
+        // BepInEx loads DLLs anywhere under plugins, so the park must leave it
+        var dir = Path.Combine(_env.BepInExDir, "plugins", "Author-Mod");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Mod.dll"), "dll");
+        var m = new ModEntry { Raw = dir, Kind = EntryKind.PluginDir, Name = "Author-Mod", Dir = dir };
+
+        var result = ModRemoval.RemoveLocal(_env, m, delete: false);
+
+        Assert.False(Directory.Exists(dir));
+        var parked = Path.Combine(_env.BepInExDir, ModRemoval.ParkedPluginsFolder, "Author-Mod");
+        Assert.Equal(parked, Assert.Single(result.Affected));
+        Assert.True(File.Exists(Path.Combine(parked, "Mod.dll")));
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(_env.BepInExDir, "plugins"), "*.dll", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public void Delete_RefusesAFolderOutsideMods()
     {
         var m = new ModEntry { Raw = "x", Kind = EntryKind.Local, Name = "x", Dir = _env.ModsDir };

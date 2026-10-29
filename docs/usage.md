@@ -218,7 +218,9 @@ and from a terminal it is `--hold-new`.
   [how-it-works.md](how-it-works.md#game-system-categories-and-load-priority).
 - **Remove mod (park or delete)…** (right-click a local mod) parks its folder as
   `*.disabled` (reversible, rename it back) or deletes it permanently, and drops
-  its load-order entry either way. Deleted files are **not** restored by Ctrl+Z,
+  its load-order entry either way. A mod under `BepInEx\plugins` parks to
+  `BepInEx\plugins.disabled` instead, because BepInEx would still load any DLL
+  left anywhere under `plugins`. Deleted files are **not** restored by Ctrl+Z,
   so parking is the safe default.
 - **Unsubscribe on Steam…** (right-click a Workshop mod) opens the item's page in
   the Steam client. Subscriptions belong to Steam, so unsubscribing is its

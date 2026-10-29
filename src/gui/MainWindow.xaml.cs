@@ -1812,7 +1812,10 @@ public partial class MainWindow : Window
         var name = m.DisplayName ?? m.Name;
         var choice = ParkOrDeleteDialog.Show(this,
             $"Remove local mod '{name}'?",
-            "Park renames its folder to *.disabled (rename back to restore); Delete removes the files " +
+            (m.Kind == EntryKind.PluginDir
+                ? $"Park moves its folder to BepInEx\\{ModRemoval.ParkedPluginsFolder} (BepInEx never loads code from there; move it back to restore); "
+                : "Park renames its folder to *.disabled (rename back to restore); ") +
+            "Delete removes the files " +
             "permanently — Ostrasort's undo does NOT bring deleted files back. Its load-order entry is " +
             "dropped either way (a .bak and a rolling backup are kept).");
         if (choice == ParkOrDelete.Cancel) return;
@@ -1828,7 +1831,7 @@ public partial class MainWindow : Window
             Rescan();
             RunStatus.Text = result.Deleted
                 ? $"'{name}' deleted and unregistered.  "
-                : $"'{name}' parked as .disabled and unregistered — rename the folder back to restore it.  ";
+                : $"'{name}' parked at {result.Affected.FirstOrDefault()} and unregistered — move or rename it back to restore it.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex)
