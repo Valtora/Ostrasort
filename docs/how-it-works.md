@@ -364,7 +364,9 @@ version of a merged object, the patch is flagged stale even though no mod change
 because the merge would keep overriding it with values built on the old vanilla
 base. Every generation **rebuilds the patch's `data\` tree from scratch**, so a
 conflict that disappeared (a mod uninstalled or updated) can never leave a ghost
-override behind. The staleness inspection also verifies the patch actually
+override behind. Until that regeneration, a merge no conflict needs any more marks
+the patch stale (or, when nothing else is covered, no longer needed), because it
+still loads last and overrides the mods' own versions. The staleness inspection also verifies the patch actually
 **loads after every mod it merges**, so if the order puts a merged mod later, the
 patch is flagged instead of falsely claiming "nothing lost". See
 [usage.md](usage.md) for the resolver workflow.

@@ -61,8 +61,6 @@ public static class TextReport
               (s.Patch.UnneededKeys.Count > 0 ? $" (resolved upstream: {string.Join(", ", s.Patch.UnneededKeys)})" : "")
             : $"fresh (v{s.Patch.ToolVersion ?? "?"}) covering {string.Join(", ", s.Patch.CoveredKeys)}" +
               (s.Patch.ExcludedCount > 0 ? $"; {s.Patch.ExcludedCount} item(s) excluded by you" : "")));
-        if (s.Patch.Exists && !s.Patch.Stale && !s.Patch.Obsolete && s.Patch.UnneededKeys.Count > 0)
-            sb.AppendLine($"  no longer needed for {string.Join(", ", s.Patch.UnneededKeys)} (resolved upstream)");
         sb.AppendLine();
 
         var jsonErrMods = a.AllMods.Where(m => m.JsonErrors.Count > 0).ToList();

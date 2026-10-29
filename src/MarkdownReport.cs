@@ -91,8 +91,6 @@ public static class MarkdownReport
               (s.Patch.UnneededKeys.Count > 0 ? $" (Resolved upstream: {Md(string.Join(", ", s.Patch.UnneededKeys))}.)" : "")
             : $"Fresh (v{s.Patch.ToolVersion ?? "?"}) covering {Md(string.Join(", ", s.Patch.CoveredKeys))}."
               + (s.Patch.ExcludedCount > 0 ? $" {s.Patch.ExcludedCount} item(s) excluded by you." : ""));
-        if (s.Patch.Exists && !s.Patch.Stale && !s.Patch.Obsolete && s.Patch.UnneededKeys.Count > 0)
-            sb.AppendLine($"No longer needed for {Md(string.Join(", ", s.Patch.UnneededKeys))} (resolved upstream).");
         sb.AppendLine();
 
         var jsonErrMods = a.AllMods.Where(m => m.JsonErrors.Count > 0).ToList();

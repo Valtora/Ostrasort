@@ -101,6 +101,31 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void MergeNoLongerNeeded_MakesThePatchStale_AndAllUnneededMakesItObsolete()
+    {
+        WriteJson(Path.Combine(_env.CoreDataDir, "conditions", "cond2.json"),
+            """[{"strName":"CondY","fSev":1,"strColor":"Red"}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "conditions", "cond2.json"),
+            """[{"strName":"CondY","fSev":2,"strColor":"Red"}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "conditions", "cond2.json"),
+            """[{"strName":"CondY","fSev":1,"strColor":"Blue"}]""");
+        var state = Engine.Analyze(_env);
+        Patcher.Generate(_env, Patcher.PlanMerge(_env, state.Analysis), state.Analysis, _env.InstalledVersion, "test");
+
+        // ModB stops overriding CondX: the patch still ships a merged CondX
+        File.Delete(Path.Combine(_env.ModsDir, "ModB", "data", "conditions", "cond.json"));
+        state = Engine.Analyze(_env);
+        Assert.True(state.Patch.Stale);
+        Assert.Contains(state.Patch.StaleReasons, r => r.Contains("conditions/CondX"));
+
+        // once nothing at all is covered, removing the patch is the fix
+        File.Delete(Path.Combine(_env.ModsDir, "ModB", "data", "conditions", "cond2.json"));
+        state = Engine.Analyze(_env);
+        Assert.False(state.Patch.Stale);
+        Assert.True(state.Patch.Obsolete);
+    }
+
+    [Fact]
     public void ModAddedObject_NoCoreAncestor_TwoWayMerges()
     {
         // two mods each ADD the same new object (no vanilla version). Disjoint

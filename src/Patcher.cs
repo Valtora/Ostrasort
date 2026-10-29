@@ -277,6 +277,13 @@ public static class Patcher
         }
         foreach (var key in markerPools.Keys.Where(k => current.All(c => c.Key != k)))
             info.UnneededKeys.Add(key);
+        // a merge no conflict needs any more still loads last and overrides the
+        // game with values no installed mod may set now - that is stale, not a
+        // note. With nothing else covered the whole patch is Obsolete instead,
+        // and removing it is the fix.
+        if (info.UnneededKeys.Count > 0 && (info.CoveredKeys.Count > 0 || info.Stale))
+            info.StaleReasons.Add($"no longer a conflict, but the patch still overrides {string.Join(", ", info.UnneededKeys)} - " +
+                                  "regenerate it so the mods' own versions apply");
 
         return info;
     }
