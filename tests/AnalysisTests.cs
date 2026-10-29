@@ -54,6 +54,33 @@ public class AnalysisTests
     }
 
     [Fact]
+    public void Suggestion_DuplicateWithDifferentMarkers_KeepsTheEnabledCopy()
+    {
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var off = new ModEntry { Raw = "M|disabled", Kind = EntryKind.Local, Name = "M", Dir = "M", Disabled = true };
+        var x = Registered("X", EntryKind.Local, "X");
+        var on = new ModEntry { Raw = "M|edit", Kind = EntryKind.Local, Name = "M", Dir = "M", EditMarker = true };
+        var a = WithOrder(core, off, x, on);
+
+        a.BuildSuggestion();
+
+        Assert.Equal(new[] { "core", "X", "M|edit" }, a.SuggestedOrder);
+    }
+
+    [Fact]
+    public void Suggestion_WorkshopDuplicateWithAMarker_IsOneMod()
+    {
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var plain = Registered(@"C:\ws\123", EntryKind.Workshop, "123");
+        var marked = new ModEntry { Raw = @"C:\ws\123|disabled", Kind = EntryKind.Workshop, Name = "123", Dir = @"C:\ws\123", Disabled = true };
+        var a = WithOrder(core, plain, marked);
+
+        a.BuildSuggestion();
+
+        Assert.Single(a.SuggestedOrder, e => e.StartsWith(@"C:\ws\123", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Suggestion_SubsetRule_CoversUnregisteredMods()
     {
         // registered S stocks a superset of unregistered T's pool. T is

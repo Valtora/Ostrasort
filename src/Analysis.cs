@@ -337,13 +337,20 @@ public sealed class Analysis
         var work = new List<ModEntry>();
         var seenIdentity = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // of several entries for one mod, keep the first ENABLED one (the copy the
+        // game loads, and the one FindCollisions analyses), else the first - so
+        // dropping a duplicate never turns the mod off
+        var survivor = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var g in Registered.GroupBy(IdentityOf, StringComparer.OrdinalIgnoreCase))
+            survivor[g.Key] = g.FirstOrDefault(m => !m.Disabled) ?? g.First();
+
         foreach (var m in Registered)
         {
             var identity = IdentityOf(m);
-            if (!seenIdentity.Add(identity))
+            if (!ReferenceEquals(survivor[identity], m) || !seenIdentity.Add(identity))
             {
                 Changes.Add(new Change("remove", m.Raw, "duplicate entry"));
-                Warnings.Add($"duplicate aLoadOrder entry '{m.Raw}' - keeping the first occurrence");
+                Warnings.Add($"duplicate aLoadOrder entry '{m.Raw}' - keeping '{survivor[identity].Raw}'");
                 continue;
             }
             if (m.Kind != EntryKind.Core && m.Dir is null)
@@ -585,7 +592,7 @@ public sealed class Analysis
 
     internal static string IdentityOf(ModEntry m) =>
         m.Kind == EntryKind.Local ? $"local:{m.Name}"
-        : m.Raw.Length > 0 ? m.Raw
+        : m.Raw.Length > 0 ? System.IO.Path.TrimEndingDirectorySeparator(m.Raw.Split('|')[0])   // the path, never its marker
         : m.Dir ?? m.Name;   // unregistered entries all share Raw "" - identify by folder
 
     /// <summary>
