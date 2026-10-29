@@ -102,7 +102,7 @@ public static class Engine
     private static void CheckImages(Analysis a)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // a duplicated entry must not self-collide
-        var mods = a.AllMods.Where(m => m.Dir is not null && !m.IsPatch && !m.Disabled && m.ImagePaths.Count > 0)
+        var mods = a.AllMods.Where(m => m.Dir is not null && !m.IsPatch && m.Loads && m.ImagePaths.Count > 0)
             .Where(m => seen.Add(Analysis.IdentityOf(m)))
             .ToList();
         var byPath = new Dictionary<string, List<ModEntry>>(StringComparer.OrdinalIgnoreCase);

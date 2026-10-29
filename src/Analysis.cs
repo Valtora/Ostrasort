@@ -118,13 +118,13 @@ public sealed class Analysis
         // effective order: current registration order, then would-be additions.
         // The Ostrasort-generated patch never counts as a claimant - it IS the
         // resolution of a collision, not a party to one. A disabled entry does
-        // not load, so it cannot collide. A duplicated aLoadOrder entry (the
+        // not load, and an ignored mod is never registered, so neither can collide. A duplicated aLoadOrder entry (the
         // game can re-append a subscription) must not collide with itself -
         // only the first occurrence claims.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var mods = Registered.Where(m => m.Kind != EntryKind.Core && m.Dir is not null)
             .Concat(UnregisteredLocal).Concat(UnregisteredWorkshop)
-            .Where(m => !m.IsPatch && !m.Disabled && seen.Add(IdentityOf(m))).ToList();
+            .Where(m => !m.IsPatch && m.Loads && seen.Add(IdentityOf(m))).ToList();
 
         var byKey = new Dictionary<(string, string), List<ModEntry>>();
         foreach (var m in mods)

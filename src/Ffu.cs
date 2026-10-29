@@ -260,8 +260,8 @@ public static class FfuAnalysis
 
     public static void Classify(GameEnv env, Analysis a, FfuOverrideList? overrides = null)
     {
-        // disabled entries never load - they join no FFU block and get no hygiene nags
-        var mods = a.AllMods.Where(m => m.Kind != EntryKind.Core && m.Dir is not null && !m.Disabled).ToList();
+        // disabled and ignored mods never load - they join no FFU block and get no hygiene nags
+        var mods = a.AllMods.Where(m => m.Kind != EntryKind.Core && m.Dir is not null && m.Loads).ToList();
 
         // ---- seed FFU-ness from each mod's own signals ----
         foreach (var m in mods)
@@ -631,7 +631,7 @@ public static class FfuAnalysis
         // WHICH mods, and why. Players read this banner and reasonably check the
         // Steam Workshop page's "Required items" panel, which is hand-curated by
         // the author and has nothing to do with the markers Ostrasort reads.
-        var ffuMods = a.AllMods.Where(m => m.IsFfu && !m.Disabled).ToList();
+        var ffuMods = a.AllMods.Where(m => m.IsFfu && m.Loads).ToList();
         if (ffuMods.Count > 0)
             lines.Add($"Ostrasort found {ffuMods.Count} FFU-dependent mod(s), with the marker in each. {NameThem(ffuMods)} " +
                       "That comes from each mod's own files, so a mod can be FFU-dependent even when its Steam " +

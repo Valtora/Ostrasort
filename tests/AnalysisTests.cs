@@ -77,6 +77,24 @@ public class AnalysisTests
     }
 
     [Fact]
+    public void IgnoredMod_NeverClaimsAnything()
+    {
+        // an ignored mod is never registered, so the game never loads it - an
+        // old copy parked on disk must not raise a conflict or feed the patch
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var live = Registered("Live", EntryKind.Local, "Live");
+        live.Claims[("loot", "Pool")] = new[] { "x=1x1", "y=1x1" };
+        var parked = new ModEntry { Raw = "", Kind = EntryKind.Local, Name = "Old", Dir = "Old", Registered = false, Ignored = true };
+        parked.Claims[("loot", "Pool")] = new[] { "x=1x1", "z=1x1" };
+
+        var a = WithOrder(core, live);
+        a.UnregisteredLocal.Add(parked);
+        a.FindCollisions();
+
+        Assert.Empty(a.Collisions);
+    }
+
+    [Fact]
     public void Suggestion_RestoresAMissingCoreEntry()
     {
         var data = Registered("Data", EntryKind.Local, "Data");

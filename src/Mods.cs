@@ -37,6 +37,14 @@ public sealed class ModEntry
     public string? StrNotes { get; set; }             // strNotes from mod_info.json - the mod's own description (fallback for the Description column)
     public bool Registered { get; set; } = true;
     public bool Ignored { get; set; }                // user chose to leave it unregistered (see IgnoreList)
+
+    /// <summary>
+    /// Whether the game loads this mod once the suggestion is applied: a disabled
+    /// (or held) entry is skipped at load, and an ignored mod is never registered.
+    /// The one predicate for "is this mod a party to anything" - collisions, FFU
+    /// classification and image overrides all filter on it.
+    /// </summary>
+    public bool Loads => !Disabled && !Ignored;
     /// <summary>
     /// Unregistered mods only: register this one with the game's own |disabled
     /// marker rather than loading it (the "Add new mods turned off" preference).
