@@ -25,7 +25,8 @@ public class SchemaValidatorTests : IDisposable
                 "properties": {
                   "strName": { "type": "string" },
                   "nX": { "type": "integer" },
-                  "strType": { "type": "string", "enum": ["A", "B"] }
+                  "strType": { "type": "string", "enum": ["A", "B"] },
+                  "fY": { "type": ["number", "null"], "minimum": 0, "maximum": 10 }
                 }
               }
             }
@@ -42,6 +43,19 @@ public class SchemaValidatorTests : IDisposable
     [Fact]
     public void ValidObject_NoErrors() =>
         Assert.Empty(_validator.Validate(Obj("""{"strName":"C","nX":3,"strType":"A"}"""), "conditions"));
+
+    [Theory]
+    [InlineData("""{"strName":"C","fY":5}""", null)]
+    [InlineData("""{"strName":"C","fY":null}""", null)]
+    [InlineData("""{"strName":"C","fY":"x"}""", "expected number or null")]
+    [InlineData("""{"strName":"C","fY":-1}""", "below the minimum")]
+    [InlineData("""{"strName":"C","fY":11}""", "above the maximum")]
+    public void TypeArraysAndNumericBounds_AreChecked(string json, string? expected)
+    {
+        var errs = _validator.Validate(Obj(json), "conditions");
+        if (expected is null) Assert.Empty(errs);
+        else Assert.Contains(errs, e => e.Contains(expected));
+    }
 
     [Fact]
     public void UnknownProperty_IsRejected()

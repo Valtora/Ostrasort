@@ -8,8 +8,9 @@ namespace Ostrasort;
 /// <summary>
 /// A compact JSON-Schema (draft-07 subset) validator for the handful of schema
 /// files the game ships in StreamingAssets\data\schemas. Those schemas use
-/// only: type, properties, additionalProperties, enum, required, array items,
-/// and string pattern - no $ref / oneOf / allOf - so this stays small and the
+/// only: type (a name or an array of names), properties, additionalProperties,
+/// enum, required, array items, string pattern, and numeric minimum/maximum -
+/// no $ref / oneOf / allOf - so this stays small and the
 /// project stays dependency-free. Used as a safety net on the objects the
 /// conflict merger writes into the Ostrasort Patch.
 /// </summary>
@@ -80,15 +81,27 @@ public sealed class SchemaValidator
     {
         string Where() => string.IsNullOrEmpty(path) ? "(root)" : path;
 
-        // type
-        if (schema.TryGetProperty("type", out var typeEl) && typeEl.ValueKind == JsonValueKind.String)
+        // type: one name, or an array of allowed names
+        if (schema.TryGetProperty("type", out var typeEl) &&
+            typeEl.ValueKind is JsonValueKind.String or JsonValueKind.Array)
         {
-            var t = typeEl.GetString()!;
-            if (!MatchesType(value, t))
+            var allowed = typeEl.ValueKind == JsonValueKind.String
+                ? new[] { typeEl.GetString()! }
+                : typeEl.EnumerateArray().Where(t => t.ValueKind == JsonValueKind.String).Select(t => t.GetString()!).ToArray();
+            if (allowed.Length > 0 && !allowed.Any(t => MatchesType(value, t)))
             {
-                errors.Add($"{Where()}: expected {t}, got {value.ValueKind.ToString().ToLowerInvariant()}");
+                errors.Add($"{Where()}: expected {string.Join(" or ", allowed)}, got {value.ValueKind.ToString().ToLowerInvariant()}");
                 return;   // type mismatch - deeper checks are moot
             }
+        }
+
+        // numeric bounds
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var num))
+        {
+            if (schema.TryGetProperty("minimum", out var minEl) && minEl.ValueKind == JsonValueKind.Number && minEl.TryGetDouble(out var min) && num < min)
+                errors.Add($"{Where()}: {value.GetRawText()} is below the minimum {minEl.GetRawText()}");
+            if (schema.TryGetProperty("maximum", out var maxEl) && maxEl.ValueKind == JsonValueKind.Number && maxEl.TryGetDouble(out var max) && num > max)
+                errors.Add($"{Where()}: {value.GetRawText()} is above the maximum {maxEl.GetRawText()}");
         }
 
         // enum

@@ -605,7 +605,17 @@ public static class Patcher
             foreach (var o in byType)
             {
                 var merged = ObjectMerge.Assemble(o);
-                var errs = validator.Validate(merged, o.Type);
+                // only what the MERGE introduced: the game's own data breaks its
+                // schemas in places (a third of vanilla conditions carry fields
+                // the conditions schema forbids), and a mod's own copy is its
+                // author's to fix - neither is something the player can act on
+                var inherited = new HashSet<string>(StringComparer.Ordinal);
+                var coreObj = FieldDiff.LoadObject(Path.Combine(env.CoreDataDir, o.Type), o.Collision.ObjName, a.IgnorePatterns);
+                if (coreObj is not null) inherited.UnionWith(validator.Validate(coreObj, o.Type));
+                foreach (var m in o.Collision.Claimants.Where(m => m.Dir is not null))
+                    if (FieldDiff.LoadObject(Path.Combine(m.Dir!, "data", o.Type), o.Collision.ObjName, a.IgnorePatterns) is { } own)
+                        inherited.UnionWith(validator.Validate(own, o.Type));
+                var errs = validator.Validate(merged, o.Type).Where(e => !inherited.Contains(e)).ToList();
                 if (errs.Count > 0)
                 {
                     o.SchemaErrors.AddRange(errs);

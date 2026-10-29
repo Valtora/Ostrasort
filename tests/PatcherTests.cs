@@ -82,6 +82,22 @@ public class PatcherTests : IDisposable
         Assert.Contains(state.Patch.StaleReasons, r => r.Contains("BASE GAME"));
     }
 
+    [Fact]
+    public void SchemaWarnings_SkipWhatVanillaAlreadyBreaks()
+    {
+        // the schema forbids strColor, but the vanilla CondX itself carries it -
+        // the merge did not introduce that, so it is no warning of the patch's
+        WriteJson(Path.Combine(_env.CoreDataDir, "schemas", "conditions-schema.json"), """
+            {"type":"array","items":{"type":"object","additionalProperties":false,
+              "properties":{"strName":{"type":"string"},"fSev":{"type":"number"}}}}
+            """);
+        var state = Engine.Analyze(_env);
+        var plan = Patcher.PlanMerge(_env, state.Analysis);
+        Patcher.Generate(_env, plan, state.Analysis, _env.InstalledVersion, "test");
+
+        Assert.Empty(Assert.Single(plan.Objects).SchemaErrors);
+    }
+
     [Theory]
     [InlineData("OstrasortPatch|disabled")]
     [InlineData(null)]   // the patch entry removed from aLoadOrder

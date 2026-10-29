@@ -358,8 +358,10 @@ mod's value** (the same outcome the game itself would produce), never to a
 computed union, and mark it for review in the GUI.
 
 Merged objects are then **validated against the game's own JSON schemas**
-(`StreamingAssets\data\schemas`) and any that do not conform are flagged. This is
-a **best-effort** merge, not a guaranteed-correct one. Two mods can change
+(`StreamingAssets\data\schemas`) and any that do not conform are flagged. Only
+problems the merge itself introduced count: the game's own data does not always
+follow its schemas, and a mod's own copy is its author's to fix. This is a
+**best-effort** merge, not a guaranteed-correct one. Two mods can change
 interdependent fields in ways no tool can reason about, so the result is always
 presented for you to verify in game. Objects with **no base-game version** (two
 mods adding the *same* brand-new object) have no common ancestor, so they degrade
