@@ -30,6 +30,8 @@ public static class Engine
 
         var scanner = new Scanner(env, lo.IgnorePatterns);
         scanner.IndexCore();
+        analysis.CoreObjectNames.UnionWith(scanner.CoreIndex.Select(k => k.Name));
+        analysis.CoreDataFiles.UnionWith(scanner.CoreDataFiles);
         foreach (var m in analysis.AllMods) scanner.Scan(m);
 
         if (holdNew) HoldNewMods(analysis);   // after the scan (it needs each mod's class), before anything reads Disabled

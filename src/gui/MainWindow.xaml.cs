@@ -137,7 +137,7 @@ public partial class MainWindow : Window
             _arrUndo.Clear();
             _arrRedo.Clear();
             _state = scanned ?? Analyze(_env);
-            LogCorrelation.Annotate(_state.Analysis, GameEnv.PlayerLogPath, _env.BepInExLogPath);   // attribute last-launch log issues
+            LogCorrelation.Annotate(_state.Analysis, [GameEnv.PlayerLogPath, _env.BepInExLogPath], _env.GameRoot);   // attribute last-launch log issues
             RenderState(_state);
         }
         catch (Exception e)

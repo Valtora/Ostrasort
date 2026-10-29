@@ -30,13 +30,22 @@ public static class LogCorrelation
     private static readonly Regex JsonToken = new(@"[\w\-./\\]+\.json", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex Word = new(@"[A-Za-z0-9_]{4,}", RegexOptions.Compiled);
     private static readonly Regex LoadingJson = new(@"Loading json:\s*([\w\-./\\]+\.json)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // Unity's first lines name the install that wrote Player.log
+    private static readonly Regex MonoPath = new(@"^Mono path\[0\] = '(.+?)[/\\]Ostranauts_Data[/\\]Managed'", RegexOptions.Compiled);
+
+    /// <summary>Stands in for the base game in the file and strName indexes: a line core explains is never pinned on one mod.</summary>
+    private static readonly ModEntry CoreOwner = new() { Raw = "core", Kind = EntryKind.Core, Name = "core" };
 
     // BepInEx / engine sources that are the framework itself, not a mod
     private static readonly HashSet<string> Framework =
         new(new[] { "BepInEx", "Unity", "Mono", "HarmonyX", "Harmony", "Doorstop", "Preloader" }, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Reads each existing log file and records attributed issues as log warnings + per-mod notes.</summary>
-    public static void Annotate(Analysis a, params string[] logPaths)
+    /// <summary>
+    /// Reads each existing log file and records attributed issues as log warnings
+    /// + per-mod notes. Player.log is per user, not per install, so a log another
+    /// install wrote (its first line names the game folder) is skipped.
+    /// </summary>
+    public static void Annotate(Analysis a, IReadOnlyList<string> logPaths, string? gameRoot = null)
     {
         // each log is scanned separately so a "Loading json:" context from one
         // file can never leak into the next one's lines
@@ -47,7 +56,9 @@ public static class LogCorrelation
             try
             {
                 if (!File.Exists(path)) continue;
-                files.Add(File.ReadLines(path).ToList());
+                var lines = File.ReadLines(path).ToList();
+                if (gameRoot is not null && WrittenBy(lines) is { } writer && !SamePath(writer, gameRoot)) continue;
+                files.Add(lines);
                 // the launch stamp: the game overwrites Player.log every run, so a
                 // fresh occurrence of the same error still reads as a new one
                 stamps.Add($"{path}@{File.GetLastWriteTimeUtc(path):O}");
@@ -155,13 +166,35 @@ public static class LogCorrelation
             if (sev is null) continue;
             if (!seen.Add(line)) continue;
 
+            // a line the base game also explains is never pinned on one mod
             var owners = AttributeData(line, loadingContext, byPath, byBase, byStrName);
-            var mod2 = owners.Count == 1 ? owners[0] : null;
-            issues.Add(new LogIssue(sev, line, mod2, owners));
+            var mods = owners.Where(o => o != CoreOwner).ToList();
+            var mod2 = mods.Count == 1 && mods.Count == owners.Count ? mods[0] : null;
+            issues.Add(new LogIssue(sev, line, mod2, mods));
         }
     }
 
     // ------------------------------------------------------------- indexes ---
+
+    /// <summary>The game folder a Player.log's Mono path line names, or null when it has none.</summary>
+    private static string? WrittenBy(IReadOnlyList<string> lines)
+    {
+        foreach (var l in lines.Take(20))
+            if (MonoPath.Match(l) is { Success: true } m) return m.Groups[1].Value;
+        return null;
+    }
+
+    private static bool SamePath(string a, string b) =>
+        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
+                      Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Mods whose DATA can have been read at the last launch: registered and not
+    /// turned off. A disabled or unregistered mod's files never load, so a data
+    /// line that names one of them was written by something else.
+    /// </summary>
+    private static IEnumerable<ModEntry> DataLoaders(Analysis a) =>
+        a.Registered.Where(m => m.Kind != EntryKind.Core && m.Dir is not null && !m.Disabled);
 
     // NB: the generated patch is indexed like any other mod. Excluding it made
     // its own load errors structurally unattributable - and worse, when exactly
@@ -183,20 +216,24 @@ public static class LogCorrelation
     {
         var byPath = new Dictionary<string, List<ModEntry>>(StringComparer.OrdinalIgnoreCase);
         var byBase = new Dictionary<string, List<ModEntry>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var m in a.AllMods)
-            foreach (var f in m.DataFiles)
-            {
-                Add(byPath, f, m);
-                var slash = f.LastIndexOf('/');
-                Add(byBase, slash >= 0 ? f[(slash + 1)..] : f, m);
-            }
+        void AddFile(string f, ModEntry m)
+        {
+            Add(byPath, f, m);
+            var slash = f.LastIndexOf('/');
+            Add(byBase, slash >= 0 ? f[(slash + 1)..] : f, m);
+        }
+        foreach (var f in a.CoreDataFiles) AddFile(f, CoreOwner);
+        foreach (var m in DataLoaders(a))
+            foreach (var f in m.DataFiles) AddFile(f, m);
         return (byPath, byBase);
     }
 
     private static Dictionary<string, List<ModEntry>> BuildStrNameIndex(Analysis a)
     {
         var map = new Dictionary<string, List<ModEntry>>(StringComparer.Ordinal);
-        foreach (var m in a.AllMods)
+        foreach (var name in a.CoreObjectNames)
+            if (name.Length >= 4) Add(map, name, CoreOwner);
+        foreach (var m in DataLoaders(a))
             foreach (var (_, name) in m.Claims.Keys)
                 if (name.Length >= 4) Add(map, name, m);
         return map;

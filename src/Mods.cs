@@ -283,6 +283,8 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
         };
 
     public HashSet<(string Type, string Name)> CoreIndex { get; } = new();
+    /// <summary>Core data files that load (relative under data\, forward-slashed) - lets log attribution recognise the game's own files.</summary>
+    public HashSet<string> CoreDataFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Reverse index: a core loot-pool id -> the friendly name(s) of the core object(s) that use it.</summary>
     public LootPoolNames LootNames { get; private set; } = LootPoolNames.Empty;
     public int CoreTypes { get; private set; }
@@ -343,6 +345,7 @@ public sealed class Scanner(GameEnv env, IReadOnlyList<string>? ignorePatterns =
                 continue;
             }
             CoreIndex.Add((e.Type, e.Name));
+            CoreDataFiles.Add(e.RelPath.Replace('\\', '/'));
             types.Add(e.Type);
         }
         CoreTypes = types.Count;

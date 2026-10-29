@@ -119,6 +119,10 @@ public sealed class Analysis
     public List<string> SuggestedOrder { get; private set; } = new();
     public List<Change> Changes { get; } = new();
 
+    /// <summary>Core object names and data files that load, for log attribution (filled by <see cref="Engine"/>).</summary>
+    public HashSet<string> CoreObjectNames { get; } = new(StringComparer.Ordinal);
+    public HashSet<string> CoreDataFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public IEnumerable<ModEntry> AllMods =>
         Registered.Concat(UnregisteredLocal).Concat(UnregisteredWorkshop);
 

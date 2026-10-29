@@ -150,13 +150,50 @@ public class LogCorrelationTests
         File.WriteAllText(log, "#Error# Failed to parse condowners/evil.json\n");
         try
         {
-            LogCorrelation.Annotate(a, log);
+            LogCorrelation.Annotate(a, [log]);
             // log issues live apart from the structural warnings so the health card
             // can drop them on dismissal, but every report still prints both
             Assert.Contains(a.LogWarnings, w => w.Contains("Evil Mod") && w.Contains("last game launch"));
             Assert.Empty(a.Warnings);
             Assert.Contains(a.AllWarnings, w => w.Contains("Evil Mod"));
             Assert.NotEmpty(mod.LogNotes);
+        }
+        finally { File.Delete(log); }
+    }
+
+    [Fact]
+    public void DataError_NeverBlamesADisabledMod()
+    {
+        var off = Mod("Turned Off", dataFiles: new[] { "condowners/evil.json" });
+        off.Disabled = true;
+        var issue = Assert.Single(Collect(With(off), "#Error# Failed to parse condowners/evil.json"));
+        Assert.Null(issue.Mod);
+        Assert.Empty(issue.Candidates);
+    }
+
+    [Fact]
+    public void DataError_InAFileCoreAlsoShips_IsNotPinnedOnTheMod()
+    {
+        var a = With(Mod("Overrider", dataFiles: new[] { "items/items.json" }));
+        a.CoreDataFiles.Add("items/items.json");
+        var issue = Assert.Single(Collect(a, "#Error# bad entry in items/items.json"));
+        Assert.Null(issue.Mod);
+        Assert.Equal("Overrider", Assert.Single(issue.Candidates).DisplayName);
+    }
+
+    [Fact]
+    public void Annotate_SkipsAPlayerLogAnotherInstallWrote()
+    {
+        var a = WithEvilMod();
+        var log = Path.Combine(Path.GetTempPath(), "OstraLog_" + Guid.NewGuid().ToString("N") + ".log");
+        File.WriteAllText(log, "Mono path[0] = 'D:/Games/Ostranauts/Ostranauts_Data/Managed'\n" + EvilLine + "\n");
+        try
+        {
+            LogCorrelation.Annotate(a, [log], gameRoot: @"C:\Program Files (x86)\Steam\steamapps\common\Ostranauts");
+            Assert.Empty(a.LogWarnings);
+
+            LogCorrelation.Annotate(a, [log], gameRoot: @"D:\Games\Ostranauts");
+            Assert.NotEmpty(a.LogWarnings);
         }
         finally { File.Delete(log); }
     }
@@ -177,9 +214,9 @@ public class LogCorrelationTests
         try
         {
             var first = WithEvilMod();
-            LogCorrelation.Annotate(first, log);
+            LogCorrelation.Annotate(first, [log]);
             var second = WithEvilMod();
-            LogCorrelation.Annotate(second, log);
+            LogCorrelation.Annotate(second, [log]);
 
             Assert.NotNull(first.LogFingerprint);
             Assert.Equal(first.LogFingerprint, second.LogFingerprint);
@@ -197,11 +234,11 @@ public class LogCorrelationTests
         try
         {
             var first = WithEvilMod();
-            LogCorrelation.Annotate(first, log);
+            LogCorrelation.Annotate(first, [log]);
 
             File.SetLastWriteTimeUtc(log, DateTime.UtcNow.AddMinutes(5));   // a later launch
             var second = WithEvilMod();
-            LogCorrelation.Annotate(second, log);
+            LogCorrelation.Annotate(second, [log]);
 
             Assert.NotEqual(first.LogFingerprint, second.LogFingerprint);
         }
@@ -216,7 +253,7 @@ public class LogCorrelationTests
         try
         {
             var a = WithEvilMod();
-            LogCorrelation.Annotate(a, log);
+            LogCorrelation.Annotate(a, [log]);
             Assert.Null(a.LogFingerprint);   // nothing to dismiss
         }
         finally { File.Delete(log); }

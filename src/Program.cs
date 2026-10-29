@@ -682,7 +682,7 @@ public static class Program
         }
 
         // attribute the game's last-launch log issues to the final mod set (report only)
-        LogCorrelation.Annotate(state.Analysis, GameEnv.PlayerLogPath, env.BepInExLogPath);
+        LogCorrelation.Annotate(state.Analysis, [GameEnv.PlayerLogPath, env.BepInExLogPath], env.GameRoot);
 
         foreach (var act in performed) OpLog.Add($"[cli] {act}");   // record CLI writes in the shared log
         if (json)
