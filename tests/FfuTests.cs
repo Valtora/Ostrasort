@@ -652,6 +652,9 @@ public class FfuRemovalTests
                 ModsDir = modsDir,
             };
             var state = Engine.Analyze(env);
+            // a zip-extracted tree is often ReadOnly - the delete must still succeed
+            foreach (var i in new DirectoryInfo(mfpDir).EnumerateFileSystemInfos("*", SearchOption.AllDirectories).Append(new DirectoryInfo(mfpDir)))
+                i.Attributes |= FileAttributes.ReadOnly;
 
             var removal = FfuAnalysis.RemoveFfuCore(env, state.Analysis.Ffu!, state.Analysis, delete: true);
 

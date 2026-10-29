@@ -489,7 +489,7 @@ public partial class MainWindow : Window
 
     private void RemoveFfu_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || !GateRunning()) return;
+        if (_state is null || !GateRunning() || !GateRival()) return;   // it writes loading_order.json too
         var ctx = _state.Analysis.Ffu ?? new FfuContext();
         var mfpCount = _state.Analysis.AllMods.Count(m => m.Dir is not null &&
             string.Equals(m.DisplayName, FfuAnalysis.MinorFixesPlus, StringComparison.OrdinalIgnoreCase));

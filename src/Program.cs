@@ -346,6 +346,7 @@ public static class Program
             var renv = GameEnv.Locate(gameRoot, modsDir);
             if (GameEnv.IsGameRunning()) { Console.Error.WriteLine("Ostranauts is running - close it first."); return 1; }
             var rstate = Engine.Analyze(renv);
+            GateNoRival(rstate.Analysis.Ffu, allowRival, "remove FFU Core");   // it writes loading_order.json too
             var rctx = rstate.Analysis.Ffu ?? new FfuContext();
             var removal = FfuAnalysis.RemoveFfuCore(renv, rctx, rstate.Analysis, hardDelete);
             if (removal.IsEmpty)

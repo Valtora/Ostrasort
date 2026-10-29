@@ -546,21 +546,11 @@ public static class FfuAnalysis
     public static FfuRemoval RemoveFfuCore(GameEnv env, FfuContext ctx, Analysis a, bool delete = false)
     {
         var affected = new List<string>();
-        foreach (var dll in ctx.FrameworkDllPaths.Where(File.Exists))
-        {
-            if (delete)
-            {
-                File.Delete(dll);
-                affected.Add(dll);
-                continue;
-            }
-            var target = dll + ".disabled";
-            if (File.Exists(target)) File.Delete(target);
-            File.Move(dll, target);
-            affected.Add(target);
-        }
 
-        // Minor Fixes Plus - wherever it lives (BepInEx\plugins or Mods\)
+        // Minor Fixes Plus FIRST - wherever it lives (BepInEx\plugins or Mods\).
+        // Its folder is the step that can fail (a ReadOnly tree from a zip, a
+        // locked file), so it goes before the DLLs: a failure then leaves FFU
+        // whole instead of half-removed with its DLLs already gone.
         var deadRaws = new List<string>();
         foreach (var m in a.AllMods.Where(m => m.Dir is not null &&
                      string.Equals(m.DisplayName, MinorFixesPlus, StringComparison.OrdinalIgnoreCase)))
@@ -570,18 +560,31 @@ public static class FfuAnalysis
             {
                 if (delete)
                 {
-                    Directory.Delete(dir, recursive: true);
+                    FileSystemUtil.RobustDeleteDirectory(dir);   // ReadOnly-safe
                     affected.Add(dir);
                 }
                 else
                 {
-                    var target = dir + ".disabled";
-                    if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+                    var target = FileSystemUtil.FreePath(dir, ".disabled");   // never overwrite an earlier park
                     Directory.Move(dir, target);
                     affected.Add(target);
                 }
             }
             if (m.Registered && m.Raw.Length > 0) deadRaws.Add(m.Raw);
+        }
+
+        foreach (var dll in ctx.FrameworkDllPaths.Where(File.Exists))
+        {
+            if (delete)
+            {
+                File.SetAttributes(dll, File.GetAttributes(dll) & ~FileAttributes.ReadOnly);
+                File.Delete(dll);
+                affected.Add(dll);
+                continue;
+            }
+            var target = FileSystemUtil.FreePath(dll, ".disabled");
+            File.Move(dll, target);
+            affected.Add(target);
         }
 
         var unregistered = new List<string>();

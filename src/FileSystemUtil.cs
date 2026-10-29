@@ -14,6 +14,17 @@ namespace Ostrasort;
 public static class FileSystemUtil
 {
     /// <summary>
+    /// The first of "{stem}{suffix}", "{stem} (2){suffix}", ... that does not exist
+    /// yet - where a park goes, so a second park never overwrites the first.
+    /// </summary>
+    public static string FreePath(string stem, string suffix)
+    {
+        var path = stem + suffix;
+        for (var n = 2; Directory.Exists(path) || File.Exists(path); n++) path = $"{stem} ({n}){suffix}";
+        return path;
+    }
+
+    /// <summary>
     /// Delete a folder even when it (or a child) carries the ReadOnly attribute.
     /// We clear ReadOnly, then rename-then-delete so the removal is atomic: if
     /// the rename is refused (a file is genuinely locked, e.g. the game is open)
