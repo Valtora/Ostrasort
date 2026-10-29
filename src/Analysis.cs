@@ -123,6 +123,9 @@ public sealed class Analysis
     public HashSet<string> CoreObjectNames { get; } = new(StringComparer.Ordinal);
     public HashSet<string> CoreDataFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Plugins that use game code the installed build no longer has (see <see cref="CodeModCheck"/>).</summary>
+    public List<CodeModIssue> CodeModIssues { get; } = new();
+
     public IEnumerable<ModEntry> AllMods =>
         Registered.Concat(UnregisteredLocal).Concat(UnregisteredWorkshop);
 

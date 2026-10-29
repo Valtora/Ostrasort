@@ -120,11 +120,12 @@ public static class LogCorrelation
         var byName = BuildNameIndex(a);
         var (byPath, byBase) = BuildFileIndex(a);
         var byStrName = BuildStrNameIndex(a);
+        var byMissing = BuildMissingIndex(a, byName);
 
         var issues = new List<LogIssue>();
         var seen = new HashSet<string>(StringComparer.Ordinal);   // dedupe identical repeated lines
         foreach (var file in files)
-            CollectFile(file, byName, byPath, byBase, byStrName, issues, seen);
+            CollectFile(file, byName, byPath, byBase, byStrName, byMissing, issues, seen);
         return issues;
     }
 
@@ -132,6 +133,7 @@ public static class LogCorrelation
         Dictionary<string, ModEntry> byName,
         Dictionary<string, List<ModEntry>> byPath, Dictionary<string, List<ModEntry>> byBase,
         Dictionary<string, List<ModEntry>> byStrName,
+        Dictionary<string, ModEntry?> byMissing,
         List<LogIssue> issues, HashSet<string> seen)
     {
         string? loadingContext = null;
@@ -165,6 +167,14 @@ public static class LogCorrelation
                     : null;
             if (sev is null) continue;
             if (!seen.Add(line)) continue;
+
+            // a missing-member exception naming game code a plugin was already
+            // flagged for (CodeModCheck) is that plugin's, confirmed at runtime
+            if (MissingMember(line, byMissing) is { } flagged)
+            {
+                issues.Add(new LogIssue(sev, line, flagged.Mod, flagged.Mod is null ? Array.Empty<ModEntry>() : new[] { flagged.Mod }));
+                continue;
+            }
 
             // a line the base game also explains is never pinned on one mod
             var owners = AttributeData(line, loadingContext, byPath, byBase, byStrName);
@@ -237,6 +247,36 @@ public static class LogCorrelation
             foreach (var (_, name) in m.Claims.Keys)
                 if (name.Length >= 4) Add(map, name, m);
         return map;
+    }
+
+    /// <summary>
+    /// "Type.Member" for every piece of game code a plugin uses that the installed
+    /// build lacks, mapped to the mod that ships the plugin (null when it has no
+    /// mod entry, such as a loose DLL in BepInEx\plugins).
+    /// </summary>
+    private static Dictionary<string, ModEntry?> BuildMissingIndex(Analysis a, Dictionary<string, ModEntry> byName)
+    {
+        var map = new Dictionary<string, ModEntry?>(StringComparer.Ordinal);
+        foreach (var issue in a.CodeModIssues)
+        {
+            var mod = Engine.CodeModOwner(a, issue) ?? byName.GetValueOrDefault(Norm(issue.Owner));
+            foreach (var missing in issue.Missing)
+            {
+                var space = missing.IndexOf(' ');
+                if (space > 0) map.TryAdd(missing[(space + 1)..], mod);
+            }
+        }
+        return map;
+    }
+
+    private static (string Member, ModEntry? Mod)? MissingMember(string line, Dictionary<string, ModEntry?> byMissing)
+    {
+        if (byMissing.Count == 0) return null;
+        if (!line.Contains("MissingMethod", StringComparison.Ordinal) && !line.Contains("MissingField", StringComparison.Ordinal)
+            && !line.Contains("TypeLoad", StringComparison.Ordinal) && !line.Contains("not found", StringComparison.Ordinal)) return null;
+        foreach (var (member, mod) in byMissing)
+            if (line.Contains(member, StringComparison.Ordinal)) return (member, mod);
+        return null;
     }
 
     private static void Add(Dictionary<string, List<ModEntry>> map, string key, ModEntry m)

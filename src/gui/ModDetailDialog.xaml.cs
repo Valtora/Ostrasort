@@ -133,6 +133,16 @@ public partial class ModDetailDialog : Window
                 Line("• " + n, n.StartsWith("NOT") || n.StartsWith("DEAD") || n.Contains("JSON") || n.Contains("game-log") ? Warn : Dim);
         }
 
+        // ---- plugins built for another game version ----
+        if (m.MissingGameCode.Count > 0)
+        {
+            Section("Broken by this game version");
+            Line("Its code uses parts of the game this version no longer has, so it will likely fail or crash the game. " +
+                 "Look for an update, or turn it off until there is one.", Bad);
+            foreach (var x in m.MissingGameCode.Take(12)) Line("• " + x, Dim);
+            if (m.MissingGameCode.Count > 12) Line($"• and {m.MissingGameCode.Count - 12} more", Dim);
+        }
+
         // ---- JSON problems ----
         if (m.JsonErrors.Count > 0)
         {

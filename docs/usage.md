@@ -114,7 +114,11 @@ actions right there. Below the table sits a row of tabs.
   **Resolve conflicts & generate patch**, **Rebuild from scratch** and **Remove
   patch** buttons.
 - **Warnings** lists dead entries, unregistered mods, version lag, broken JSON,
-  image overrides, BepInEx problems, and any load errors the **game itself**
+  image overrides, BepInEx problems, code mods broken by a game update (their
+  plugin uses game code the installed version no longer has, which also gets
+  its own line on the health card and a section in the mod's detail panel, so
+  you can update the mod or turn it off before the game crashes on it), and any
+  load errors the **game itself**
   logged at the last launch, attributed to the mod responsible where Ostrasort
   can pin them down (see the Logs tab for the rest).
 - **Logs** keeps a record of everything Ostrasort has done (applies, patches,

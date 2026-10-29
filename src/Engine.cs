@@ -45,6 +45,7 @@ public static class Engine
         analysis.MarkOrderResolved();   // final-say (late-tier) mods that win by loading last - after FieldDiff so it overrides "mergeable"
         CheckImages(analysis);
         CheckBepInEx(env, analysis);
+        CheckCodeMods(env, analysis);
         CheckIgnorePatterns(scanner, analysis);
         WarnAutoloader(analysis);
         var patch = Patcher.Inspect(env, analysis);   // marks collisions the patch resolves
@@ -162,6 +163,45 @@ public static class Engine
             a.Warnings.Add($"plugin {dll} is shipped by more than one source ({string.Join(", ", who)}) " +
                            "- the same plugin loading twice usually breaks its Harmony patches");
     }
+
+    /// <summary>
+    /// Plugins compiled against game code the installed build no longer has.
+    /// The player cannot fix the plugin, so the advice is to update it or turn
+    /// it off. Names the Workshop item when the plugin is a bridge copy of one.
+    /// </summary>
+    private static void CheckCodeMods(GameEnv env, Analysis a)
+    {
+        a.CodeModIssues.AddRange(CodeModCheck.CheckInstall(env));
+        foreach (var issue in a.CodeModIssues)
+        {
+            CodeModOwner(a, issue)?.MissingGameCode.AddRange(issue.Missing);
+            var name = CodeModOwnerName(a, issue);
+            var sample = string.Join(", ", issue.Missing.Take(3)) + (issue.Missing.Count > 3 ? $", +{issue.Missing.Count - 3} more" : "");
+            a.Warnings.Add($"code mod '{name}' ({Path.GetFileName(issue.PluginPath)}) uses game code this version no longer has " +
+                           $"({sample}) - it will likely fail or crash the game, so update it or turn it off");
+        }
+    }
+
+    /// <summary>
+    /// The mod that ships a plugin: the Workshop item for a bridge copy, else the
+    /// mod whose own plugins folder holds a DLL of that name, else a mod named
+    /// like the plugins folder. Null for a plugin no mod accounts for.
+    /// </summary>
+    public static ModEntry? CodeModOwner(Analysis a, CodeModIssue issue)
+    {
+        const string ws = "Workshop ";
+        if (issue.Owner.StartsWith(ws, StringComparison.Ordinal))
+            return a.AllMods.FirstOrDefault(m => m.Kind == EntryKind.Workshop && m.Name == issue.Owner[ws.Length..]);
+        var dll = Path.GetFileName(issue.PluginPath);
+        return a.AllMods.FirstOrDefault(m => m.Kind != EntryKind.Workshop && m.PluginDlls.Contains(dll))
+            ?? a.AllMods.FirstOrDefault(m => m.Kind != EntryKind.Workshop
+                && (string.Equals(m.Name, issue.Owner, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(m.DisplayName, issue.Owner, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>The mod's display name for a plugin issue, falling back to its folder.</summary>
+    public static string CodeModOwnerName(Analysis a, CodeModIssue issue) =>
+        CodeModOwner(a, issue) is { } m ? m.DisplayName ?? m.Name : issue.Owner;
 
     /// <summary>
     /// FFU itself is supported; the one true rival is Robyn's OstraAutoloader

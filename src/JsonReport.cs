@@ -95,6 +95,12 @@ public static class JsonReport
                 ["excludedCount"] = s.Patch.ExcludedCount,
             },
             ["warnings"] = new JsonArray(a.AllWarnings.Select(w => (JsonNode)w).ToArray()),
+            ["codeModIssues"] = new JsonArray(a.CodeModIssues.Select(i => (JsonNode)new JsonObject
+            {
+                ["plugin"] = i.PluginPath,
+                ["owner"] = Engine.CodeModOwnerName(a, i),
+                ["missing"] = new JsonArray(i.Missing.Select(x => (JsonNode)x).ToArray()),
+            }).ToArray()),
             ["orderChanged"] = a.OrderChanged,
             ["suggestedOrder"] = new JsonArray(a.SuggestedOrder.Select(e => (JsonNode)e).ToArray()),
             ["changes"] = new JsonArray(a.Changes.Select(c => (JsonNode)new JsonObject

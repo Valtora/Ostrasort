@@ -88,6 +88,7 @@ public sealed class ModEntry
     public HashSet<string> PluginDlls { get; } = new(StringComparer.OrdinalIgnoreCase);   // basenames under BepInEx\plugins
     public List<string> JsonErrors { get; } = new();
     public List<string> LogNotes { get; } = new();          // issues attributed to this mod from the game's Player.log / BepInEx log at the last launch
+    public List<string> MissingGameCode { get; } = new();   // game code its plugins use that the installed build lacks (CodeModCheck)
     /// <summary>Condition names this mod defines via conditions_simple (they land in the conditions namespace).</summary>
     public HashSet<string> SimpleConditionNames { get; } = new(StringComparer.Ordinal);
     /// <summary>Data files of this mod skipped by loading_order.json's aIgnorePatterns (rel path, pattern).</summary>
@@ -226,6 +227,7 @@ public sealed class ModEntry
         }
         if (RemoveIds.Count > 0) notes.Add($"removes {RemoveIds.Count} core entr{(RemoveIds.Count == 1 ? "y" : "ies")} (FFU removeIds)");
         if (GameVersionNote(installedVersion) is { } versionNote) notes.Add(versionNote);
+        if (MissingGameCode.Count > 0) notes.Add("BROKEN BY THIS GAME VERSION (update it or turn it off)");
         if (JsonErrors.Count > 0) notes.Add($"{JsonErrors.Count} JSON problem(s)");
         if (LogNotes.Count > 0) notes.Add($"{LogNotes.Count} game-log issue(s) last launch");
         return notes;

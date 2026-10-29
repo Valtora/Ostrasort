@@ -29,6 +29,18 @@ public class LogCorrelationTests
     }
 
     [Fact]
+    public void MissingMethod_ForAFlaggedPlugin_IsPinnedOnItsMod()
+    {
+        var a = With(Mod("ShipsWater"), Mod("Other", claims: new[] { ("condowner", "DataHandler") }));
+        a.CodeModIssues.Add(new CodeModIssue(@"C:\g\BepInEx\plugins\ShipsWater\ShipsWater.dll", "ShipsWater",
+            new[] { "method DataHandler.GetCondTrigger" }));
+
+        var issue = Assert.Single(Collect(a,
+            "MissingMethodException: Method not found: int DataHandler.GetCondTrigger(string)"));
+        Assert.Equal("ShipsWater", issue.Mod?.Name);
+    }
+
+    [Fact]
     public void FrameworkBepInExLines_AreIgnored()
     {
         var a = With(Mod("Ship's Water"));

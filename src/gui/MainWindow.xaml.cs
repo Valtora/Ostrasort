@@ -281,7 +281,8 @@ public partial class MainWindow : Window
         var logMods = logDismissed
             ? new List<ModEntry>()
             : a.AllMods.Where(m => m.LogNotes.Count > 0).ToList();
-        var warnCount = a.Warnings.Count + a.AllMods.Sum(m => m.JsonErrors.Count)
+        // broken code mods get their own line below, so they are not counted twice
+        var warnCount = a.Warnings.Count - a.CodeModIssues.Count + a.AllMods.Sum(m => m.JsonErrors.Count)
                         + (logDismissed ? 0 : a.LogWarnings.Count);
         var fixable = a.OrderChanged || Patcher.HasWork(a) || s.Patch.Stale || s.Patch.Obsolete;
 
@@ -296,6 +297,12 @@ public partial class MainWindow : Window
             issues.Add("Ostranauts reported problems from " +
                        string.Join(", ", logMods.Take(3).Select(m => m.DisplayName ?? m.Name)) +
                        (logMods.Count > 3 ? $" (and {logMods.Count - 3} more)" : "") + " on its last launch");
+        if (a.CodeModIssues.Count > 0)
+        {
+            var broken = a.CodeModIssues.Select(i => Engine.CodeModOwnerName(a, i)).Distinct().ToList();
+            issues.Add((broken.Count == 1 ? $"code mod {broken[0]} uses" : $"{broken.Count} code mods ({string.Join(", ", broken.Take(3))}{(broken.Count > 3 ? ", ..." : "")}) use")
+                       + " game code this version no longer has. " + (broken.Count == 1 ? "Update it or turn it off" : "Update them or turn them off"));
+        }
         if (warnCount > 0)
             issues.Add(warnCount == 1 ? "1 warning (see the Warnings tab)" : $"{warnCount} warnings (see the Warnings tab)");
 

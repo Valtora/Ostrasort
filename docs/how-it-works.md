@@ -222,6 +222,19 @@ Surfaced in the same pass.
 - **BepInEx sanity**, plugins that can never load because the loader is not
   installed, and the same plugin DLL shipped by two different sources
   (double-patching)
+- **code mods broken by a game update** (`src\CodeModCheck.cs`). Every plugin
+  DLL under `BepInEx\plugins` lists the game types, methods and fields it uses
+  from `Assembly-CSharp.dll`. Ostrasort reads those lists with
+  `System.Reflection.Metadata` (nothing is loaded or run) and checks each one
+  against the installed game, matching methods by full signature, so a method
+  whose parameters changed counts as gone, which is what throws
+  `MissingMethodException` at runtime. `[HarmonyPatch]` targets are checked by
+  name. Base classes are followed into the other assemblies in
+  `Ostranauts_Data\Managed`, and when one of those cannot be read the member is
+  left unflagged. The player cannot repair a plugin, so the advice is to update
+  it or turn it off. After a launch, a `MissingMethodException` that names a
+  flagged member is attributed to that mod. The check cannot see string lookups
+  such as `AccessTools.Method("Name")`, and it does not check MonoMod patches
 
 ## FFU support and the OstraAutoloader
 
