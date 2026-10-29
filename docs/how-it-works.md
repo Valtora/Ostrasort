@@ -324,6 +324,11 @@ a pool no longer marks the whole thing handled: the plain claimants are analysed
 and merged among themselves as usual, and only the command editor is left out of
 the union (folding its `--ADD--` tokens in would corrupt the merged pool).
 
+An FFU-dependent mod that ships a **plain** whole copy of a pool (no commands) is
+different: it also loads after the patch, and its copy replaces the whole pool, so
+no merge can survive it. Ostrasort does not offer to patch such a pool. It reports
+that the FFU mod's version wins, and the choice of which mod to keep is yours.
+
 A pool's internal id (`CNDOLKioskEmbassyOKLG`) means little on its own, so
 Ostrasort annotates it with a **friendly name**. It reverse-indexes the core game
 so a pool is described by the kiosk or shop that uses it (its `strNameFriendly`,

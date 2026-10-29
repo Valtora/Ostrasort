@@ -142,6 +142,9 @@ public static class Patcher
         // two final-say mods: a union would undo both curations - their call
         !c.CurationClash &&
         c.PlainClaimants.Count >= 2 &&
+        // the patch closes the NON-FFU block: a plain FFU claimant loads after it
+        // and replaces the whole pool, so a merge it is part of can never win
+        c.PlainClaimants.All(m => !m.IsFfu) &&
         c.PlainClaimants.All(m => m.Claims.TryGetValue((c.Type, c.ObjName), out var l) && l is not null) &&
         // OrderLocked is only ever set on a subset violation the sort refuses to
         // reorder, and the mod holding the late slot did not earn final say over

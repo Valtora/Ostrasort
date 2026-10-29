@@ -283,6 +283,17 @@ public sealed class Analysis
                                  "nor the patch can keep both, so choose which mod to keep");
             }
         }
+
+        // a partial overlap with a plain (non-command) FFU claimant: that mod
+        // loads after the patch and replaces the whole pool, so the patch cannot
+        // merge it (Patcher.IsPatchableLoot) - say so rather than offer a merge
+        foreach (var c in Collisions.Where(c => c.Type == "loot" && !c.ResolvedByOrder && !c.CurationClash))
+        {
+            if (c.PlainClaimants.LastOrDefault(m => m.IsFfu) is not { } ffu) continue;
+            if (!c.PlainPairs.Any(p => p.Rel == Relation.Partial)) continue;
+            c.FieldNotes.Add($"{ffu.DisplayName ?? ffu.Name} is FFU-dependent and ships a whole copy of this pool, so it loads " +
+                             "after the Ostrasort Patch and its version wins - the patch cannot keep both, so choose which mod to keep");
+        }
     }
 
     /// <summary>

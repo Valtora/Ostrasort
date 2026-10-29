@@ -175,6 +175,28 @@ public class AnalysisTests
     }
 
     [Fact]
+    public void PartialPoolWithAPlainFfuClaimant_IsNotOfferedToThePatch()
+    {
+        // the FFU mod loads after the patch and replaces the whole pool, so a
+        // merged union would be overwritten at load
+        var core = new ModEntry { Raw = "core", Kind = EntryKind.Core, Name = "core", Dir = "core", Class = ModClass.Core };
+        var plain = Registered("Plain", EntryKind.Local, "Plain");
+        var ffu = Registered("Ffu", EntryKind.Local, "Ffu");
+        ffu.IsFfu = true;
+        plain.Claims[("loot", "P")] = new[] { "x=1x1", "y=1x1" };
+        ffu.Claims[("loot", "P")] = new[] { "x=1x1", "z=1x1" };
+        var an = WithOrder(core, plain, ffu);
+
+        an.FindCollisions();
+        an.MarkOrderResolved();
+
+        var col = Assert.Single(an.Collisions);
+        Assert.False(Patcher.IsPatchableLoot(col));
+        Assert.True(CollisionView.NeedsAttention(col));
+        Assert.Contains(col.FieldNotes, n => n.Contains("loads after the Ostrasort Patch"));
+    }
+
+    [Fact]
     public void IgnoredMod_NeverClaimsAnything()
     {
         // an ignored mod is never registered, so the game never loads it - an
