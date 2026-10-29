@@ -338,6 +338,20 @@ public class ModInstallTests : IDisposable
     }
 
     [Fact]
+    public void RegisterInstalled_WithHoldNew_AddsTheModTurnedOff()
+    {
+        var zip = Zip(
+            ("MyMod/mod_info.json", """[{"strName":"RegMod"}]"""),
+            ("MyMod/data/items/x.json", "[]"));
+
+        var result = ModInstall.Execute(_env, ModInstall.Inspect(_env, zip));
+        var registered = ModInstall.RegisterInstalled(_env, result, holdNew: true);
+
+        Assert.Equal(new[] { "RegMod|disabled" }, registered);
+        Assert.Equal(new[] { "core", "RegMod|disabled" }, LoadOrderFile.Read(_env.LoadingOrderPath).Order);
+    }
+
+    [Fact]
     public void RegisterInstalled_MultiModArchive_WritesOnceSoTheBakHoldsThePreInstallOrder()
     {
         var before = File.ReadAllText(_env.LoadingOrderPath);

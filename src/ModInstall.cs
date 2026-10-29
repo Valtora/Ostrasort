@@ -255,7 +255,8 @@ public static class ModInstall
     /// is left untouched. Returns the aLoadOrder entries added. The caller is
     /// responsible for the game-closed / rival-lock gates (registration writes).
     /// </summary>
-    public static List<string> RegisterInstalled(GameEnv env, Result result)
+    /// <param name="holdNew">"Add new mods turned off": register each with the game's |disabled marker.</param>
+    public static List<string> RegisterInstalled(GameEnv env, Result result, bool holdNew = false)
     {
         var registerDirs = result.Installed
             .SelectMany(c => c.RegisterDirs)
@@ -263,7 +264,7 @@ public static class ModInstall
             .ToList();
         if (registerDirs.Count == 0) return new();
 
-        var state = Engine.Analyze(env);
+        var state = Engine.Analyze(env, holdNew: holdNew);   // held mods suggest a |disabled entry
         var toRegister = new List<ModEntry>();
         foreach (var m in state.Analysis.UnregisteredLocal.ToList())
         {

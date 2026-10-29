@@ -386,7 +386,7 @@ public static class Program
             var result = ModInstall.Execute(ienv, plan, null, args.Contains("--overwrite"));
             // registration writes loading_order.json; skip it while the autoloader owns the file
             var canRegister = FfuContext.Detect(ienv) is not { AutoloaderActive: true } || allowRival;
-            var registered = canRegister ? ModInstall.RegisterInstalled(ienv, result) : new List<string>();
+            var registered = canRegister ? ModInstall.RegisterInstalled(ienv, result, holdNew) : new List<string>();
 
             foreach (var c in result.Installed)
             {

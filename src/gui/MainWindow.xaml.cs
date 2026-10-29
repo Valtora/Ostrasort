@@ -1536,7 +1536,7 @@ public partial class MainWindow : Window
         {
             CaptureOp($"install {Path.GetFileName(zipPath)}");
             var result = ModInstall.Execute(_env, plan, null, overwrite);
-            var registered = rivalLock ? new List<string>() : ModInstall.RegisterInstalled(_env, result);
+            var registered = rivalLock ? new List<string>() : ModInstall.RegisterInstalled(_env, result, ChkHoldNew.IsChecked == true);
 
             foreach (var c in result.Installed) OpLog.Add($"Installed '{c.Name}' from {Path.GetFileName(zipPath)} → {c.TargetDir}.");
             foreach (var r in registered) OpLog.Add($"Registered installed mod: {r}.");
