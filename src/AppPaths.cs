@@ -20,9 +20,15 @@ namespace Ostrasort;
 /// </summary>
 public static class AppPaths
 {
-    /// <summary>Roaming data root, %APPDATA%\Ostrasort. Created lazily by the callers that write into it.</summary>
-    public static string DataDir { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Ostrasort");
+    /// <summary>
+    /// Roaming data root, %APPDATA%\Ostrasort. Created lazily by the callers that
+    /// write into it. OSTRASORT_DATA_DIR overrides it, so the test suite (and any
+    /// throwaway run) can keep its caches, profiles and backups out of the real one.
+    /// </summary>
+    public static string DataDir { get; } =
+        Environment.GetEnvironmentVariable("OSTRASORT_DATA_DIR") is { Length: > 0 } overridden
+            ? overridden
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Ostrasort");
 
     /// <summary>Where every release up to 0.22 kept its data: %LOCALAPPDATA%\Ostrasort (now the Velopack install root).</summary>
     public static string LegacyDataDir { get; } = Path.Combine(
