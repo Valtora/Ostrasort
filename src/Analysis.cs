@@ -151,7 +151,8 @@ public sealed class Analysis
                 list.Add(m);
             }
 
-        foreach (var ((type, name), claimants) in byKey.Where(kv => kv.Value.Count > 1).OrderBy(kv => kv.Key))
+        foreach (var ((type, name), claimants) in byKey.Where(kv => kv.Value.Count > 1)
+                     .OrderBy(kv => kv.Key.Item1, StringComparer.Ordinal).ThenBy(kv => kv.Key.Item2, StringComparer.Ordinal))   // ordinal: the same install sorts the same on every machine
         {
             var col = new Collision { Type = type, ObjName = name, Claimants = claimants };
             // ALL pairs, not just adjacent ones - with 3+ claimants a partial
@@ -188,8 +189,8 @@ public sealed class Analysis
         }
 
         HashSet<string> ia = PoolItems(earlier, type, name), ib = PoolItems(later, type, name);
-        var lost = ia.Where(x => !ib.Contains(x)).OrderBy(x => x).ToArray();
-        var added = ib.Where(x => !ia.Contains(x)).OrderBy(x => x).ToArray();
+        var lost = ia.Where(x => !ib.Contains(x)).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+        var added = ib.Where(x => !ia.Contains(x)).OrderBy(x => x, StringComparer.Ordinal).ToArray();
 
         var rel = (lost.Length, added.Length) switch
         {
