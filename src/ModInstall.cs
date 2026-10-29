@@ -151,7 +151,8 @@ public static class ModInstall
     /// Extract the chosen components. A component whose target already exists is
     /// skipped unless <paramref name="overwrite"/> is set, in which case a local
     /// mod folder is deleted and replaced (ReadOnly-safe) and a BepInEx bundle is
-    /// merged over the existing files. Writes nothing to loading_order.json - that
+    /// merged over the existing files (existing BepInEx\config files are always
+    /// kept). Writes nothing to loading_order.json - that
     /// is <see cref="RegisterInstalled"/>'s job.
     /// </summary>
     public static Result Execute(
@@ -236,6 +237,9 @@ public static class ModInstall
             if (c.Kind == ComponentKind.LocalMod && rel.StartsWith("BepInEx/", StringComparison.OrdinalIgnoreCase)) continue;
 
             var dest = SafeCombine(targetDir, rel);
+            // a bundle never replaces the player's tuned BepInEx config - BepInEx
+            // adds any missing keys itself on the next launch
+            if (c.Kind == ComponentKind.BepInExBundle && IsConfig(rel) && File.Exists(dest)) continue;
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             entry.ExtractToFile(dest, overwrite: true);
         }
@@ -327,8 +331,20 @@ public static class ModInstall
             .Select(p => Path.Combine(env.BepInExDir, "plugins", p["plugins/".Length..]))
             .ToArray();
 
+        // any file the bundle would write that is already on disk makes it an
+        // existing install - loose plugin DLLs and config/core/monomod files
+        // included, not just first-level plugin folders
+        var targets = files
+            .Where(f => f.StartsWith(bep, StringComparison.OrdinalIgnoreCase))
+            .Select(f => (Rel: f[prefix.Length..], Path: Path.Combine(env.GameRoot, f[prefix.Length..].Replace('/', Path.DirectorySeparatorChar))))
+            .ToList();
         var exists = registerDirs.Any(Directory.Exists) ||
-                     leafFolders.Any(l => Directory.Exists(Path.Combine(env.BepInExDir, l.Replace('/', Path.DirectorySeparatorChar))));
+                     leafFolders.Any(l => Directory.Exists(Path.Combine(env.BepInExDir, l.Replace('/', Path.DirectorySeparatorChar)))) ||
+                     targets.Any(t => File.Exists(t.Path));
+
+        var keptConfigs = targets.Where(t => IsConfig(t.Rel) && File.Exists(t.Path)).Select(t => t.Rel).ToList();
+        if (keptConfigs.Count > 0)
+            warnings.Add($"your existing BepInEx settings are kept, not replaced by the archive's copies: {string.Join(", ", keptConfigs)}.");
 
         return new Component(name, env.GameRoot, prefix, SubtreeFilter: "BepInEx/", ComponentKind.BepInExBundle,
             hasData, exists, registerDirs);
@@ -378,6 +394,10 @@ public static class ModInstall
         while (p.StartsWith("./", StringComparison.Ordinal)) p = p[2..];
         return p;
     }
+
+    /// <summary>Whether a bundle-relative path ("BepInEx/config/...") is a BepInEx config file.</summary>
+    private static bool IsConfig(string rel) =>
+        rel.StartsWith("BepInEx/config/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsUnsafePath(string norm) =>
         norm.StartsWith('/') || norm.Contains(':') ||

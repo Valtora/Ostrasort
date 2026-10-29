@@ -171,6 +171,39 @@ public class ModInstallTests : IDisposable
     }
 
     [Fact]
+    public void BepInExBundle_ExistingLooseFile_CountsAsInstalledAndIsNotReplacedWithoutOverwrite()
+    {
+        var dll = Game("BepInEx", "plugins", "Foo.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(dll)!);
+        File.WriteAllText(dll, "old");
+        var zip = Zip(("BepInEx/plugins/Foo.dll", "new"));
+
+        var plan = ModInstall.Inspect(_env, zip);
+        Assert.True(Assert.Single(plan.Components).Exists);
+
+        var result = ModInstall.Execute(_env, plan);
+        Assert.Single(result.Skipped);
+        Assert.Equal("old", File.ReadAllText(dll));
+    }
+
+    [Fact]
+    public void BepInExBundle_Overwrite_KeepsThePlayersConfig()
+    {
+        var cfg = Game("BepInEx", "config", "Foo.cfg");
+        Directory.CreateDirectory(Path.GetDirectoryName(cfg)!);
+        File.WriteAllText(cfg, "tuned");
+        var zip = Zip(("BepInEx/plugins/Foo.dll", "new"), ("BepInEx/config/Foo.cfg", "default"));
+
+        var plan = ModInstall.Inspect(_env, zip);
+        Assert.True(Assert.Single(plan.Components).Exists);
+        Assert.Contains(plan.Warnings, w => w.Contains("BepInEx/config/Foo.cfg"));
+
+        ModInstall.Execute(_env, plan, overwrite: true);
+        Assert.Equal("tuned", File.ReadAllText(cfg));
+        Assert.Equal("new", File.ReadAllText(Game("BepInEx", "plugins", "Foo.dll")));
+    }
+
+    [Fact]
     public void BepInExDataMod_IsMarkedRegistrable()
     {
         var zip = Zip(

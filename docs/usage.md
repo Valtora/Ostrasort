@@ -148,7 +148,9 @@ you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
   while a plain data mod goes to the Mods folder.
 - A confirmation lists exactly what will be installed and where. If a mod is
   **already installed**, it is skipped unless you tick **Overwrite** (which
-  cleanly replaces it).
+  cleanly replaces it). A BepInEx bundle counts as installed when any file it
+  ships is already there, and your own `BepInEx\config` settings are never
+  replaced by the archive's copies, even with Overwrite.
 - Each installed **data** mod is registered in the load order automatically.
   Code-only plugins are copied (BepInEx auto-loads them, so they need no entry).
 - Extraction is path-traversal safe and the game must be closed, like every
