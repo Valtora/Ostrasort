@@ -46,10 +46,29 @@ public sealed class MergeItem
     public bool AutoResolved { get; set; }        // decided by the headless fallback, not a person
     public bool Excluded { get; set; }            // drop (loot) / revert to vanilla (field)
 
-    public bool Contested => Options.Select(o => o.Entry).Distinct(StringComparer.Ordinal).Count() > 1;
+    public bool Contested => DistinctValueCount(Options) > 1;
     public bool NeedsDecision => Contested && ChosenSourceId is null && !Excluded;
     public MergeOption Resolved =>
         Options.LastOrDefault(o => o.SourceId == ChosenSourceId) ?? Options[^1];
+
+    /// <summary>
+    /// How many genuinely different values the options hold. Object-field values
+    /// compare as JSON (Entry is a truncated display string, so two different
+    /// arrays can render alike, and 1 vs 1.0 render differently but are equal);
+    /// loot options carry no Node and compare by their entry text.
+    /// </summary>
+    internal static int DistinctValueCount(IEnumerable<MergeOption> options)
+    {
+        var distinct = new List<MergeOption>();
+        foreach (var o in options)
+            if (!distinct.Any(d => SameValue(d, o))) distinct.Add(o);
+        return distinct.Count;
+    }
+
+    private static bool SameValue(MergeOption a, MergeOption b) =>
+        a.Node is null && b.Node is null
+            ? string.Equals(a.Entry, b.Entry, StringComparison.Ordinal)
+            : a.Node is not null && b.Node is not null && JsonNode.DeepEquals(a.Node, b.Node);
 }
 
 /// <summary>A colliding shop/loot pool being merged into a union.</summary>

@@ -26,6 +26,34 @@ public class ObjectMergeTests
     }
 
     [Fact]
+    public void ArraysThatOnlyDifferPastTheDisplayCut_AreStillContested()
+    {
+        // the resolver shows only the first three elements - two arrays that
+        // differ in the fourth must not read as agreeing
+        var core = Obj("""{"strName":"X","aTags":["a","b","c","d"]}""");
+        var plan = ObjectMerge.Build(Coll("condowners", "X", A, B), core,
+            Versions((A, """{"strName":"X","aTags":["a","b","c","X"]}"""),
+                     (B, """{"strName":"X","aTags":["a","b","c","Y"]}""")));
+
+        var field = Assert.Single(plan!.Fields);
+        Assert.True(field.Contested);
+        Assert.True(field.NeedsDecision);
+    }
+
+    [Fact]
+    public void NumbersEqualInValue_AreNotAConflict()
+    {
+        var core = Obj("""{"strName":"X","fMass":2}""");
+        var plan = ObjectMerge.Build(Coll("condowners", "X", A, B), core,
+            Versions((A, """{"strName":"X","fMass":1.0}"""),
+                     (B, """{"strName":"X","fMass":1}""")));
+
+        var field = Assert.Single(plan!.Fields);
+        Assert.False(field.Contested);
+        Assert.False(field.NeedsDecision);
+    }
+
+    [Fact]
     public void SameFieldDifferentValue_IsContested()
     {
         var core = Obj("""{"strName":"X","a":1}""");

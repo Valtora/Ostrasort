@@ -69,7 +69,7 @@ public static class ObjectMerge
                 .ToList();
 
             var isArray = key.StartsWith("a", StringComparison.Ordinal) && LooksArray(baseVal, changers);
-            var distinctVals = options.Select(o => o.Entry).Distinct(StringComparer.Ordinal).Count();
+            var distinctVals = MergeItem.DistinctValueCount(options);
 
             // array conflict: offer the union of everyone's entries as an extra choice
             if (distinctVals > 1 && isArray)
