@@ -35,6 +35,25 @@ public class ModRemovalTests : IDisposable
 
     private ModEntry ModA() => ModEntry.Parse("ModA|edit", _env);
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("|disabled")]
+    [InlineData("|edit")]
+    public void EmptyEntry_NeverResolvesToTheModsFolder(string raw)
+    {
+        Assert.Null(ModEntry.Parse(raw, _env).Dir);
+    }
+
+    [Fact]
+    public void Delete_RefusesAFolderOutsideMods()
+    {
+        var m = new ModEntry { Raw = "x", Kind = EntryKind.Local, Name = "x", Dir = _env.ModsDir };
+
+        Assert.Throws<InvalidOperationException>(() => ModRemoval.RemoveLocal(_env, m, delete: true));
+        Assert.True(Directory.Exists(Path.Combine(_env.ModsDir, "ModA")));
+        Assert.True(File.Exists(_env.LoadingOrderPath));
+    }
+
     [Fact]
     public void Park_RenamesTheFolderAndUnregisters()
     {

@@ -147,13 +147,15 @@ public sealed class ModEntry
             };
         }
 
+        // an empty path ("", "|disabled") would combine to the Mods folder itself -
+        // treat it as unresolved so nothing ever acts on Mods as if it were a mod
         var dir = Path.Combine(env.ModsDir, path);
         return new ModEntry
         {
             Raw = raw,
             Kind = EntryKind.Local,
             Name = path,
-            Dir = Directory.Exists(dir) ? dir : null,
+            Dir = !string.IsNullOrWhiteSpace(path) && Directory.Exists(dir) ? dir : null,
             EditMarker = edit,
             Disabled = disabled,
         };

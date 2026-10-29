@@ -24,7 +24,15 @@ public static class ModRemoval
         var affected = new List<string>();
         if (m.Dir is not null && Directory.Exists(m.Dir))
         {
-            var dir = Path.TrimEndingDirectorySeparator(m.Dir);
+            var dir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(m.Dir));
+            // only ever park or delete a folder strictly INSIDE the folder that
+            // holds this kind of mod - never Mods or plugins itself, nor anything
+            // an odd entry ("..\x") resolves to outside it
+            var parent = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
+                m.Kind == EntryKind.Local ? env.ModsDir : Path.Combine(env.BepInExDir, "plugins")));
+            if (!dir.StartsWith(parent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"'{m.Dir}' is not a mod folder inside '{parent}' - refusing to remove it.");
             if (delete)
             {
                 FileSystemUtil.RobustDeleteDirectory(dir);
