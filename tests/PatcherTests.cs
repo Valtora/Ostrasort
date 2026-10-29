@@ -285,6 +285,32 @@ public class PatcherTests : IDisposable
     }
 
     [Fact]
+    public void LootPool_ChangeOutsideTheItems_MakesThePatchStale_ButOldMarkersStayFresh()
+    {
+        WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "loot", "pool.json"),
+            """[{"strName":"PoolR","strType":"item","aLoots":["A=1.0x1","Y=1.0x1"]}]""");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "loot", "pool.json"),
+            """[{"strName":"PoolR","strType":"item","aLoots":["A=1.0x1","Z=1.0x1"]}]""");
+        var state = Engine.Analyze(_env);
+        Patcher.Generate(_env, Patcher.PlanMerge(_env, state.Analysis), state.Analysis, _env.InstalledVersion, "test");
+        var marker = Path.Combine(_env.ModsDir, Patcher.FolderName, Patcher.MarkerFile);
+
+        // a marker written before signatures covered the rest of the pool (items
+        // only) must still read as fresh
+        var oldStyle = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(marker), "(\"hash\":\\s*\"[0-9A-F]+):[0-9A-F]+\"", "$1\"");
+        Assert.NotEqual(File.ReadAllText(marker), oldStyle);
+        File.WriteAllText(marker, oldStyle);
+        Assert.False(Engine.Analyze(_env).Patch.Stale);
+
+        // regenerate, then ModB changes a field the merged pool takes from it
+        state = Engine.Analyze(_env);
+        Patcher.Generate(_env, Patcher.PlanMerge(_env, state.Analysis), state.Analysis, _env.InstalledVersion, "test");
+        WriteJson(Path.Combine(_env.ModsDir, "ModB", "data", "loot", "pool.json"),
+            """[{"strName":"PoolR","strType":"condition","aLoots":["A=1.0x1","Z=1.0x1"]}]""");
+        Assert.True(Engine.Analyze(_env).Patch.Stale);
+    }
+
+    [Fact]
     public void LootPool_PipeRowsDifferingAfterTheFirstItem_AreNotEqual()
     {
         WriteJson(Path.Combine(_env.ModsDir, "ModA", "data", "loot", "pool.json"),
