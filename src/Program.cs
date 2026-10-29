@@ -622,6 +622,8 @@ public static class Program
             if (switchPlan.Missing.Count > 0)
                 performed.Add($"{switchPlan.Missing.Count} profile mod(s) not installed, skipped: " +
                               string.Join(", ", switchPlan.Missing.Select(m => m.DisplayName)) + ".");
+            if (switchPlan.TurnedOff.Count > 0)
+                performed.Add($"{switchPlan.TurnedOff.Count} subscribed Workshop mod(s) not in the profile kept turned off.");
             state = Engine.Analyze(env, tidy, holdNew: holdNew);
         }
 

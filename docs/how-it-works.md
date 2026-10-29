@@ -401,7 +401,9 @@ result one of two ways, your choice.
 
 - **Replace** makes the profile's order the whole `aLoadOrder`. Currently
   registered mods the profile omits are removed from the order (their files are
-  untouched, and any unregistered local mod is flagged as usual). This is the
+  untouched, and any unregistered local mod is flagged as usual). A subscribed
+  Workshop mod is kept in the order turned off instead, because the game would add
+  a missing subscription back itself, turned on and at the very end. This is the
   clean switch between distinct setups.
 - **Merge-append** writes the profile's order, then every currently registered
   mod it does not mention, appended in place. This layers a profile over the

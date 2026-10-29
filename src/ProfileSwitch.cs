@@ -16,7 +16,8 @@ public sealed record SwitchPlan(
     List<string> NewOrder,           // raw entries to write
     List<ProfileEntry> Missing,      // profile entries that no longer resolve on disk (skipped)
     List<string> Appended,           // (merge) current entries appended after the profile's order
-    List<string> Dropped);           // (replace) current entries the profile omits, removed from the order
+    List<string> Dropped,            // (replace) current entries the profile omits, removed from the order
+    List<string> TurnedOff);         // (replace) Workshop subscriptions the profile omits, kept but |disabled
 
 /// <summary>
 /// Plans a profile switch (pure, testable). Resolves each profile entry against
@@ -57,18 +58,30 @@ public static class ProfileSwitch
             }
 
         // replace: the current mods the profile omits are dropped from the order
-        // (their files stay on disk - Ostrasort's next scan flags any unregistered)
-        var dropped = mode == SwitchMode.Replace
+        // (their files stay on disk - Ostrasort's next scan flags any unregistered).
+        // A subscribed Workshop item is the exception: the game re-adds a missing
+        // subscription itself on the next launch, turned ON and at the very end, so
+        // it stays in the order with the game's own |disabled marker instead.
+        var omitted = mode == SwitchMode.Replace
             ? current.Registered
                 .Where(m => m.Kind != EntryKind.Core && !IsPatchEntry(m) && !keys.Contains(KeyOf(m.Raw)))
-                .Select(m => m.Raw).ToList()
-            : new List<string>();
+                .ToList()
+            : new List<ModEntry>();
+        var turnedOff = new List<string>();
+        foreach (var m in omitted.Where(m => m.Kind == EntryKind.Workshop && m.Dir is not null))
+            if (keys.Add(KeyOf(m.Raw)))
+            {
+                var entry = m.Raw.Split('|')[0] + "|disabled";
+                kept.Add(entry);
+                turnedOff.Add(entry);
+            }
+        var dropped = omitted.Where(m => !(m.Kind == EntryKind.Workshop && m.Dir is not null)).Select(m => m.Raw).ToList();
 
         // the game loads core before everything else - guarantee it leads, exactly once
         kept.RemoveAll(r => r.Split('|')[0] == "core");
         kept.Insert(0, "core");
 
-        return new SwitchPlan(mode, kept, missing, appended, dropped);
+        return new SwitchPlan(mode, kept, missing, appended, dropped, turnedOff);
     }
 
     /// <summary>Normalized mod identity: marker stripped, absolute paths canonically cased, case-insensitive.</summary>

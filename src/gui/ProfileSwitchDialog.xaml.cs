@@ -58,6 +58,9 @@ public partial class ProfileSwitchDialog : Window
         if (plan.Mode == SwitchMode.Replace && plan.Dropped.Count > 0)
             notes.Add($"{plan.Dropped.Count} currently-registered mod(s) not in the profile will be removed from the order " +
                       "(their files stay on disk).");
+        if (plan.TurnedOff.Count > 0)
+            notes.Add($"{plan.TurnedOff.Count} subscribed Workshop mod(s) not in the profile will stay in the order turned off " +
+                      "(the game would otherwise add them back turned on).");
         TxtNotes.Text = notes.Count > 0 ? string.Join("\n", notes) : "This profile matches what's installed — nothing changes.";
         TxtNotes.Foreground = plan.Missing.Count > 0 ? Warn : Dim;
     }

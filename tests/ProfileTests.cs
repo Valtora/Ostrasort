@@ -138,6 +138,20 @@ public class ProfileTests : IDisposable
     }
 
     [Fact]
+    public void Plan_Replace_KeepsAnOmittedWorkshopSubscriptionTurnedOff()
+    {
+        // the game would re-add a missing subscription itself, turned on and last
+        var ws = Path.Combine(_root, "workshop", "123");
+        Directory.CreateDirectory(ws);
+        var current = Registered("core", "ModA|edit", ws);
+        var plan = ProfileSwitch.Plan(_env, current, Named("s", "core", "ModB|edit"), SwitchMode.Replace);
+
+        Assert.Equal(new[] { "core", "ModB|edit", ws + "|disabled" }, plan.NewOrder);
+        Assert.Equal(new[] { ws + "|disabled" }, plan.TurnedOff);
+        Assert.Equal(new[] { "ModA|edit" }, plan.Dropped);
+    }
+
+    [Fact]
     public void Plan_Merge_AppendsCurrentModsNotInTheProfile()
     {
         var current = Registered("core", "ModA|edit", "ModC|edit");
