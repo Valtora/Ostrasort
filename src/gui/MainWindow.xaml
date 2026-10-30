@@ -505,6 +505,53 @@
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
+            <TabItem x:Name="TabSaves" Header="Saves">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8,2,8,8">
+                        <Button x:Name="BtnSaveBackupNow" Content="Back up saves now" Padding="10,4" Click="SaveBackupNow_Click"
+                                ToolTip="Zip the whole Saves folder now (skipped when no save changed since the last backup)."/>
+                        <Button x:Name="BtnSaveRestore" Content="Restore…" Padding="10,4" Margin="8,0,0,0" Click="SaveRestore_Click"
+                                ToolTip="Replace your saves with the selected backup. Your current saves are backed up first."/>
+                        <Button x:Name="BtnSaveProfile" Content="Save mod set as profile…" Padding="10,4" Margin="8,0,0,0" Click="SaveProfile_Click"
+                                ToolTip="Make a profile from the mods the selected save was made with, so you can switch back to them."/>
+                        <Button Content="Open backups folder" Padding="10,4" Margin="8,0,0,0" Click="SaveOpenFolder_Click"/>
+                        <CheckBox x:Name="ChkBackupSaves" Content="Back up automatically" VerticalAlignment="Center" Margin="14,0,0,0"
+                                  Checked="BackupSaves_Changed" Unchecked="BackupSaves_Changed"
+                                  ToolTip="Back up the Saves folder before a profile switch, a patch change, a culprit hunt, and the first scan after a game update."/>
+                    </StackPanel>
+                    <Grid Margin="8,6,8,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" FontWeight="SemiBold" Text="Your saves (newest first)"/>
+                        <ListBox Grid.Row="1" x:Name="ListSaves" Margin="0,4,0,8" SelectionChanged="Saves_SelectionChanged"
+                                 ToolTip="The mod set is recorded for saves made in a game started with Ostrasort's Launch button.">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="2,3">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"/>
+                                        <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11.5"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Grid.Row="2" FontWeight="SemiBold" Text="Backups of the Saves folder"/>
+                        <ListBox Grid.Row="3" x:Name="ListSaveBackups" Margin="0,4,0,0" SelectionChanged="Saves_SelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="2,3">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"/>
+                                        <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11.5"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
         </TabControl>
         </Grid>
 

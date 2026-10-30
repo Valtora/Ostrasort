@@ -43,7 +43,7 @@ so nothing you did not intend gets lost.
 
 ## Where your data lives
 
-Your settings, saved profiles, load-order backups and logs are kept in
+Your settings, saved profiles, load-order and save backups and logs are kept in
 `%APPDATA%\Ostrasort` (the roaming profile), separate from the app itself, so
 they survive updates, reinstalls, and even an uninstall. Upgrading from a
 pre-0.23 build moves this data there automatically the first time the new version
@@ -130,6 +130,8 @@ actions right there. Below the table sits a row of tabs.
   of them.
 - **Profiles** saves named load orders and switches between them (see
   [Profiles](#profiles) below).
+- **Saves** backs up your saves and shows which mods each save was made with
+  (see [Saves](#saves) below).
 
 Above the table, the **Installation** picker chooses which game install
 Ostrasort manages. **Auto-detect** finds your Steam install and its mods folder
@@ -285,6 +287,28 @@ while the game is running or the OstraAutoloader manages the install. After a
 switch, Ostrasort re-checks whether the new setup needs a conflict patch and
 lights up the **Patch** tab if so. Profiles are stored per install under
 `%APPDATA%\Ostrasort\profiles`.
+
+## Saves
+
+The **Saves** tab keeps zipped copies of the game's whole Saves folder. With
+**Back up automatically** on (the default), Ostrasort takes one before a
+profile switch, before the compatibility patch changes, before a culprit hunt,
+and on the first scan after a game update. A backup is skipped when no save
+changed since the last one, and the newest **3** are kept in
+`%APPDATA%\Ostrasort\save-backups`. Saves are large (often over 150 MB in
+total), so expect up to three times that on disk. **Back up saves now** takes
+one on demand, and **Restore…** puts the selected backup back after backing up
+the saves it replaces. If Steam Cloud syncs your saves, Steam may report a sync
+conflict on the next launch; keep the files on this computer.
+
+Ostranauts saves do not record which mods they were made with, so Ostrasort
+records it: when you start the game with **Launch game**, every save written in
+that session is linked to the mods that were active. The tab shows each save's
+mod set, and **Save mod set as profile…** turns it into a profile you can switch
+back to. When your newest save was made with mods that no longer load, the
+Warnings tab says so, because loading a save without the mods that placed its
+objects can drop or damage them. Saves from a game started straight from Steam
+are not linked.
 
 ## The conflict resolver
 

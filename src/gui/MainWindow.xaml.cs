@@ -104,6 +104,7 @@ public partial class MainWindow : Window
         Title = $"Ostrasort v{Program.Version}";
         ChkTidy.IsChecked = _settings.Tidy;
         ChkHoldNew.IsChecked = _settings.HoldNew;
+        ChkBackupSaves.IsChecked = _settings.BackupSaves;
         ChkTechCols.IsChecked = _settings.TechColumns;
         ApplyTechColumns();
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
@@ -156,6 +157,7 @@ public partial class MainWindow : Window
             _arrRedo.Clear();
             _state = scanned ?? Analyze(_env);
             LogCorrelation.Annotate(_state.Analysis, [GameEnv.PlayerLogPath, _env.BepInExLogPath], _env.GameRoot);   // attribute last-launch log issues
+            TrackSaves(_state);   // link saves to launches, warn about a newest save's missing mods
             RenderState(_state);
         }
         catch (Exception e)
@@ -278,6 +280,7 @@ public partial class MainWindow : Window
         RenderProfiles();
         UpdateActionBar(s);
         RenderLogs();
+        RenderSaves();
     }
 
     // -------------------------------------------------------- health summary ---
@@ -1324,6 +1327,7 @@ public partial class MainWindow : Window
                 var dlg = new ResolverDialog(plan) { Owner = this };
                 if (dlg.ShowDialog() != true) return;
             }
+            BackupSaves("patch change");
             CaptureOp(fresh ? "rebuild patch from scratch"
                     : _state.Patch.Exists ? "refresh patch (incl. decisions)" : "generate patch");
             var result = Patcher.Generate(_env, plan, _state.Analysis, _env.InstalledVersion, Program.Version);
@@ -1365,6 +1369,7 @@ public partial class MainWindow : Window
         _busy = true;
         try
         {
+            BackupSaves("patch removal");
             CaptureOp("remove patch");
             Patcher.Remove(_env);
             OpLog.Add("Removed the Ostrasort Patch.");
@@ -1495,12 +1500,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Launch_Click(object sender, RoutedEventArgs e)
+    private async void Launch_Click(object sender, RoutedEventArgs e)
     {
+        await WaitForSaveBackupAsync();
         try
         {
             Process.Start(new ProcessStartInfo("steam://rungameid/1022980") { UseShellExecute = true });
             OpLog.Add("Launched Ostranauts via Steam.");
+            RecordLaunch();   // saves written in this session link to the current mod set
             RunStatus.Text = "Launching Ostranauts via Steam…  ";
             RunStatus.Foreground = Dim;
         }
@@ -2084,6 +2091,7 @@ public partial class MainWindow : Window
             if (dlg.ShowDialog() != true || dlg.Result is not { } plan) return;
             // check AFTER the modal - the file may have changed while it was open
             if (!ConfirmLoadOrderCurrent()) return;
+            BackupSaves("profile switch");
             CaptureOp($"switch to profile '{row.Name}'");
             LoadOrderFile.Read(_env.LoadingOrderPath).Write(plan.NewOrder);
             OpLog.Add($"Switched to profile '{row.Name}' ({plan.Mode.ToString().ToLowerInvariant()}, {plan.NewOrder.Count} entries).");
