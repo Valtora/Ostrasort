@@ -158,7 +158,6 @@ public static class JsonReport
             ["revertedChanges"] = new JsonArray(m.RevertedChanges.Select(x => (JsonNode)x).ToArray()),
             ["redundantOverrides"] = new JsonArray(m.RedundantOverrides.Select(x => (JsonNode)x).ToArray()),
             ["dataProblems"] = new JsonArray(m.DataProblems.Select(x => (JsonNode)x).ToArray()),
-            ["communityNotes"] = new JsonArray(m.CommunityNotes.Select(x => (JsonNode)x).ToArray()),
             ["hasPatchers"] = m.HasPatchers,
             ["jsonErrors"] = new JsonArray(m.JsonErrors.Select(e => (JsonNode)e).ToArray()),
             ["logNotes"] = new JsonArray(m.LogNotes.Select(n => (JsonNode)n).ToArray()),

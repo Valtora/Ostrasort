@@ -95,10 +95,6 @@ public sealed class ModEntry
     public List<string> RedundantOverrides { get; } = new();
     /// <summary>"object: field, field" where this mod still carries the value the last game update changed.</summary>
     public List<string> RevertedChanges { get; } = new();
-    /// <summary>Mods the community rules say this one must load after (see <see cref="CommunityRules"/>).</summary>
-    public List<ModEntry> LoadAfter { get; } = new();
-    /// <summary>What the community rules say about this mod, for its detail panel.</summary>
-    public List<string> CommunityNotes { get; } = new();
     /// <summary>Mistakes in its own data for its author: dangling names and schema errors vanilla never has (see <see cref="ModDataCheck"/>).</summary>
     public List<string> DataProblems { get; } = new();
     /// <summary>Condition names this mod defines via conditions_simple (they land in the conditions namespace).</summary>

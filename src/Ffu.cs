@@ -261,7 +261,7 @@ public static class FfuAnalysis
         return (i >= 0 ? entry[..i] : entry).Trim();
     }
 
-    public static void Classify(GameEnv env, Analysis a, FfuOverrideList? overrides = null, CommunityRules? rules = null)
+    public static void Classify(GameEnv env, Analysis a, FfuOverrideList? overrides = null)
     {
         // disabled and ignored mods never load - they join no FFU block and get no hygiene nags
         var mods = a.AllMods.Where(m => m.Kind != EntryKind.Core && m.Dir is not null && m.Loads).ToList();
@@ -280,14 +280,7 @@ public static class FfuAnalysis
                 m.FfuGroup = FfuLoadGroup.AfterFFU;
                 m.FfuSignals.Add("a manual FFU-dependent tag you added");
             }
-            // the community rules tag a mod that ships no marker; like the manual
-            // tag it can only move a mod later, into the FFU block
-            if (!m.IsFfu && rules?.For(m) is { Ffu: true })
-            {
-                m.IsFfu = true;
-                m.FfuGroup = FfuLoadGroup.AfterFFU;
-                m.FfuSignals.Add("tagged FFU-dependent by the community rules");
-            }
+
             if (m.Meta?.Group is FfuLoadGroup.FFUCore or FfuLoadGroup.AfterFFU)
             {
                 m.IsFfu = true;

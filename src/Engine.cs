@@ -14,12 +14,11 @@ public static class Engine
     /// </param>
     public static EngineState Analyze(GameEnv env, bool tidy = false, IgnoreList? ignore = null,
         FfuOverrideList? ffuOverrides = null, CategoryOverrideList? categoryOverrides = null,
-        bool holdNew = false, CommunityRules? rules = null)
+        bool holdNew = false)
     {
         ignore ??= IgnoreList.LoadDefault();
         ffuOverrides ??= FfuOverrideList.LoadDefault();
         categoryOverrides ??= CategoryOverrideList.LoadDefault();
-        rules ??= CommunityRules.Load();
         var lo = LoadOrderFile.Read(env.LoadingOrderPath);
         var analysis = new Analysis
         {
@@ -37,9 +36,8 @@ public static class Engine
 
         if (holdNew) HoldNewMods(analysis);   // after the scan (it needs each mod's class), before anything reads Disabled
 
-        FfuAnalysis.Classify(env, analysis, ffuOverrides, rules);   // FFU block membership, patch targets, FFU hygiene
+        FfuAnalysis.Classify(env, analysis, ffuOverrides);   // FFU block membership, patch targets, FFU hygiene
         CategoryAnalysis.Classify(env, analysis, categoryOverrides);   // game-system category + load-priority tier
-        rules.Apply(env, analysis);   // community tiers (never over a pin), load-after edges, known breakage
         analysis.FindCollisions();
         foreach (var c in analysis.Collisions.Where(c => c.Type == "loot"))
             c.FriendlyName = scanner.LootNames.Describe(c.ObjName);   // readable name for the raw pool id

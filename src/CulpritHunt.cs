@@ -161,7 +161,7 @@ public sealed class CulpritHunt
             foreach (var m in loaded)
             {
                 if (off.Contains(Key(m.Raw)) || m.Class == ModClass.Infrastructure) continue;
-                var deps = m.FfuDeps.Select(n => Analysis.ResolveDep(loaded, n)).OfType<ModEntry>().Concat(m.LoadAfter);
+                var deps = m.FfuDeps.Select(n => Analysis.ResolveDep(loaded, n)).OfType<ModEntry>();
                 if (deps.Any(d => d != m && off.Contains(Key(d.Raw))))
                 {
                     off.Add(Key(m.Raw));

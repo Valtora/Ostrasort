@@ -563,32 +563,6 @@ public sealed class Analysis
             if (!moved) break;
         }
 
-        // rule 4.7: load-after edges from the community rules, same mechanics as
-        // 4.6 among non-FFU mods, never crossing a load-priority band
-        for (var pass = 0; pass <= plain.Count; pass++)
-        {
-            var moved = false;
-            foreach (var m in plain.Where(m => m.LoadAfter.Count > 0))
-                foreach (var dep in m.LoadAfter.Where(d => plain.Contains(d) && d != m))
-                {
-                    int mi = work.IndexOf(m), di = work.IndexOf(dep);
-                    if (di < mi) continue;
-                    if (Tier(dep) != Tier(m))
-                    {
-                        if (bandWarned.Add((m, dep)))
-                            Warnings.Add($"the community rules say '{m.DisplayName ?? m.Name}' loads after '{dep.DisplayName ?? dep.Name}', " +
-                                         "but their load priorities keep it first - change one of their load priorities");
-                        continue;
-                    }
-                    work.RemoveAt(mi);
-                    work.Insert(work.IndexOf(dep) + 1, m);
-                    Changes.Add(new Change("move", SuggestedRaw(m),
-                        $"the community rules say it loads after {dep.DisplayName ?? dep.Name}"));
-                    moved = true;
-                }
-            if (!moved) break;
-        }
-
         // rule 5 (FFU): FFU-dependent mods form a block AFTER every non-FFU mod:
         // the FFU core tier (Minor Fixes Plus) first, then FFU mods dependency-
         // sorted per their Autoload.Meta.toml, patch-style mods pinned to their
@@ -654,10 +628,9 @@ public sealed class Analysis
         for (var pass = 0; pass <= ffu.Count; pass++)
         {
             var moved = false;
-            foreach (var m in ordered.Where(m => m.HasFfuDeps || m.LoadAfter.Count > 0).ToList())
+            foreach (var m in ordered.Where(m => m.HasFfuDeps).ToList())
             {
-                var deps = m.FfuDeps.Select(Resolve).OfType<ModEntry>().Concat(m.LoadAfter.Where(ordered.Contains))
-                    .Where(d => d != m).ToList();
+                var deps = m.FfuDeps.Select(Resolve).OfType<ModEntry>().Where(d => d != m).ToList();
                 if (deps.Count == 0) continue;
                 var maxDep = deps.Max(d => ordered.IndexOf(d));
                 var idx = ordered.IndexOf(m);

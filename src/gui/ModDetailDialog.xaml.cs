@@ -143,13 +143,6 @@ public partial class ModDetailDialog : Window
             if (m.MissingGameCode.Count > 12) Line($"• and {m.MissingGameCode.Count - 12} more", Dim);
         }
 
-        // ---- what the community rules say about it ----
-        if (m.CommunityNotes.Count > 0)
-        {
-            Section("Community rules");
-            foreach (var n in m.CommunityNotes) Line("• " + n, Warn);
-        }
-
         // ---- core objects it copies, measured against the game's own versions ----
         if (m.RevertedChanges.Count > 0)
         {

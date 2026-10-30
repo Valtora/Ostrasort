@@ -29,11 +29,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- the copy of the community rules built into the app (see CommunityRules.cs) -->
-    <EmbeddedResource Include="rules\community-rules.json" LogicalName="Ostrasort.community-rules.json" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!-- Installer + in-app auto-update framework (Setup.exe, portable, GitHub-hosted
          delta updates). Velopack owns install/shortcuts/update; see VeloUpdate.cs. -->
     <PackageReference Include="Velopack" Version="1.2.0" />
