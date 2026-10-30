@@ -8,9 +8,9 @@
         <TextBlock x:Name="TxtBody" TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,14"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Park (reversible)" Padding="12,4" Margin="0,0,8,0" IsDefault="True" Click="Park_Click"
-                    ToolTip="Rename to *.disabled — rename back to restore."/>
+                    ToolTip="Rename to *.disabled. Rename it back to restore."/>
             <Button Content="Delete files" Padding="12,4" Margin="0,0,8,0" Click="Delete_Click"
-                    ToolTip="Remove the files permanently — no leftovers, not undoable by Ostrasort."/>
+                    ToolTip="Remove the files permanently, with no leftovers. Ostrasort cannot undo this."/>
             <Button Content="Cancel" Padding="12,4" IsCancel="True"/>
         </StackPanel>
     </StackPanel>

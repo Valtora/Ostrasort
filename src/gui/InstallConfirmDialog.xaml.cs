@@ -46,7 +46,7 @@ public partial class InstallConfirmDialog : Window
             ? "BepInEx mod → game BepInEx folder"
             : $"data mod → Mods\\{c.Name}";
         var tag = c.Exists ? "   (already installed)" : "";
-        return $"•  {c.Name}   —   {where}{tag}";
+        return $"•  {c.Name}:  {where}{tag}";
     }
 
     private void Install_Click(object sender, RoutedEventArgs e)

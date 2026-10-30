@@ -163,13 +163,6 @@ public partial class MainWindow
 
     private void Saves_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateSaveButtons();
 
-    private void BackupSaves_Changed(object sender, RoutedEventArgs e)
-    {
-        if (ChkBackupSaves is null) return;
-        _settings.BackupSaves = ChkBackupSaves.IsChecked == true;
-        SaveSettings();
-    }
-
     private void SaveBackupNow_Click(object sender, RoutedEventArgs e) => BackupSaves("manual", manual: true);
 
     private void SaveOpenFolder_Click(object sender, RoutedEventArgs e)

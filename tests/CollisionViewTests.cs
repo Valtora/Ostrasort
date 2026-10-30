@@ -42,7 +42,7 @@ public class CollisionViewTests
         var activeText = Active(WithCollisions(only));
 
         Assert.DoesNotContain("OnlyPool", activeText);           // nothing needs action -> tab reads clean
-        Assert.Contains("Handled automatically", activeText);    // the empty-state hint points to the other tab
+        Assert.Contains("all handled automatically", activeText);   // the empty state says why it is clean
     }
 
     [Fact]

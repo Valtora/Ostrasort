@@ -96,21 +96,18 @@ public partial class MainWindow : Window
         _activeInstall = activeInstall;
         InitializeComponent();
         RestoreWindowState();
-        CmbTheme.SelectedIndex = _settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         // Single-instance signal fires on a background thread - marshal to the UI.
         // Activate = a second launch asks us to come forward.
         SingleInstance.OnActivate = () => Dispatcher.Invoke(BringToFront);
         Title = $"Ostrasort v{Program.Version}";
-        ChkTidy.IsChecked = _settings.Tidy;
-        ChkHoldNew.IsChecked = _settings.HoldNew;
-        ChkBackupSaves.IsChecked = _settings.BackupSaves;
-        ChkTechCols.IsChecked = _settings.TechColumns;
+        MenuTechCols.IsChecked = _settings.TechColumns;
         ApplyTechColumns();
         if (_settings.Tab >= 0 && _settings.Tab < Tabs.Items.Count) Tabs.SelectedIndex = _settings.Tab;
         PopulateInstallations();
         OpLog.Add($"Ostrasort v{Program.Version} opened ({_env.GameRoot}).");
         Rescan();
+        if (_attentionCount > 0) ShowAttentionTab();   // open on what needs attention, not on the last tab used
         // not from here: the constructor runs before app.Run starts the dispatcher,
         // so there is no synchronization context yet and the await inside would
         // resume on a thread-pool thread and throw on the first UI touch
@@ -126,8 +123,7 @@ public partial class MainWindow : Window
     // ---------------------------------------------------------------- scan ---
 
     private EngineState Analyze(GameEnv env) =>
-        Engine.Analyze(env, ChkTidy.IsChecked == true, _ignore, _ffuOverrides, _categoryOverrides,
-                       holdNew: ChkHoldNew.IsChecked == true);
+        Engine.Analyze(env, _settings.Tidy, _ignore, _ffuOverrides, _categoryOverrides, holdNew: _settings.HoldNew);
 
     /// <param name="scanned">A scan of <see cref="_env"/> already taken (an install switch), rendered instead of rescanning.</param>
     private void Rescan(EngineState? scanned = null)
@@ -153,7 +149,7 @@ public partial class MainWindow : Window
             finally { _scanErrorShowing = false; }
             // everything on screen is now the PREVIOUS scan - say so instead of
             // letting a stale table masquerade as current
-            RunStatus.Text = "Scan FAILED — showing the last successful scan. Fix the problem, then Rescan.  ";
+            RunStatus.Text = "Scan FAILED. Showing the last successful scan; fix the problem, then rescan.  ";
             RunStatus.Foreground = Bad;
         }
         finally
@@ -242,8 +238,8 @@ public partial class MainWindow : Window
     {
         var a = s.Analysis;
         RunGamePath.Text = _env.GameRoot + "  ";
-        RunFoundVia.Text = $"   (found via {_env.DiscoveredVia}" +
-                           (_env.Manager is { } mp ? $"; code mods from the {mp.Label}, which Ostrasort reads but never changes)" : ")");
+        TxtFoundVia.Text = _env.DiscoveredVia +
+                           (_env.Manager is { } mp ? $". Code mods come from the {mp.Label}, which Ostrasort reads but never changes." : "");
         RunModsPath.Text = _env.ModsDir + "  ";
         TxtVersions.Text = _env.InstalledVersion ?? "unknown";
         TxtCoreInfo.Text = $"{s.Scanner.CoreIndex.Count:N0} objects across {s.Scanner.CoreTypes} types" +
@@ -266,7 +262,8 @@ public partial class MainWindow : Window
         UpdateActionBar(s);
         RenderLogs();
         RenderSaves();
-        BtnHunt.Content = _hunt is null ? "Find a problem mod…" : _hunt.Finished ? "Culprit hunt: result…" : $"Culprit hunt: round {_hunt.Round}…";
+        BtnHunt.Visibility = _hunt is null ? Visibility.Collapsed : Visibility.Visible;
+        BtnHunt.Content = _hunt is { Finished: true } ? "Culprit hunt: result…" : $"Culprit hunt: round {_hunt?.Round}…";
     }
 
     // -------------------------------------------------------- health summary ---
@@ -317,18 +314,20 @@ public partial class MainWindow : Window
         {
             HealthBanner.Background = ThemeManager.BannerGoodBg;
             HealthBanner.BorderBrush = ThemeManager.BannerGoodBorder;
-            TxtHealthTitle.Text = "Your mods are set up correctly. Nothing to do.";
             TxtHealthTitle.Foreground = Good;
+            HealthBanner.Padding = new Thickness(12, 6, 12, 6);
+            TxtHealthDetail.Visibility = Visibility.Collapsed;
             // a mod turned off is a choice, not a problem, so it never colours the
             // card - but a count keeps it from being forgotten about
             var content = a.Registered.Where(m => m.Kind != EntryKind.Core).ToList();
             var active = content.Count(m => !m.Disabled);
             var off = content.Count - active;
-            TxtHealthDetail.Text = (active == 1 ? "1 mod active." : $"{active} mods active.")
-                                   + (off == 0 ? ""
-                                      : off == 1 ? " 1 more is installed but turned off."
-                                      : $" {off} more are installed but turned off.");
-            TxtHealthDetail.Foreground = Dim;
+            // one line when all is well: the card stays put but stops taking space
+            TxtHealthTitle.Text = "Your mods are set up correctly. "
+                                  + (active == 1 ? "1 mod active" : $"{active} mods active")
+                                  + (off == 0 ? "."
+                                     : off == 1 ? ", 1 more installed but turned off."
+                                     : $", {off} more installed but turned off.");
             BtnHealthFix.Visibility = Visibility.Collapsed;
             BtnHealthLog.Visibility = Visibility.Collapsed;
             BtnHealthShow.Visibility = Visibility.Collapsed;
@@ -336,6 +335,8 @@ public partial class MainWindow : Window
         }
         else
         {
+            HealthBanner.Padding = new Thickness(12, 9, 12, 9);
+            TxtHealthDetail.Visibility = Visibility.Visible;
             var severe = logMods.Count > 0;
             HealthBanner.Background = severe ? ThemeManager.BannerAlarmBg : ThemeManager.BannerInfoBg;
             HealthBanner.BorderBrush = severe ? ThemeManager.BannerAlarmBorder : ThemeManager.BannerInfoBorder;
@@ -420,7 +421,9 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Open the tab that explains the current issues, most pressing first.</summary>
-    private void HealthShow_Click(object sender, RoutedEventArgs e)
+    private void HealthShow_Click(object sender, RoutedEventArgs e) => ShowAttentionTab();
+
+    private void ShowAttentionTab()
     {
         if (_state is null) return;
         var a = _state.Analysis;
@@ -484,8 +487,8 @@ public partial class MainWindow : Window
         FfuBanner.Background = rival ? ThemeManager.BannerAlarmBg : ThemeManager.BannerInfoBg;
         FfuBanner.BorderBrush = rival ? ThemeManager.BannerAlarmBorder : ThemeManager.BannerInfoBorder;
         TxtFfuBannerTitle.Text = rival
-            ? "OstraAutoloader active — Ostrasort is read-only on this install"
-            : $"{ctx.Summary} detected — FFU ordering rules are applied";
+            ? "OstraAutoloader is active, so Ostrasort is read-only on this install"
+            : $"{ctx.Summary} detected. FFU ordering rules are applied";
         TxtFfuBannerTitle.Foreground = rival ? Bad : Warn;
         ListFfuBanner.ItemsSource = FfuAnalysis.Notices(s.Analysis);
         BtnDisableAutoloader.Visibility = rival ? Visibility.Visible : Visibility.Collapsed;
@@ -524,7 +527,7 @@ public partial class MainWindow : Window
             foreach (var f in removal.Affected) OpLog.Add($"Removed FFU Core ({verb}): {f}");
             foreach (var r in removal.Unregistered) OpLog.Add($"Removed FFU Core load-order entry: {r}");
             Rescan();
-            RunStatus.Text = $"FFU removed ({verb}) — Steam Workshop mods only.  ";
+            RunStatus.Text = $"FFU removed ({verb}). Steam Workshop mods only from now on.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex)
@@ -546,7 +549,7 @@ public partial class MainWindow : Window
             var verb = choice == ParkOrDelete.Delete ? "deleted" : "disabled";
             foreach (var f in affected) OpLog.Add($"OstraAutoloader {verb}: {f}");
             Rescan();
-            RunStatus.Text = $"OstraAutoloader {verb} — Ostrasort now manages the load order.  ";
+            RunStatus.Text = $"OstraAutoloader {verb}. Ostrasort now manages the load order.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex)
@@ -592,13 +595,14 @@ public partial class MainWindow : Window
         var version = m.Kind == EntryKind.Core ? "-" : m.ModVersion ?? "-";
 
         // status glyph: colour is never the only signal - the shape carries it too
-        var hasBad = (m.Dir is null && m.Kind != EntryKind.Core) || m.JsonErrors.Count > 0 || m.LogNotes.Count > 0;
-        var hasWarn = !m.Registered && !m.Ignored;
+        var hasBad = (m.Dir is null && m.Kind != EntryKind.Core) || m.JsonErrors.Count > 0 || m.LogNotes.Count > 0
+                     || m.MissingGameCode.Count > 0;
+        var hasWarn = (!m.Registered && !m.Ignored) || m.RevertedChanges.Count > 0;
         var (glyph, glyphBrush, glyphTip) =
             m.Disabled || m.Ignored ? ("⏸", Dim, m.Disabled ? "Disabled: the game skips this mod." : "Ignored: kept unregistered on purpose.")
             : hasBad ? ("✕", Bad, "Problems found. " + string.Join(" ", notes.Select(n => n + ".")))
             : hasWarn ? ("!", Warn, string.Join(" ", notes.Select(n => n + ".")))
-            : ("✓", Good, "No problems found.");
+            : ("", Good, "No problems found.");
 
         var (descRaw, descLine) = DescribeMod(m);
 
@@ -681,21 +685,21 @@ public partial class MainWindow : Window
         var pat = new List<LineVm>();
         if (!s.Patch.Exists)
             pat.Add(Patcher.HasWork(a)
-                ? L("No patch generated yet — use \"Resolve conflicts & generate patch\" to merge the conflicts.", Warn)
+                ? L("No patch generated yet. Use \"Resolve conflicts & generate patch\" to merge the conflicts.", Warn)
                 : L("No patch needed.", Good));
         else if (s.Patch.Stale)
         {
-            foreach (var r in s.Patch.StaleReasons) pat.Add(L($"STALE — {r}", Bad));
+            foreach (var r in s.Patch.StaleReasons) pat.Add(L($"STALE: {r}", Bad));
             pat.Add(L("Regenerate it with the patch button; your previous decisions are kept where still valid.", Warn));
         }
         else if (s.Patch.Obsolete)
-            pat.Add(L("The installed patch is no longer needed (conflicts resolved upstream) — remove it.", Warn));
+            pat.Add(L("The installed patch is no longer needed (conflicts resolved upstream), so remove it.", Warn));
         else
         {
-            pat.Add(L($"Fresh (generated by v{s.Patch.ToolVersion ?? "?"}) — covering {string.Join(", ", s.Patch.CoveredKeys)}" +
-                      (s.Patch.ExcludedCount > 0 ? $" — {s.Patch.ExcludedCount} item(s) excluded by you" : ""), Good));
+            pat.Add(L($"Fresh (generated by v{s.Patch.ToolVersion ?? "?"}), covering {string.Join(", ", s.Patch.CoveredKeys)}" +
+                      (s.Patch.ExcludedCount > 0 ? $", with {s.Patch.ExcludedCount} item(s) excluded by you" : ""), Good));
             if (a.Collisions.Any(c => c.ResolvedByPatch && c.ObjectMergeable))
-                pat.Add(L("Includes merged game objects — those are best-effort, so verify them in game.", Dim));
+                pat.Add(L("Includes merged game objects. Those are best-effort, so check them in game.", Dim));
         }
         ListPatch.ItemsSource = pat;
 
@@ -726,9 +730,10 @@ public partial class MainWindow : Window
         var attentionColl = a.Collisions.Count(CollisionView.NeedsAttention);
         var handledColl = a.Collisions.Count - attentionColl;   // benign + patch-merged + FFU/additive handled
         SetTabHeader(TabCollisions, attentionColl == 0 ? "Conflicts" : $"Conflicts ({attentionColl})", collAttention);
-        SetTabHeader(TabResolved, handledColl == 0 ? "Handled automatically" : $"Handled automatically ({handledColl})", attention: false);
+        ChkShowHandled.Content = handledColl == 1 ? "Show 1 handled automatically" : $"Show {handledColl} handled automatically";
+        ChkShowHandled.Visibility = handledColl == 0 ? Visibility.Collapsed : Visibility.Visible;
         SetTabHeader(TabOrder, a.OrderChanged ? $"Load order ({a.Changes.Count})" : "Load order", orderAttention);
-        SetTabHeader(TabPatch, "Compatibility patch", patchAttention);
+        SetTabHeader(TabPatch, "Patch", patchAttention);
         SetTabHeader(TabWarnings, warnCount == 0 ? "Warnings" : $"Warnings ({warnCount})", warnAttention);
 
         _attentionCount = new[] { collAttention, orderAttention, patchAttention, warnAttention }.Count(x => x);
@@ -862,11 +867,10 @@ public partial class MainWindow : Window
         BtnLaunch.IsEnabled = !running;
         LinkReset.IsEnabled = _manualDirty;
 
-        // footer occasional actions (formerly behind "More…")
+        // the Tools menu's occasional actions
         var bak = _env.LoadingOrderPath + ".bak";
         var backupCount = (File.Exists(bak) ? 1 : 0) + Backups.List(_env.LoadingOrderPath).Count;
-        BtnRestoreBak.IsEnabled = backupCount > 0 && !running && !rivalLock;
-        BtnRemovePatch.IsEnabled = s.Patch.Exists && !running && !rivalLock;
+        MenuRestoreBak.IsEnabled = backupCount > 0 && !running && !rivalLock;
 
         var arrUndoable = _manualDirty && _arrUndo.Count > 0;
         var arrRedoable = _arrRedo.Count > 0;
@@ -876,37 +880,35 @@ public partial class MainWindow : Window
             : _undo.Count > 0 ? $"Undo: {_undo.Peek().Label} (Ctrl+Z)" : "Nothing to undo";
         BtnRedo.ToolTip = arrRedoable ? "Redo row move (Ctrl+Y)"
             : _redo.Count > 0 ? $"Redo: {_redo.Peek().Label} (Ctrl+Y)" : "Nothing to redo";
-        TxtDragHint.Text = _manualDirty ? "manual arrangement pending — apply or reset" : "drag rows to reorder manually";
 
         if (running)
         {
-            RunStatus.Text = "Ostranauts is RUNNING — writes disabled, rescan after closing it.  ";
+            RunStatus.Text = "Ostranauts is running, so writes are disabled. Close it, then rescan.  ";
             RunStatus.Foreground = Bad;
         }
         else if (rivalLock)
         {
-            RunStatus.Text = "OstraAutoloader manages this install — analysis only, writes disabled (see the banner).  ";
+            RunStatus.Text = "OstraAutoloader manages this install: analysis only, writes disabled (see the banner).  ";
             RunStatus.Foreground = Bad;
         }
         else if (_manualDirty)
         {
             var issues = Analysis.ValidateOrder(RegisteredEntriesInVisualOrder());
             RunStatus.Text = issues.Count == 0
-                ? "Manual arrangement pending — no rule violations.  "
-                : $"Manual arrangement pending — {issues.Count} rule issue(s), see tooltip.  ";
+                ? "Manual arrangement pending, no rule violations.  "
+                : $"Manual arrangement pending with {issues.Count} rule issue(s) (see the tooltip).  ";
             RunStatus.Foreground = issues.Count == 0 ? Warn : Bad;
             ((TextBlock)RunStatus.Parent!).ToolTip = issues.Count == 0 ? null : string.Join("\n", issues);
         }
         else if (_attentionCount > 0)
         {
-            RunStatus.Text = $"{_attentionCount} thing(s) need attention — see the highlighted tabs.  ";
+            RunStatus.Text = $"{_attentionCount} thing(s) need attention. See the highlighted tabs.  ";
             RunStatus.Foreground = Warn;
             ((TextBlock)RunStatus.Parent!).ToolTip = null;
         }
         else
         {
-            RunStatus.Text = "Everything satisfied — nothing to do.  ";
-            RunStatus.Foreground = Good;
+            RunStatus.Text = "";   // the health card already says all is well
             ((TextBlock)RunStatus.Parent!).ToolTip = null;
         }
         LinkReset.Inlines.Clear();
@@ -937,6 +939,7 @@ public partial class MainWindow : Window
 
     private void Filter_Changed(object sender, TextChangedEventArgs e)
     {
+        TxtFilterHint.Visibility = TxtFilter.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_rows.Count > 0) ApplyFilter();
     }
 
@@ -1052,7 +1055,7 @@ public partial class MainWindow : Window
     {
         if (GameEnv.IsGameRunning())
         {
-            MessageBox.Show(this, "Ostranauts is running — close it first. Nothing was written.",
+            MessageBox.Show(this, "Ostranauts is running. Close it first; nothing was written.",
                 "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
             if (!_manualDirty) Rescan();   // refresh the running state, never over a pending arrangement
             return false;
@@ -1080,7 +1083,7 @@ public partial class MainWindow : Window
     {
         if (_state?.Analysis.Ffu is not { AutoloaderActive: true }) return true;
         MessageBox.Show(this,
-            "OstraAutoloader manages this install — it regenerates loading_order.json on every launch, " +
+            "OstraAutoloader manages this install. It regenerates loading_order.json on every launch, " +
             "so Ostrasort is analysis-only here (see the banner). Nothing was written.",
             "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
         return false;
@@ -1102,11 +1105,11 @@ public partial class MainWindow : Window
         try { current = File.ReadAllText(_env.LoadingOrderPath); }
         catch { return true; }   // unreadable/missing now - let the write path surface the real error
         if (current == _state.Lo.RawText) return true;
-        OpLog.Add("loading_order.json changed on disk since the last scan — reloaded instead of overwriting.");
+        OpLog.Add("loading_order.json changed on disk since the last scan, so it was reloaded instead of overwritten.");
         Rescan();
         MessageBox.Show(this,
             "loading_order.json changed on disk since Ostrasort last scanned it (another tool or a background " +
-            "registration edited it). Ostrasort reloaded it so that change isn't lost — review the list and try again.",
+            "registration edited it). Ostrasort reloaded it so that change isn't lost. Review the list and try again.",
             "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
         return false;
     }
@@ -1198,36 +1201,55 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Tidy_Changed(object sender, RoutedEventArgs e)
+    // ------------------------------------------------------- app-wide menus ---
+
+    private static void OpenMenu(object sender)
     {
-        _settings.Tidy = ChkTidy.IsChecked == true;
-        if (_state is not null && !_manualDirty) Rescan();
+        if (sender is FrameworkElement { ContextMenu: { } menu } el)
+        {
+            menu.PlacementTarget = el;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
+        }
     }
 
+    private void AppMenu_Click(object sender, RoutedEventArgs e) => OpenMenu(sender);
+    private void Tools_Click(object sender, RoutedEventArgs e) => OpenMenu(sender);
+    private void ViewMenu_Click(object sender, RoutedEventArgs e) => OpenMenu(sender);
+
     /// <summary>
-    /// "Add new mods turned off": a mod found on disk but missing from the load
-    /// order is registered with the game's own disabled marker instead of loading.
-    /// Rescans, because it changes the suggestion and takes held mods out of the
-    /// collision analysis.
+    /// The set-once preferences. Theme applies at once; the two that change the
+    /// suggestion (group by category, add new mods turned off) rescan, unless a
+    /// manual arrangement is pending and a rescan would throw it away.
     /// </summary>
-    private void HoldNew_Changed(object sender, RoutedEventArgs e)
+    private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        _settings.HoldNew = ChkHoldNew.IsChecked == true;
-        if (_state is not null && !_manualDirty) Rescan();
+        var dlg = new SettingsDialog(_settings) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+        var rescan = dlg.Tidy != _settings.Tidy || dlg.HoldNew != _settings.HoldNew;
+        if (dlg.Theme != _settings.Theme)
+        {
+            _settings.Theme = dlg.Theme;
+            ThemeManager.Apply(dlg.Theme);
+            ReapplyTheme();
+            OpLog.Add($"Theme set to {dlg.Theme}.");
+        }
+        _settings.Tidy = dlg.Tidy;
+        _settings.HoldNew = dlg.HoldNew;
+        _settings.BackupSaves = dlg.BackupSaves;
+        SaveSettings();
+        if (rescan && _state is not null && !_manualDirty) Rescan();
+    }
+
+    private void RowDeselect_Click(object sender, RoutedEventArgs e) => ModsGrid.SelectedItem = null;
+
+    private void ShowHandled_Changed(object sender, RoutedEventArgs e)
+    {
+        if (ListResolved is null) return;
+        ListResolved.Visibility = ChkShowHandled.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // --------------------------------------------------------------- theming ---
-
-    private void Theme_Changed(object sender, SelectionChangedEventArgs e)
-    {
-        if (!IsLoaded) return;   // ignore the programmatic set during construction
-        var mode = CmbTheme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "system" };
-        _settings.Theme = mode;
-        ThemeManager.Apply(mode);
-        ReapplyTheme();
-        OpLog.Add($"Theme set to {mode}.");
-    }
-
     private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
     {
         // follow the OS live while the theme is set to "system"
@@ -1377,7 +1399,7 @@ public partial class MainWindow : Window
         var live = _env.LoadingOrderPath;
         if (!File.Exists(live))
         {
-            MessageBox.Show(this, "There is no loading_order.json to back up yet — launch the game once so it creates one.",
+            MessageBox.Show(this, "There is no loading_order.json to back up yet. Launch the game once so it creates one.",
                 "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -1387,7 +1409,7 @@ public partial class MainWindow : Window
             OpLog.Add("Backed up the current loading_order.json (manual).");
             if (_state is not null) UpdateActionBar(_state);   // refresh the Restore button's count/tooltip
             var count = (File.Exists(live + ".bak") ? 1 : 0) + Backups.List(live).Count;
-            RunStatus.Text = $"Backup created — {count} restore point(s) available.  ";
+            RunStatus.Text = $"Backup created. {count} restore point(s) available.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -1397,19 +1419,19 @@ public partial class MainWindow : Window
     private void RestoreBak_Click(object sender, RoutedEventArgs e)
     {
         var bak = _env.LoadingOrderPath + ".bak";
-        var menu = new ContextMenu { PlacementTarget = BtnRestoreBak };
+        var menu = new ContextMenu { PlacementTarget = BtnTools };
         if (File.Exists(bak))
         {
             var item = new MenuItem
             {
-                Header = $".bak — {File.GetLastWriteTime(bak):yyyy-MM-dd HH:mm:ss}   (last write; restore swaps, so it's reversible)",
+                Header = $".bak: {File.GetLastWriteTime(bak):yyyy-MM-dd HH:mm:ss}   (last write; restore swaps, so it's reversible)",
             };
             item.Click += (_, _) => RestoreSwapBak();
             menu.Items.Add(item);
         }
         foreach (var (path, written) in Backups.List(_env.LoadingOrderPath))
         {
-            var item = new MenuItem { Header = $"backup — {written:yyyy-MM-dd HH:mm:ss}" };
+            var item = new MenuItem { Header = $"backup: {written:yyyy-MM-dd HH:mm:ss}" };
             var p = path;
             item.Click += (_, _) => RestoreFromBackup(p);
             menu.Items.Add(item);
@@ -1584,16 +1606,16 @@ public partial class MainWindow : Window
         {
             CaptureOp($"install {Path.GetFileName(zipPath)}");
             var result = ModInstall.Execute(_env, plan, null, overwrite);
-            var registered = rivalLock ? new List<string>() : ModInstall.RegisterInstalled(_env, result, ChkHoldNew.IsChecked == true);
+            var registered = rivalLock ? new List<string>() : ModInstall.RegisterInstalled(_env, result, _settings.HoldNew);
 
             foreach (var c in result.Installed) OpLog.Add($"Installed '{c.Name}' from {Path.GetFileName(zipPath)} → {c.TargetDir}.");
             foreach (var r in registered) OpLog.Add($"Registered installed mod: {r}.");
-            foreach (var c in result.Skipped) OpLog.Add($"Skipped '{c.Name}' — already installed (overwrite not chosen).");
+            foreach (var c in result.Skipped) OpLog.Add($"Skipped '{c.Name}': already installed (overwrite not chosen).");
             Rescan();
 
             if (result.Installed.Count == 0)
             {
-                RunStatus.Text = "Nothing installed — every item was already present (tick Overwrite to replace).  ";
+                RunStatus.Text = "Nothing installed. Every item was already present (tick Overwrite to replace).  ";
                 RunStatus.Foreground = Warn;
                 return;
             }
@@ -1770,7 +1792,7 @@ public partial class MainWindow : Window
                 : $"Enabled '{name}' ({m.Raw} -> {m.RawToggledDisabled(false)}).");
             Rescan();
             RunStatus.Text = disable
-                ? $"'{name}' disabled — the entry stays, the game skips it.  "
+                ? $"'{name}' turned off. The entry stays and the game skips it.  "
                 : $"'{name}' enabled.  ";
             RunStatus.Foreground = Good;
             return true;
@@ -1787,7 +1809,7 @@ public partial class MainWindow : Window
     private void TechCols_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded) return;
-        _settings.TechColumns = ChkTechCols.IsChecked == true;
+        _settings.TechColumns = MenuTechCols.IsChecked;
         ApplyTechColumns();
     }
 
@@ -1823,7 +1845,7 @@ public partial class MainWindow : Window
             Rescan();
             RunStatus.Text = result.AlreadyRegistered
                 ? $"'{name}' was already registered.  "
-                : $"'{name}' registered — the game will now load it.  ";
+                : $"'{name}' registered. The game will now load it.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex)
@@ -1864,7 +1886,7 @@ public partial class MainWindow : Window
                 ? $"Park moves its folder to BepInEx\\{ModRemoval.ParkedPluginsFolder} (BepInEx never loads code from there; move it back to restore); "
                 : "Park renames its folder to *.disabled (rename back to restore); ") +
             "Delete removes the files " +
-            "permanently — Ostrasort's undo does NOT bring deleted files back. Its load-order entry is " +
+            "permanently, and Ostrasort's undo does NOT bring deleted files back. Its load-order entry is " +
             "dropped either way (a .bak and a rolling backup are kept).");
         if (choice == ParkOrDelete.Cancel) return;
         _busy = true;
@@ -1879,7 +1901,7 @@ public partial class MainWindow : Window
             Rescan();
             RunStatus.Text = result.Deleted
                 ? $"'{name}' deleted and unregistered.  "
-                : $"'{name}' parked at {result.Affected.FirstOrDefault()} and unregistered — move or rename it back to restore it.  ";
+                : $"'{name}' parked at {result.Affected.FirstOrDefault()} and unregistered. Move or rename it back to restore it.  ";
             RunStatus.Foreground = Good;
         }
         catch (Exception ex)
@@ -1901,7 +1923,7 @@ public partial class MainWindow : Window
         {
             Process.Start(new ProcessStartInfo($"steam://url/CommunityFilePage/{id}") { UseShellExecute = true });
             OpLog.Add($"Opened Steam page for {m.DisplayName ?? id} [{id}] to unsubscribe.");
-            RunStatus.Text = "Steam opened — press Unsubscribe on the item's page, then rescan here.  ";
+            RunStatus.Text = "Steam opened. Press Unsubscribe on the item's page, then rescan here.  ";
             RunStatus.Foreground = Dim;
         }
         catch (Exception ex)
@@ -1938,7 +1960,7 @@ public partial class MainWindow : Window
             : $"Cleared the FFU-dependent mark on '{name}'.");
         Rescan();
         RunStatus.Text = ffu
-            ? $"'{name}' marked FFU-dependent — it now sorts after Minor Fixes Plus.  "
+            ? $"'{name}' marked FFU-dependent. It now sorts after Minor Fixes Plus.  "
             : $"'{name}' no longer marked FFU-dependent.  ";
         RunStatus.Foreground = Good;
     }
@@ -2025,8 +2047,8 @@ public partial class MainWindow : Window
         TxtProfileHint.Text =
             _manualDirty ? "apply or reset your manual arrangement before saving a profile"
             : running ? "close the game to switch profiles"
-            : rivalLock ? "OstraAutoloader manages this install — switching is disabled"
-            : (ListProfiles?.Items.Count ?? 0) == 0 ? "no profiles yet — “Save current…” makes one from the live order"
+            : rivalLock ? "OstraAutoloader manages this install, so switching is disabled"
+            : (ListProfiles?.Items.Count ?? 0) == 0 ? "No profiles yet. Save current… makes one from the live order."
             : "";
     }
 
@@ -2180,7 +2202,8 @@ public partial class MainWindow : Window
     {
         if (BtnRowDetails is null) return;   // called before the template is built
         var row = ModsGrid.SelectedItem as ModRow;
-        TxtRowActionTarget.Text = row is null ? "Select a mod for actions"
+        RowActionBar.Visibility = row is null ? Visibility.Collapsed : Visibility.Visible;
+        TxtRowActionTarget.Text = row is null ? ""
             : row.M.Kind == EntryKind.Core ? "core (base game data)" : row.Name;
 
         var rivalLock = _state?.Analysis.Ffu is { AutoloaderActive: true };
@@ -2230,7 +2253,7 @@ public partial class MainWindow : Window
         try
         {
             var dlg = new ModDetailDialog(_env, _state.Analysis, row.M,
-                row.StatusGlyph, row.StatusBrush, CanToggleRow(row.M)) { Owner = this };
+                row.StatusGlyph.Length > 0 ? row.StatusGlyph : "✓", row.StatusBrush, CanToggleRow(row.M)) { Owner = this };
             if (dlg.ShowDialog() != true) return;
             action = dlg.Action;
         }
@@ -2281,8 +2304,6 @@ public partial class MainWindow : Window
             _settings.Left = Left; _settings.Top = Top;
             _settings.Width = Width; _settings.Height = Height;
         }
-        _settings.Tidy = ChkTidy.IsChecked == true;
-        _settings.HoldNew = ChkHoldNew.IsChecked == true;
         _settings.Tab = Tabs.SelectedIndex;
         _settings.Save();
     }
@@ -2425,7 +2446,7 @@ public partial class MainWindow : Window
                 "## Exact steps to reproduce (so I can see it happen too)\n\n1. \n2. \n3. \n\n" +
                 "**Screenshots**\nDrag any screenshots in here.\n\n" +
                 "---\n" +
-                "*Diagnostics (please keep these — they help me reproduce it):*\n" +
+                "*Diagnostics (please keep these, they help me reproduce it):*\n" +
                 $"- Ostrasort: v{Program.Version}\n" +
                 $"- OS: {DescribeOs()}\n" +
                 $"- Game version: {_env.InstalledVersion ?? "unknown"}\n" +
@@ -2442,13 +2463,13 @@ public partial class MainWindow : Window
             if (report is not null && IssueUrl(body).Length > MaxIssueUrl)
             {
                 Clipboard.SetText(report);
-                body = prompt + "\n*My full Ostrasort report is on the clipboard — pasted below:*\n\n";
+                body = prompt + "\n*My full Ostrasort report is on the clipboard, pasted below:*\n\n";
                 clipboardFallback = true;
             }
 
             Process.Start(new ProcessStartInfo(IssueUrl(body)) { UseShellExecute = true });
             OpLog.Add("Opened a pre-filled GitHub bug report in the browser" +
-                      (clipboardFallback ? " (report copied to clipboard — too long to auto-fill)." :
+                      (clipboardFallback ? " (report copied to clipboard, too long to auto-fill)." :
                        report is not null ? " (full report included)." : "."));
             if (clipboardFallback)
                 MessageBox.Show(this,

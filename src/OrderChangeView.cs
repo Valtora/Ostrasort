@@ -17,7 +17,7 @@ public static class OrderChangeView
         var lines = new List<ViewLine>();
         if (!a.OrderChanged)
         {
-            lines.Add(new ViewLine("The current load order satisfies every rule — nothing to change.", LineSev.Good, 0));
+            lines.Add(new ViewLine("The current load order satisfies every rule, so there is nothing to change.", LineSev.Good, 0));
             return lines;
         }
 

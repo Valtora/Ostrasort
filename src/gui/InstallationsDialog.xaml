@@ -1,7 +1,7 @@
 <Window x:Class="Ostrasort.Gui.InstallationsDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ostrasort — Installations" Height="460" Width="740" MinHeight="380" MinWidth="640"
+        Title="Installations" Height="460" Width="740" MinHeight="380" MinWidth="640"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" WindowStyle="ToolWindow">
     <Grid Margin="16">
         <Grid.RowDefinitions>

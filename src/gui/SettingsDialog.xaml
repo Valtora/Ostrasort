@@ -1,0 +1,42 @@
+<Window x:Class="Ostrasort.Gui.SettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" SizeToContent="Height" Width="520" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <Style x:Key="Explain" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Margin" Value="26,2,0,14"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+        </Style>
+    </Window.Resources>
+    <StackPanel Margin="20,16">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Theme" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <ComboBox x:Name="CmbTheme" Width="130">
+                <ComboBoxItem Content="System"/>
+                <ComboBoxItem Content="Light"/>
+                <ComboBoxItem Content="Dark"/>
+            </ComboBox>
+        </StackPanel>
+        <TextBlock Style="{StaticResource Explain}" Margin="0,2,0,14" Text="System follows the Windows light or dark setting."/>
+
+        <CheckBox x:Name="ChkTidy" Content="Group the suggested order by category"/>
+        <TextBlock Style="{StaticResource Explain}"
+                   Text="Lays out the suggested order as core, mod loader, code mods, additive data, overrides, then the patch. Cosmetic: the rules that decide what must load after what are applied either way."/>
+
+        <CheckBox x:Name="ChkHoldNew" Content="Add new mods turned off"/>
+        <TextBlock Style="{StaticResource Explain}"
+                   Text="A mod found on disk but missing from the load order is added with the game's own disabled marker, so it does not load until you tick it on. Never applied to the compatibility patch or the mod loader."/>
+
+        <CheckBox x:Name="ChkBackupSaves" Content="Back up saves automatically"/>
+        <TextBlock Style="{StaticResource Explain}"
+                   Text="Zips the Saves folder before a profile switch, a patch change, a culprit hunt, and the first scan after a game update. The newest 3 backups are kept."/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
+            <Button Content="OK" Padding="18,4" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
+            <Button Content="Cancel" Padding="18,4" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

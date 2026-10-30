@@ -26,7 +26,7 @@
             <TextBlock Text="Mode:" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,10,0"/>
             <RadioButton x:Name="RadReplace" GroupName="mode" Content="Replace" IsChecked="True"
                          VerticalAlignment="Center" Margin="0,0,16,0" Checked="Mode_Changed"
-                         ToolTip="The profile's saved order becomes the entire load order. Mods not in the profile are removed from the order — their files stay on disk."/>
+                         ToolTip="The profile's saved order becomes the entire load order. Mods not in the profile are removed from the order; their files stay on disk."/>
             <RadioButton x:Name="RadMerge" GroupName="mode" Content="Merge-append"
                          VerticalAlignment="Center" Checked="Mode_Changed"
                          ToolTip="Apply the profile's order, then keep any currently-registered mods it doesn't list, appended at the end."/>

@@ -94,18 +94,20 @@ public partial class MainWindow
         if (_hunt is null) return false;
         HealthBanner.Background = ThemeManager.BannerInfoBg;
         HealthBanner.BorderBrush = ThemeManager.BannerInfoBorder;
+        HealthBanner.Padding = new Thickness(12, 9, 12, 9);
+        TxtHealthDetail.Visibility = Visibility.Visible;
         TxtHealthTitle.Foreground = Warn;
         TxtHealthDetail.Foreground = Normal;
         if (_hunt.Finished)
         {
             TxtHealthTitle.Text = "The culprit hunt has finished.";
-            TxtHealthDetail.Text = "Press Find a problem mod… to see the result and put your mods back.";
+            TxtHealthDetail.Text = "Press Culprit hunt: result… at the bottom right to see it and put your mods back.";
         }
         else
         {
             TxtHealthTitle.Text = $"A culprit hunt is running (round {_hunt.Round}, {_hunt.Suspects.Count} suspects left).";
             TxtHealthDetail.Text = $"{_hunt.Off.Count} mod(s) are turned off for this round. Launch the game and check for the problem, " +
-                                   "then press Find a problem mod… to say what happened.";
+                                   "then press the Culprit hunt button at the bottom right to say what happened.";
         }
         BtnHealthFix.Visibility = Visibility.Collapsed;
         BtnHealthLog.Visibility = Visibility.Collapsed;

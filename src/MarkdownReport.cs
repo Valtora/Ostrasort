@@ -30,8 +30,8 @@ public static class MarkdownReport
             sb.AppendLine("## FFU");
             sb.AppendLine();
             sb.AppendLine(ffu.AutoloaderActive
-                ? "**OstraAutoloader is ACTIVE** — Ostrasort is read-only on this install."
-                : $"{ffu.Summary} detected (supported — FFU ordering rules applied).");
+                ? "**OstraAutoloader is ACTIVE**, so Ostrasort is read-only on this install."
+                : $"{ffu.Summary} detected (supported, FFU ordering rules applied).");
             sb.AppendLine();
             foreach (var e in ffu.Evidence) sb.AppendLine($"- {Md(e)}");
             foreach (var n in FfuAnalysis.Notices(a)) sb.AppendLine($"- {Md(n)}");
@@ -71,10 +71,10 @@ public static class MarkdownReport
 
         sb.AppendLine($"## Collisions ({a.Collisions.Count})");
         sb.AppendLine();
-        if (a.Collisions.Count == 0) sb.AppendLine("None — no two mods claim the same object.");
+        if (a.Collisions.Count == 0) sb.AppendLine("None. No two mods claim the same object.");
         foreach (var col in a.Collisions)
         {
-            sb.AppendLine($"- **{Md(col.Key)}** — claimed by {Md(string.Join(" → ", col.Claimants.Select(m => m.DisplayName ?? m.Name)))}"
+            sb.AppendLine($"- **{Md(col.Key)}**: claimed by {Md(string.Join(" → ", col.Claimants.Select(m => m.DisplayName ?? m.Name)))}"
                           + (col.FriendlyName is { Length: > 0 } fn ? $" _({Md(fn)})_" : ""));
             foreach (var p in col.Pairs)
                 sb.AppendLine("  - " + Md(TextReport.PairText(col, p)));
@@ -85,9 +85,9 @@ public static class MarkdownReport
         sb.AppendLine("## Patch");
         sb.AppendLine();
         sb.AppendLine(!s.Patch.Exists
-            ? (a.HasUnresolvedConflicts ? "None generated — the conflicts above are unmerged." : "None needed.")
+            ? (a.HasUnresolvedConflicts ? "None generated; the conflicts above are unmerged." : "None needed.")
             : s.Patch.Stale ? $"**STALE:** {Md(string.Join("; ", s.Patch.StaleReasons))}"
-            : s.Patch.Obsolete ? "Installed but no longer needed — remove it." +
+            : s.Patch.Obsolete ? "Installed but no longer needed, so remove it." +
               (s.Patch.UnneededKeys.Count > 0 ? $" (Resolved upstream: {Md(string.Join(", ", s.Patch.UnneededKeys))}.)" : "")
             : $"Fresh (v{s.Patch.ToolVersion ?? "?"}) covering {Md(string.Join(", ", s.Patch.CoveredKeys))}."
               + (s.Patch.ExcludedCount > 0 ? $" {s.Patch.ExcludedCount} item(s) excluded by you." : ""));
@@ -106,13 +106,13 @@ public static class MarkdownReport
         {
             sb.AppendLine("## Suggested order");
             sb.AppendLine();
-            sb.AppendLine("No changes — the current order satisfies every rule.");
+            sb.AppendLine("No changes. The current order satisfies every rule.");
         }
         else
         {
             sb.AppendLine($"## Suggested order ({a.Changes.Count} change(s))");
             sb.AppendLine();
-            foreach (var c in a.Changes) sb.AppendLine($"- `{c.Action}` {Md(c.Entry)} — {Md(c.Reason)}");
+            foreach (var c in a.Changes) sb.AppendLine($"- `{c.Action}` {Md(c.Entry)}: {Md(c.Reason)}");
             sb.AppendLine();
             sb.AppendLine("Resulting `aLoadOrder`:");
             sb.AppendLine();

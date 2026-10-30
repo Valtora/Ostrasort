@@ -118,7 +118,7 @@ public static class FieldDiff
             if (coreObj is null && ffuMerge)
             {
                 col.FfuMergedAtLoad = true;
-                col.FieldNotes.Add("no vanilla version to merge against — FFU merges the versions " +
+                col.FieldNotes.Add("no vanilla version to merge against, so FFU merges the versions " +
                                    "field-by-field at load (last loaded wins contested fields)");
                 continue;
             }
@@ -128,7 +128,7 @@ public static class FieldDiff
             if (plan is null)
             {
                 col.NothingLost = true;
-                col.FieldNotes.Add("the mods' versions are identical — nothing is lost");
+                col.FieldNotes.Add("the mods' versions are identical, so nothing is lost");
                 continue;
             }
 
@@ -152,11 +152,11 @@ public static class FieldDiff
                 col.FfuMergedAtLoad = !col.ObjectMergeable;
 
                 if (auto.Count > 0)
-                    col.FieldNotes.Add("merged by FFU at load — nothing lost: " + string.Join(", ",
+                    col.FieldNotes.Add("merged by FFU at load, nothing lost: " + string.Join(", ",
                         auto.Select(f => $"{f.Token} (from {f.Options[0].SourceLabel})")));
                 foreach (var f in conflicts)
                     col.FieldNotes.Add(AllNonFfu(f)
-                        ? $"conflict — you choose: {f.Token} (both non-FFU; the patch can enforce your pick)"
+                        ? $"conflict, you choose: {f.Token} (both non-FFU; the patch can enforce your pick)"
                         : $"conflict on {f.Token}: the last-loaded (FFU) mod's value wins that field at load");
                 continue;
             }
@@ -170,17 +170,17 @@ public static class FieldDiff
                 f.Contested || !f.Options.Any(o => o.SourceId == lastId));
 
             if (modAdded)
-                col.FieldNotes.Add("no vanilla version to merge against — Ostrasort can two-way merge " +
+                col.FieldNotes.Add("no vanilla version to merge against, so Ostrasort can two-way merge " +
                                    "the mods' additions (fields only one mod sets are kept; disagreements are yours to resolve)");
             if (auto.Count > 0)
                 col.FieldNotes.Add("auto-merge: " + string.Join(", ",
                     auto.Select(f => $"{f.Token} (from {f.Options[0].SourceLabel})")));
             if (conflicts.Count > 0)
-                col.FieldNotes.Add("conflict — you choose: " + string.Join(", ", conflicts.Select(f => f.Token)));
+                col.FieldNotes.Add("conflict, you choose: " + string.Join(", ", conflicts.Select(f => f.Token)));
             if (!col.ObjectMergeable && conflicts.Count == 0)
             {
                 col.NothingLost = true;
-                col.FieldNotes.Add("the last-loaded mod already includes every change — nothing lost");
+                col.FieldNotes.Add("the last-loaded mod already includes every change, so nothing is lost");
             }
         }
     }

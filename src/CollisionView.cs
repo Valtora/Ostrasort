@@ -43,7 +43,7 @@ public static class CollisionView
         : string.Join(", ", items.Take(n)) + $", +{items.Length - n} more";
 
     public static List<ViewLine> Build(Analysis a, bool cliHints = false) =>
-        Render(a.Collisions, "No two mods claim the same object — no conflicts.", cliHints);
+        Render(a.Collisions, "No two mods claim the same object, so there are no conflicts.", cliHints);
 
     /// <summary>
     /// A collision still needs the user's eyes: the load order / patch / FFU do
@@ -97,8 +97,8 @@ public static class CollisionView
         return new List<ViewLine>
         {
             new(handled > 0
-                ? $"No conflicts need action — {handled} detected, all handled (see the Handled automatically tab)."
-                : "No two mods claim the same object — no conflicts.", LineSev.Good, 0),
+                ? $"No conflicts need action. {handled} detected, all handled automatically."
+                : "No two mods claim the same object, so there are no conflicts.", LineSev.Good, 0),
         };
     }
 
@@ -110,8 +110,8 @@ public static class CollisionView
     public static List<ViewLine> BuildResolved(Analysis a, bool cliHints = false) =>
         Render(a.Collisions.Where(c => !NeedsAttention(c)).ToList(),
                a.Collisions.Count == 0
-                   ? "No two mods claim the same object — no conflicts."
-                   : "Nothing handled automatically — every conflict needs action (see the Conflicts tab).", cliHints);
+                   ? "No two mods claim the same object, so there are no conflicts."
+                   : "Nothing is handled automatically; every conflict needs action.", cliHints);
 
     private static List<ViewLine> Render(IReadOnlyList<Collision> collisions, string emptyMessage, bool cliHints = false)
     {
@@ -167,40 +167,40 @@ public static class CollisionView
             if (fixableByPatch)
             {
                 Add($"Both edit {what}. The game would keep only the last-loaded version and drop", LineSev.Bad, 1);
-                Add("the other mod's changes — but Ostrasort can merge them so nothing is lost.", LineSev.Bad, 1);
+                Add("the other mod's changes, but Ostrasort can merge them so nothing is lost.", LineSev.Bad, 1);
                 Add(cliHints
-                    ? "→ Fixable — run with --patch to merge them."
-                    : "→ Fixable — press “Resolve conflicts & generate patch” (or “Fix automatically” at the top).", LineSev.Warn, 1);
+                    ? "→ Fixable: run with --patch to merge them."
+                    : "→ Fixable: press “Resolve conflicts & generate patch” (or “Fix automatically” at the top).", LineSev.Warn, 1);
             }
             else if (anyWrongOrder)
             {
                 Add($"Both stock {what}, and the current load order is dropping items.", LineSev.Bad, 1);
                 Add(cliHints
-                    ? "→ Fixable — run with --apply to reorder them."
-                    : "→ Fixable — press “Fix automatically” at the top to reorder them.", LineSev.Warn, 1);
+                    ? "→ Fixable: run with --apply to reorder them."
+                    : "→ Fixable: press “Fix automatically” at the top to reorder them.", LineSev.Warn, 1);
             }
             else if (anyResolved)
             {
-                Add($"Both edit {what} — merged by the Ostrasort Patch, nothing lost.", LineSev.Good, 1);
+                Add($"Both edit {what}. Merged by the Ostrasort Patch, nothing lost.", LineSev.Good, 1);
             }
             else if (anyFfuMerged)
             {
-                Add($"Both edit {what} — FFU merges them field-by-field at load, nothing lost", LineSev.Good, 1);
+                Add($"Both edit {what}. FFU merges them field by field at load, nothing lost", LineSev.Good, 1);
                 Add("(a field changed by several mods goes to the last-loaded one; see the detail below).", LineSev.Good, 1);
             }
             else if (anyAdditive)
             {
-                Add($"Both add to {what} — the game merges these entry-by-entry at load, nothing lost", LineSev.Good, 1);
+                Add($"Both add to {what}. The game merges these entry by entry at load, nothing lost", LineSev.Good, 1);
                 Add("(only an entry defined by both mods goes to the last-loaded one; see the detail below).", LineSev.Good, 1);
             }
             else if (anyOrderResolved)
             {
-                Add($"Both edit {what}, and a final-say mod (new game / start) loads last on purpose —", LineSev.Good, 1);
+                Add($"Both edit {what}, and a final-say mod (new game / start) loads last on purpose:", LineSev.Good, 1);
                 Add("its version wins by design, so the other mod's is intentionally replaced, not merged.", LineSev.Good, 1);
             }
             else if (anyNothingLost)
             {
-                Add($"Both edit {what} — the versions agree (identical, or the last-loaded includes", LineSev.Good, 1);
+                Add($"Both edit {what}. The versions agree (identical, or the last-loaded includes", LineSev.Good, 1);
                 Add("every change), nothing lost (see the detail below).", LineSev.Good, 1);
             }
             else if (anyDeadReplace)
@@ -210,7 +210,7 @@ public static class CollisionView
             }
             else
             {
-                Add($"Both edit {what} — the load order handles it, nothing lost.", LineSev.Good, 1);
+                Add($"Both edit {what}. The load order handles it, nothing lost.", LineSev.Good, 1);
             }
 
             foreach (var c in cols)
@@ -230,14 +230,14 @@ public static class CollisionView
                     : c.ResolvedByOrder ? $"{Short(c.Claimants[^1])} loads last (final say) - its version wins by design"
                     : p is null ? "claimed by multiple mods"
                     : p.Rel == Relation.NonLoot
-                        ? (c.ObjectMergeable ? "mergeable — see the field notes below"
-                           : c.NothingLost ? "nothing lost — see the field notes below"
+                        ? (c.ObjectMergeable ? "mergeable (see the field notes below)"
+                           : c.NothingLost ? "nothing lost (see the field notes below)"
                            : $"only {Short(p.Later)}'s version applies")
                         : p.Rel switch
                         {
                             Relation.Partial => $"{Short(p.Later)} would drop {p.LostFromEarlier.Length} of {Short(p.Earlier)}'s items ({Sample(p.LostFromEarlier)})",
                             Relation.SubsetViolation => $"{Short(p.Later)} drops {p.LostFromEarlier.Length} item(s) {Short(p.Earlier)} stocks",
-                            Relation.SupersetOk => $"{Short(p.Later)} adds {p.AddedByLater.Length} item(s) — fine",
+                            Relation.SupersetOk => $"{Short(p.Later)} adds {p.AddedByLater.Length} item(s), which is fine",
                             Relation.Equal => "same items, different quantities",
                             _ => $"only {Short(p.Later)}'s version applies",
                         };

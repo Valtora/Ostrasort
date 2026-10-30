@@ -96,7 +96,7 @@ it owns, that collision is handled by load order: its version wins by design and
 the other mod's is intentionally replaced. Ostrasort does **not** fold such a pool
 into the compatibility patch, because a per-item union would re-add exactly the
 entries the author removed (the vanilla ships a deterministic start is meant to
-exclude). The collision shows on the **Handled automatically** tab, not as a
+exclude). The collision is listed under **Show handled automatically** on the Conflicts tab, not as a
 conflict. The exception is two final-say mods curating the same object: load order
 then picks one curation and drops the other, so it is raised as a conflict for you
 to choose which mod to keep. It is neither reordered by item count nor merged.
@@ -160,7 +160,7 @@ claimant is still caught even when each adjacent pair looks clean.
 Not every collision is a problem. Outcomes that lose nothing (identical item
 sets, identical overrides, a last-loaded version that already includes every
 change, a correct-order superset, or an object type the game or FFU merges
-field-by-field at load) move to the **Handled automatically** tab, alongside
+field-by-field at load) are listed under **Show handled automatically**, alongside
 anything the generated patch merges. The **Conflicts** tab (and its badge, the
 "needs attention" total, and the headless exit code, all driven by the same
 predicate) shows only collisions where something is actually lost or is fixable
@@ -483,7 +483,7 @@ patch straight away.
   reloads instead of overwriting that change with a stale view.
 - **Rolling backups.** The `.bak` only survives until the next write, so every
   overwrite also snapshots the previous text into `%APPDATA%\Ostrasort\backups`
-  (the newest **3** are kept). The GUI's **Restore backup…** button lists all of
+  (the newest **3** are kept). The GUI's **Restore load order backup…** (Tools menu) lists all of
   them.
 - **Workshop paths are written in the game's own on-disk case.** The Steam
   registry hands out a lowercase drive (`c:\program files…`), but Ostranauts

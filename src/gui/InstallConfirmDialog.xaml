@@ -1,7 +1,7 @@
 <Window x:Class="Ostrasort.Gui.InstallConfirmDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ostrasort — Install from file" SizeToContent="WidthAndHeight" ResizeMode="NoResize"
+        Title="Install from file" SizeToContent="WidthAndHeight" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" WindowStyle="ToolWindow">
     <StackPanel Margin="18,14" MaxWidth="480">
         <TextBlock x:Name="TxtHeader" FontWeight="SemiBold" FontSize="13.5" TextWrapping="Wrap" Margin="0,0,0,8"/>

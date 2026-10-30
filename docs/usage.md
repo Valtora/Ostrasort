@@ -21,8 +21,8 @@ checks GitHub for a newer release **each time it starts**, queried live, so a
 release published after your build is picked up on the next launch. When one
 exists Ostrasort downloads it in the background and reveals a **Restart to update
 to vX.Y.Z** button at the top right. You can also run the check yourself any time
-with the **Check for updates** link (top right), which reports the result either
-way. The check reports nothing when you are already up to date, offline, or
+with **Check for updates** in the `⋯` menu (top right), which reports the result
+either way. The check reports nothing when you are already up to date, offline, or
 rate-limited, though it always notes the outcome in the Logs tab.
 
 **Applying an update is one click.** Click the **Restart to update** button (or
@@ -56,7 +56,7 @@ Ostrasort, uninstall it from **Apps & features** (or delete that folder).
 2. **Double-click `Ostrasort.exe`.** It scans your install and lists every mod
    in load order.
 3. **Read the health card** at the top. Green means "Your mods are set up
-   correctly. Nothing to do." Amber lists the issues in plain language.
+   correctly", on one slim line. Amber lists the issues in plain language.
 4. **Fix automatically** (the button on the card) applies the suggested load
    order and creates or refreshes the compatibility patch in one go. You are
    only asked when a genuine decision is needed, and every write keeps a backup
@@ -69,84 +69,95 @@ Ostrasort, uninstall it from **Apps & features** (or delete that folder).
    raises them again the moment the game reports something different, including
    the same problem happening again on a later launch.
 6. **Undo anything** with Ctrl+Z.
-7. **Launch the game** (there is a button) and check the in-game MODS screen.
+7. **Launch game** (bottom right) and check the in-game MODS screen.
 
-If something ever looks wrong, the **More…** menu has **Restore backup…** (the
-previous `loading_order.json` plus a rolling history of the last **3** writes,
-kept in `%APPDATA%\Ostrasort\backups`), **Make backup now** (a checkpoint on
-demand), and **Remove compatibility patch…** to take the generated patch mod out
-entirely.
+If something ever looks wrong, the **Tools** menu (bottom right) has **Restore
+load order backup…** (the previous `loading_order.json` plus a rolling history of
+the last **3** writes, kept in `%APPDATA%\Ostrasort\backups`) and **Back up load
+order now** (a checkpoint on demand). **Remove patch** on the **Patch** tab takes
+the generated patch mod out entirely.
 
 ## The main window
 
-The **health card** at the top answers "am I OK". It is green when everything is
-fine, amber with a plain-language issue list otherwise, and red when the game
-itself reported problems from a mod on its last launch. Its buttons, **Fix
-automatically**, **What went wrong?**, and **Show me**, are the fastest route
-through anything it reports.
+The window has four parts, top to bottom.
 
-The table lists every mod in load order with a **status glyph** (✓ fine,
-! needs a look, ✕ problems, ⏸ disabled), an **On** checkbox that toggles the
-game's own enable and disable marker, its name, its own **Version**
-(`strModVersion`), a **Last Updated** date, and any problems in plain words. The
-diagnostic columns (source, class, data-object counts, Workshop ID) are hidden
-behind the **Technical columns** toggle. **Double-click any row** for the mod's
-detail panel. It shows everything about that mod, the status, file problems,
-problems in its data for its author (names nothing defines, misnamed fields)
-with a report you can copy and send, the
-game-log lines attributed to it, and every conflict it takes part in, with the
-actions right there. Below the table sits a row of tabs.
+- **The header** picks the game install and shows its version. **Auto-detect**
+  finds your Steam install and its mods folder (honouring the game's own
+  `strPathMods`). **Manage…** saves named installs, each with its own game
+  folder and mods folder, which can live on different disks; each keeps its own
+  load order, profiles and backups. The **(i)** button shows the folders (with
+  links to open them), how the install was found, and the base game's data.
+  On the right are **Undo** and **Redo** (Ctrl+Z, Ctrl+Y) and the **⋯** menu:
+  **Settings…**, **Check for updates** and **Report a bug…**.
+- **The health card** answers "am I OK". It is a slim green line when everything
+  is fine, amber with a plain-language issue list otherwise, and red when the
+  game itself reported problems from a mod on its last launch. Its buttons, **Fix
+  automatically**, **What went wrong?** and **Show me**, are the fastest route
+  through anything it reports.
+- **The mod table** on the left, and **the tabs** on the right.
+- **The bottom bar**: messages on the left (blank when there is nothing to say),
+  the **Tools** menu (**Find a problem mod…**, load-order backups, **Copy report**,
+  **Save report…**, **Rescan now**), and **Launch game**.
+
+The table lists every mod in load order: a **status mark** that appears only when
+a mod needs a look (! needs a look, ✕ problems, ⏸ turned off), an **On** checkbox
+that toggles the game's own enable and disable marker, its name, its own
+**Version** (`strModVersion`) and a **Last Updated** date. Above it are the
+filter box, **Install from file…**, and a gear button for the **Technical
+columns** (source, class, data-object counts, Workshop ID). **Drag rows** to
+reorder the load order by hand (not while filtering). Selecting a mod shows its
+actions in a bar below the table: **Details**, **Description**, **Folder**,
+**Workshop** and **Remove**. Right-click gives the full list. **Double-click any
+row** for the mod's detail panel. It shows everything about that mod: the
+status, file problems, problems in its data for its author (names nothing
+defines, misnamed fields) with a report you can copy and send, the game-log
+lines attributed to it, and every conflict it takes part in, with the actions
+right there.
+
+The tabs, most pressing first. A tab that needs action shows in bold with a
+count, and the window opens on it.
 
 - **Conflicts** shows who claims the same objects and whether the order handles
-  it, including field-level analysis of non-shop overrides. It shows **only
+  it, including field-level analysis of non-shop overrides. It lists **only
   conflicts that need action**, so it reads clean when there is nothing to do.
-  Conflicts the load order, FFU, or the game already handles without loss (for
-  example two shops stocking the same items with different quantities) move to
-  the **Handled automatically** tab instead of cluttering this one.
-  **Double-click any conflict** (the `•` line) to open a read-only, side-by-side
-  view of the base game's version and each mod's version, with changed fields
-  highlighted and disagreements flagged in red. **Copy JSON** puts every version
-  on the clipboard.
-- **Handled automatically** lists every conflict that needs no action, whether
-  merged by the generated patch, merged at load by FFU or the game, or handled
-  without loss by the load order. It stays on its own tab so the Conflicts tab
-  keeps its focus on real problems.
-- **Load order** shows the current order and the suggested order side by side.
-- **Compatibility patch** shows the state of the generated conflict patch, with
-  **Resolve conflicts & generate patch**, **Rebuild from scratch** and **Remove
-  patch** buttons.
+  **Show N handled automatically** adds the ones the load order, FFU, the game
+  or the generated patch already handle without loss (for example two shops
+  stocking the same items with different quantities). **Double-click any
+  conflict** (the `•` line) to open a read-only, side-by-side view of the base
+  game's version and each mod's version, with changed fields highlighted and
+  disagreements flagged in red. **Copy JSON** puts every version on the
+  clipboard.
 - **Warnings** lists dead entries, unregistered mods, version lag, broken JSON,
   image overrides, BepInEx problems, mods whose copies of game objects undo the
   last game update's changes (an updated version of the mod usually fixes
-  this), code mods broken by a game update (their
-  plugin uses game code the installed version no longer has, which also gets
-  its own line on the health card and a section in the mod's detail panel, so
-  you can update the mod or turn it off before the game crashes on it), and any
-  load errors the **game itself**
-  logged at the last launch, attributed to the mod responsible where Ostrasort
-  can pin them down (see the Logs tab for the rest).
-- **Logs** keeps a record of everything Ostrasort has done (applies, patches,
-  restores, undo and redo), and a viewer for the game's own logs (Player.log and
-  the BepInEx log) so you can see what happened after a launch. Copy or open any
-  of them.
+  this), code mods broken by a game update (their plugin uses game code the
+  installed version no longer has, which also gets its own line on the health
+  card and a section in the mod's detail panel, so you can update the mod or
+  turn it off before the game crashes on it), and any load errors the **game
+  itself** logged at the last launch, attributed to the mod responsible where
+  Ostrasort can pin them down (see the Logs tab for the rest).
+- **Load order** shows the current order and the suggested order side by side.
+- **Patch** shows the state of the generated compatibility patch, with
+  **Resolve conflicts & generate patch**, **Rebuild from scratch** and **Remove
+  patch** buttons.
 - **Profiles** saves named load orders and switches between them (see
   [Profiles](#profiles) below).
 - **Saves** backs up your saves and shows which mods each save was made with
   (see [Saves](#saves) below).
+- **Logs** keeps a record of everything Ostrasort has done (applies, patches,
+  restores, undo and redo), and a viewer for the game's own logs (Player.log and
+  the BepInEx log) so you can see what happened after a launch. Copy or open any
+  of them.
 
-Above the table, the **Installation** picker chooses which game install
-Ostrasort manages. **Auto-detect** finds your Steam install and its mods folder
-(honouring the game's own `strPathMods`). **Manage…** saves named installs, each
-with its own **game folder** and **mods folder**, which can live on different
-disks, and switches between them in one click. Each install keeps its own load
-order, profiles and backups.
-
+**Settings…** (in the ⋯ menu) holds the preferences you set once: the theme,
+grouping the suggested order by category, adding new mods turned off, and
+backing up saves automatically.
 Nothing is written until you press a button, every `loading_order.json` write
 keeps a `.bak`, and all writes are disabled while the game is running.
 
 ### Installing a mod from a file
 
-**Install from file…** (toolbar), or a **drag of a `.zip` onto the window**,
+**Install from file…** (above the mod table), or a **drag of a `.zip` onto the window**,
 installs a mod that did not come through the Steam Workshop (a FFU build, a
 GitHub release, a Nexus or Discord download). Ostrasort looks inside the archive,
 extracts each mod it finds to the right place, and adds it to the load order for
@@ -195,9 +206,9 @@ you, so there is no unzipping into `Ostranauts_Data\Mods\` by hand.
 
 By default a mod that turns up on disk but is missing from the load order is
 added ready to load. If you subscribe to mods faster than you play them, tick
-**Add new mods turned off** above the table. Every mod added from then on carries
+**Add new mods turned off** in **Settings…**. Every mod added from then on carries
 the game's own disabled marker, so it is listed on the in-game MODS screen as off
-and does not load until you tick its **Active** box. Its place in the order is
+and does not load until you tick its **On** box. Its place in the order is
 still worked out, and a mod that is turned off raises no conflicts, so you can
 turn one on, rescan, and see exactly what it collides with before adding the
 next.
@@ -236,15 +247,15 @@ and from a terminal it is `--hold-new`.
   the Steam client. Subscriptions belong to Steam, so unsubscribing is its
   one-click button there. Steam then removes the files and Ostrasort's next
   rescan suggests pruning the dead entry.
-- **Group suggested order by category** toggles a cosmetic grouping of the
-  suggested order (core, then infrastructure, then code, then data). It does not
-  regroup the table itself.
-- **Theme** (toolbar) switches between **Light**, **Dark**, and **System**
+- **Group the suggested order by category** (in Settings) is a cosmetic grouping
+  of the suggested order (core, then infrastructure, then code, then data). It
+  does not regroup the table itself.
+- **Theme** (in Settings) switches between **Light**, **Dark**, and **System**
   (follow the Windows theme, the default). The choice is remembered, and System
   mode tracks the OS live.
 - **Launch game** starts Ostranauts through Steam. The table **rescans itself**
   when you switch back to Ostrasort (for example after closing the game).
-- **Copy report** and **Save report** export the full analysis as plain text for
+- **Copy report** and **Save report…** (Tools menu) export the full analysis as plain text for
   sharing when helping someone debug their setup.
 - The window **remembers its size, position, and selected tab**, and when a newer
   release is on GitHub it is downloaded in the background and a **Restart to
@@ -303,7 +314,7 @@ list; Ostrasort works out the patch again after you switch.
 ## Saves
 
 The **Saves** tab keeps zipped copies of the game's whole Saves folder. With
-**Back up automatically** on (the default), Ostrasort takes one before a
+**Back up saves automatically** on in Settings (the default), Ostrasort takes one before a
 profile switch, before the compatibility patch changes, before a culprit hunt,
 and on the first scan after a game update. A backup is skipped when no save
 changed since the last one, and the newest **3** are kept in
@@ -382,7 +393,7 @@ review the next time the resolver opens.
 - **Rebuild patch from scratch** (Compatibility patch tab) discards every stored
   decision (source picks and exclusions) and resolves everything again from a
   blank slate.
-- **Remove patch** (same tab, or the More… menu) removes the generated mod and
+- **Remove patch** (same tab) removes the generated mod and
   its load-order entry. You can also **right-click the patch in the mod table**,
   then **Remove generated patch**, the same way you remove any other mod. Every
   route does the same guarded delete.
@@ -495,7 +506,7 @@ Ostrasort.exe --profile-load <name>   switch to a saved profile: Replace by defa
 Ostrasort.exe --tidy      opt-in cosmetic grouping in the suggested order
 Ostrasort.exe --hold-new  add mods missing from the load order turned off (the game's own
                           disabled marker) so they do not load until you turn them on, the
-                          GUI's "Add new mods turned off" checkbox. Off by default, and
+                          GUI's "Add new mods turned off" setting. Off by default, and
                           never applied to the patch or the mod loader
 Ostrasort.exe --no-gui    never open a window: alone it acts like --report; with --patch,
                           contested items fall back to the later-loaded mod's entry,

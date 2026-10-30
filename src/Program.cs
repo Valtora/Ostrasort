@@ -278,6 +278,7 @@ public static class Program
                     "✓", System.Windows.Media.Brushes.Green, canToggle: true);
             _ = new Gui.LogIssuesDialog(smokeState.Analysis);
             _ = new Gui.ImportListDialog(smokeEnv, smokeState.Analysis, new System.Net.Http.HttpClient());
+            _ = new Gui.SettingsDialog(new Gui.GuiSettings());
             // every screen of the culprit hunt: the offer, a round, and the result
             _ = new Gui.CulpritHuntDialog(null, smokeState.Analysis);
             _ = new Gui.CulpritHuntDialog(new CulpritHunt { Round = 1, Suspects = { "a", "b" }, Off = { "b" } }, smokeState.Analysis);
