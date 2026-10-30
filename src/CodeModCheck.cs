@@ -43,7 +43,7 @@ public static class CodeModCheck
     public static List<CodeModIssue> CheckInstall(GameEnv env)
     {
         var game = GameAssemblyPath(env);
-        var plugins = Path.Combine(env.BepInExDir, "plugins");
+        var plugins = Path.Combine(env.CodeBepInExDir, "plugins");
         if (!File.Exists(game) || !Directory.Exists(plugins)) return new();
 
         List<string> dlls;

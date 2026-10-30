@@ -131,10 +131,10 @@ public static class Engine
     private static void CheckBepInEx(GameEnv env, Analysis a)
     {
         var modsWithPlugins = a.AllMods.Where(m => m.HasPlugins && !m.HasPatchers).ToList();
-        var loaderInstalled = Directory.Exists(Path.Combine(env.GameRoot, "BepInEx", "core"))
+        var loaderInstalled = Directory.Exists(Path.Combine(env.CodeBepInExDir, "core"))
                            || File.Exists(Path.Combine(env.GameRoot, "winhttp.dll"));
         var bridgePresent = a.AllMods.Any(m => m.HasPatchers)
-                         || Directory.Exists(Path.Combine(env.GameRoot, "BepInEx", "patchers"));
+                         || Directory.Exists(Path.Combine(env.CodeBepInExDir, "patchers"));
         if (modsWithPlugins.Count > 0 && !loaderInstalled)
             a.Warnings.Add($"{modsWithPlugins.Count} mod(s) ship BepInEx plugins but BepInEx is NOT installed in the game folder " +
                            "- none of their code will load (subscribe to the BepInEx Mod Loader and finish its setup)");
@@ -150,7 +150,7 @@ public static class Engine
                 if (!owners.TryGetValue(dll, out var set)) owners[dll] = set = new(StringComparer.OrdinalIgnoreCase);
                 set.Add(m.Name);
             }
-        var gamePlugins = Path.Combine(env.GameRoot, "BepInEx", "plugins");
+        var gamePlugins = Path.Combine(env.CodeBepInExDir, "plugins");
         if (Directory.Exists(gamePlugins))
             foreach (var f in Directory.EnumerateFiles(gamePlugins, "*.dll", SearchOption.AllDirectories))
             {
@@ -279,7 +279,7 @@ public static class Engine
         // FFU/Thunderstore data mods living under BepInEx\plugins (mod_info.json
         // + data\) load like any other mod but must be registered by absolute
         // path - the OstraAutoloader normally does that; without it, Ostrasort does.
-        var pluginsRoot = Path.Combine(env.BepInExDir, "plugins");
+        var pluginsRoot = Path.Combine(env.CodeBepInExDir, "plugins");
         if (Directory.Exists(pluginsRoot))
         {
             List<string> infoFiles;

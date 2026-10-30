@@ -16,6 +16,7 @@ public static class Report
         Line($"Ostrasort v{version} - Ostranauts load-order analyzer", ConsoleColor.Cyan);
         Line($"Game: {env.GameRoot}");
         Line($"      version {env.InstalledVersion ?? "unknown"}, found via {env.DiscoveredVia}");
+        if (env.Manager is { } mp) Line($"      code mods from the {mp.Label} ({mp.Root}), read only");
         Line($"Mods: {env.ModsDir}");
         Line($"Core: {scanner.CoreIndex.Count:N0} data objects across {scanner.CoreTypes} types" +
              (scanner.CoreProblemFiles > 0 ? $" ({scanner.CoreProblemFiles} file(s) with non-standard JSON skipped or lenient-parsed)" : ""));

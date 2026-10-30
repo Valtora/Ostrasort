@@ -25,11 +25,31 @@ public sealed class GameEnv
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         @"AppData\LocalLow\Blue Bottle Games\Ostranauts\Player.log");
 
-    /// <summary>The BepInEx folder in the game install (mod loader, plugins, patchers, monomod).</summary>
+    /// <summary>The BepInEx folder in the game install (mod loader, plugins, patchers, monomod). Every write goes here.</summary>
     public string BepInExDir => Path.Combine(GameRoot, "BepInEx");
 
-    /// <summary>BepInEx's log (code-mod loading), in the game folder.</summary>
-    public string BepInExLogPath => Path.Combine(BepInExDir, "LogOutput.log");
+    /// <summary>The r2modman or Gale profile that ran the game's last session, when there is one (see <see cref="ManagerProfiles"/>).</summary>
+    public ManagerProfile? Manager { get; init; }
+
+    /// <summary>
+    /// Where the code mods that actually load are read from: the manager
+    /// profile's BepInEx when one ran the game, else the game folder's.
+    /// Read-only: nothing is ever written into a profile.
+    /// </summary>
+    public string CodeBepInExDir => Manager?.BepInExDir ?? BepInExDir;
+
+    /// <summary>BepInEx's log (code-mod loading), wherever BepInEx last ran from.</summary>
+    public string BepInExLogPath => Path.Combine(CodeBepInExDir, "LogOutput.log");
+
+    /// <summary>True for a path inside the game's BepInEx folder or the active manager profile's.</summary>
+    public bool IsUnderBepInEx(string path) =>
+        IsUnder(path, BepInExDir) || (Manager is { } p && IsUnder(path, p.BepInExDir));
+
+    /// <summary>True for a path inside the active manager profile, which Ostrasort must not change.</summary>
+    public bool IsInManagerProfile(string path) => Manager is { } p && IsUnder(path, p.Root);
+
+    private static bool IsUnder(string path, string dir) =>
+        path.Replace('/', '\\').StartsWith(dir.Replace('/', '\\').TrimEnd('\\') + '\\', StringComparison.OrdinalIgnoreCase);
 
     public static GameEnv Locate(string? gameRootOverride, string? modsDirOverride = null)
     {
@@ -118,6 +138,7 @@ public sealed class GameEnv
             ModsDir = modsDir,
             WorkshopContentDir = workshop,
             InstalledVersion = ReadInstalledVersion(dataDir),
+            Manager = ManagerProfiles.Active(root, PlayerLogPath),
         };
     }
 

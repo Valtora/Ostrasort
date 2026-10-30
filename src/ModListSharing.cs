@@ -61,7 +61,7 @@ public static class ModListSharing
             if (path.Length > 2 && path[1] == ':')
             {
                 var folder = Path.GetFileName(path.TrimEnd('\\', '/'));
-                var underBep = path.Replace('/', '\\').StartsWith(env.BepInExDir.Replace('/', '\\') + "\\", StringComparison.OrdinalIgnoreCase);
+                var underBep = env.IsUnderBepInEx(path);
                 if (underBep) { mod.Folder = folder; mod.Plugins = true; }
                 else mod.WorkshopId = folder;
             }
@@ -157,7 +157,7 @@ public static class ModListSharing
         {
             if (mod.Plugins)
             {
-                var plugins = Path.Combine(env.BepInExDir, "plugins");
+                var plugins = Path.Combine(env.CodeBepInExDir, "plugins");
                 if (Directory.Exists(plugins))
                     foreach (var info in Directory.EnumerateFiles(plugins, "mod_info.json", SearchOption.AllDirectories))
                         if (string.Equals(Path.GetFileName(Path.GetDirectoryName(info)), folder, StringComparison.OrdinalIgnoreCase))

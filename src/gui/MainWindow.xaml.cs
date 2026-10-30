@@ -259,7 +259,8 @@ public partial class MainWindow : Window
     {
         var a = s.Analysis;
         RunGamePath.Text = _env.GameRoot + "  ";
-        RunFoundVia.Text = $"   (found via {_env.DiscoveredVia})";
+        RunFoundVia.Text = $"   (found via {_env.DiscoveredVia}" +
+                           (_env.Manager is { } mp ? $"; code mods from the {mp.Label}, which Ostrasort reads but never changes)" : ")");
         RunModsPath.Text = _env.ModsDir + "  ";
         TxtVersions.Text = _env.InstalledVersion ?? "unknown";
         TxtCoreInfo.Text = $"{s.Scanner.CoreIndex.Count:N0} objects across {s.Scanner.CoreTypes} types" +

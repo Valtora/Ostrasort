@@ -155,9 +155,7 @@ public sealed class ModEntry
         {
             // normalise separators on BOTH sides: an entry written with forward
             // slashes (another tool's style) must still classify as PluginDir
-            var normPath = path.Replace('/', '\\');
-            var normBep = env.BepInExDir.Replace('/', '\\');
-            var underBepInEx = normPath.StartsWith(normBep + '\\', StringComparison.OrdinalIgnoreCase);
+            var underBepInEx = env.IsUnderBepInEx(path);
             return new ModEntry
             {
                 Raw = raw,

@@ -114,6 +114,8 @@ public sealed class FfuContext
     public List<string> Evidence { get; } = new();
     /// <summary>Set by <see cref="FfuAnalysis.Classify"/>: at least one FFU-classified mod is present.</summary>
     public bool AnyFfuMods { get; set; }
+    /// <summary>The manager profile these files belong to, when the game ran from one. Ostrasort never changes them then.</summary>
+    public string? ManagedBy { get; init; }
 
     public string Summary =>
         AutoloaderActive ? "Robyn's OstraAutoloader"
@@ -129,7 +131,7 @@ public sealed class FfuContext
     /// </summary>
     public static FfuContext? Detect(GameEnv env)
     {
-        var bep = env.BepInExDir;
+        var bep = env.CodeBepInExDir;   // a manager profile's BepInEx when one ran the game
         if (!Directory.Exists(bep)) return null;
 
         var evidence = new List<string>();
@@ -187,6 +189,7 @@ public sealed class FfuContext
 
         var ctx = new FfuContext
         {
+            ManagedBy = env.Manager?.Label,
             AutoloaderActive = autoloader,
             FrameworkPresent = framework,
             MonoModPatchesPresent = monoModPatches,
@@ -519,6 +522,8 @@ public static class FfuAnalysis
     /// </summary>
     public static List<string> DisableAutoloader(FfuContext ctx, bool delete = false)
     {
+        if (ctx.ManagedBy is { } owner)
+            throw new InvalidOperationException($"OstraAutoloader is installed through the {owner}. Disable or remove it there.");
         var affected = new List<string>();
         foreach (var dll in ctx.AutoloaderDlls.Where(File.Exists))
         {
@@ -553,6 +558,8 @@ public static class FfuAnalysis
     /// </summary>
     public static FfuRemoval RemoveFfuCore(GameEnv env, FfuContext ctx, Analysis a, bool delete = false)
     {
+        if (ctx.ManagedBy is { } owner)
+            throw new InvalidOperationException($"FFU is installed through the {owner}. Remove it there.");
         var affected = new List<string>();
 
         // Minor Fixes Plus FIRST - wherever it lives (BepInEx\plugins or Mods\).

@@ -25,6 +25,9 @@ public static class ModRemoval
         if (m.IsPatch)
             throw new InvalidOperationException("the Ostrasort Patch has its own Remove action (--unpatch / the Remove patch button).");
 
+        if (m.Dir is not null && env.IsInManagerProfile(m.Dir))
+            throw new InvalidOperationException($"'{m.DisplayName ?? m.Name}' is installed through the {env.Manager!.Label}. Remove it there.");
+
         var affected = new List<string>();
         if (m.Dir is not null && Directory.Exists(m.Dir))
         {

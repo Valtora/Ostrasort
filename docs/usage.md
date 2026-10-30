@@ -404,6 +404,19 @@ the suggestion.
   reminder that they apply once and should then be removed from the list.
 - FFU data mods living under `BepInEx\plugins\` are registered by absolute path,
   exactly how the game expects them.
+
+**r2modman and Gale.** These managers start the game with BepInEx loaded from
+their own profile folder, so the code mods, FFU and the BepInEx log of that
+session live in the profile, not the game folder. When a profile provably ran
+the game's last session on this install (its BepInEx log was written in the
+same session as Player.log, and is newer than the game folder's own), Ostrasort
+reads code mods, FFU, the BepInEx log and data mods under `plugins` from that
+profile. The header names the profile. Ostrasort never changes a profile:
+removing one of its mods, disabling OstraAutoloader or removing FFU is refused
+with a pointer back to the manager. It looks in each manager's default folder
+(`%APPDATA%\r2modmanPlus-local\Ostranauts` and
+`%APPDATA%\com.kesomannen.gale\ostranauts`, or Gale's own data folder setting);
+a custom r2modman data folder is not followed.
 - Conflict analysis knows that with FFU installed the game **merges same-name
   objects field-by-field at load**, so disjoint edits are reported as "nothing
   lost" instead of false conflicts, and `--ADD--` and `--DEL--` array edits are
