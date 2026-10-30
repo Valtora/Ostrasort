@@ -158,6 +158,7 @@ public partial class MainWindow : Window
             _state = scanned ?? Analyze(_env);
             LogCorrelation.Annotate(_state.Analysis, [GameEnv.PlayerLogPath, _env.BepInExLogPath], _env.GameRoot);   // attribute last-launch log issues
             TrackSaves(_state);   // link saves to launches, warn about a newest save's missing mods
+            _hunt = CulpritHunt.Load(_env.LoadingOrderPath);
             RenderState(_state);
         }
         catch (Exception e)
@@ -281,6 +282,7 @@ public partial class MainWindow : Window
         UpdateActionBar(s);
         RenderLogs();
         RenderSaves();
+        BtnHunt.Content = _hunt is null ? "Find a problem mod…" : _hunt.Finished ? "Culprit hunt: result…" : $"Culprit hunt: round {_hunt.Round}…";
     }
 
     // -------------------------------------------------------- health summary ---
@@ -292,6 +294,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void RenderHealth(EngineState s)
     {
+        if (RenderHuntHealth()) return;
         var a = s.Analysis;
         var attention = a.Collisions.Count(CollisionView.NeedsAttention);
         // a dismissed set of log issues stays visible everywhere it is evidence

@@ -697,7 +697,7 @@ public sealed class Analysis
     /// The mod a dependency name refers to: by strName, then folder name, then
     /// FFU's own id rule (spaces become underscores).
     /// </summary>
-    private static ModEntry? ResolveDep(IReadOnlyList<ModEntry> mods, string strName) =>
+    internal static ModEntry? ResolveDep(IReadOnlyList<ModEntry> mods, string strName) =>
         mods.FirstOrDefault(m => string.Equals(m.DisplayName, strName, StringComparison.OrdinalIgnoreCase))
         ?? mods.FirstOrDefault(m => string.Equals(m.Name, strName, StringComparison.OrdinalIgnoreCase))
         ?? mods.FirstOrDefault(m => FfuAnalysis.FfuId(m.DisplayName) == FfuAnalysis.FfuId(strName)

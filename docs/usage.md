@@ -310,6 +310,31 @@ Warnings tab says so, because loading a save without the mods that placed its
 objects can drop or damage them. Saves from a game started straight from Steam
 are not linked.
 
+## Finding a problem mod
+
+When something breaks in game and the logs do not name a mod, **Find a problem
+mod…** (next to **Launch game**) runs a culprit hunt. Ostrasort turns off
+about half of your active mods with the game's own disable marker, you launch
+the game and check, and you answer **Problem still happens** or **Problem is
+gone**. The suspects halve each round, so 20 mods take about five launches
+instead of twenty.
+
+- Mods that depend on a turned-off mod go off with it, since FFU skips a mod
+  whose dependency is missing. The mod loader always stays on.
+- The compatibility patch stays off until the hunt ends, because it merges
+  mods the hunt turns off.
+- Your saves are backed up when the hunt starts. Playing with mods turned off
+  can still damage a save, so load one you can lose, or start a new game.
+- When the game's log named a suspect at the last launch, the round says so as
+  a hint, but only your answer decides.
+- The health card shows the hunt's progress, and it survives closing
+  Ostrasort while you play.
+- At the end you can put every mod back, or put them back with the culprit
+  kept off. Mods installed during the hunt are not kept in the restored order.
+
+The search assumes one culprit. If the problem only happens with two mods
+together, the answers rule out every mod, and the result says so.
+
 ## The conflict resolver
 
 When two mods change the same thing and the game would keep only one, **Resolve

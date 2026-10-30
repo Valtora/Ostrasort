@@ -570,6 +570,8 @@
                 <Button x:Name="BtnApplyManual" Content="Apply manual order" Padding="14,6" Margin="8,0,0,0"
                         Visibility="Collapsed" FontWeight="SemiBold" Click="Apply_Click"
                         ToolTip="Write the row arrangement you dragged into loading_order.json (a backup is kept)."/>
+                <Button x:Name="BtnHunt" Content="Find a problem mod…" Padding="14,6" Margin="8,0,0,0" Click="Hunt_Click"
+                        ToolTip="Something breaks in game and you do not know which mod? Turn halves of your mods off until one is left."/>
                 <Button x:Name="BtnLaunch" Content="Launch game" Padding="14,6" Margin="8,0,0,0" Click="Launch_Click"/>
             </StackPanel>
             <TextBlock VerticalAlignment="Center">
