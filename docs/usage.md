@@ -91,7 +91,9 @@ game's own enable and disable marker, its name, its own **Version**
 (`strModVersion`), a **Last Updated** date, and any problems in plain words. The
 diagnostic columns (source, class, data-object counts, Workshop ID) are hidden
 behind the **Technical columns** toggle. **Double-click any row** for the mod's
-detail panel. It shows everything about that mod, the status, file problems, the
+detail panel. It shows everything about that mod, the status, file problems,
+problems in its data for its author (names nothing defines, misnamed fields)
+with a report you can copy and send, the
 game-log lines attributed to it, and every conflict it takes part in, with the
 actions right there. Below the table sits a row of tabs.
 

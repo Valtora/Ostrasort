@@ -49,6 +49,7 @@ public static class Engine
         CheckImages(analysis);
         CheckBepInEx(env, analysis);
         CheckCodeMods(env, analysis);
+        ModDataCheck.Annotate(env, analysis, scanner);   // findings for mod authors, shown in mod details only
         CheckIgnorePatterns(scanner, analysis);
         WarnAutoloader(analysis);
         var patch = Patcher.Inspect(env, analysis);   // marks collisions the patch resolves

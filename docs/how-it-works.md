@@ -250,6 +250,25 @@ Surfaced in the same pass.
   only their hashes, so Ostrasort cannot carry a mod's edits forward onto the
   new version
 
+## Checking each mod's own data
+
+`src\ModDataCheck.cs` looks for mistakes only a mod's author can fix, and shows
+them in the mod's detail panel with a report to copy for the author. They never
+reach the health card or the Warnings tab, because the player cannot act on
+them.
+
+- **Names nothing defines.** Eight reference fields are checked, the ones that
+  resolve without exception in the base game's own data: `strItemDef`,
+  `strLoot`, `aTickers`, `jsonPI` and `strContainerCT` on condowners,
+  `strCOBase` and `strCondLoot` on cooverlays, and `aLights` on items. Fields
+  the game itself leaves dangling, such as some `aInteractions` and
+  `aStartingConds` entries, are not checked.
+- **Schema errors vanilla never has.** The game ships data that breaks its own
+  schemas in places, so each error is reduced to its shape (path without array
+  positions, rule, and property name) and compared with the shapes core data
+  produces, cached per core version. Only a shape vanilla never has is
+  reported. Clones (`strReference`) are skipped, and so are missing-field
+  errors for partial FFU edits.
 ## Community rules
 
 `rules/community-rules.json` in the repository carries knowledge no mod states

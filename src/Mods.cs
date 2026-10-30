@@ -99,6 +99,8 @@ public sealed class ModEntry
     public List<ModEntry> LoadAfter { get; } = new();
     /// <summary>What the community rules say about this mod, for its detail panel.</summary>
     public List<string> CommunityNotes { get; } = new();
+    /// <summary>Mistakes in its own data for its author: dangling names and schema errors vanilla never has (see <see cref="ModDataCheck"/>).</summary>
+    public List<string> DataProblems { get; } = new();
     /// <summary>Condition names this mod defines via conditions_simple (they land in the conditions namespace).</summary>
     public HashSet<string> SimpleConditionNames { get; } = new(StringComparer.Ordinal);
     /// <summary>Data files of this mod skipped by loading_order.json's aIgnorePatterns (rel path, pattern).</summary>

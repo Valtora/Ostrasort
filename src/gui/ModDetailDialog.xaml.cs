@@ -167,6 +167,23 @@ public partial class ModDetailDialog : Window
             Line("• " + string.Join(", ", m.RedundantOverrides.Take(10)) + (m.RedundantOverrides.Count > 10 ? ", ..." : ""), Dim);
         }
 
+        // ---- mistakes in its own data, for its author ----
+        if (m.DataProblems.Count > 0)
+        {
+            Section("Problems for the mod's author");
+            Line("Ostrasort found these in the mod's own data. Most make part of the mod do nothing rather than break the game, " +
+                 "and only its author can fix them.", Dim);
+            foreach (var p in m.DataProblems.Take(15)) Line("• " + p, Dim);
+            if (m.DataProblems.Count > 15) Line($"• and {m.DataProblems.Count - 15} more", Dim);
+            var mod = m;
+            LinkLine("Send them to the author:", "copy a report", () =>
+            {
+                Clipboard.SetText(ModDataCheck.AuthorReport(mod, _env.InstalledVersion));
+                MessageBox.Show(this, "The report is on the clipboard. Paste it into a comment on the mod's Workshop page or wherever its author takes reports.",
+                    "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Information);
+            });
+        }
+
         // ---- JSON problems ----
         if (m.JsonErrors.Count > 0)
         {

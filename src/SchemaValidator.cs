@@ -55,6 +55,14 @@ public sealed class SchemaValidator
         return errors;
     }
 
+    /// <summary>The same check on a parsed element, without the round trip through text.</summary>
+    public List<string> Validate(JsonElement obj, string type)
+    {
+        var errors = new List<string>();
+        if (ItemSchema(type) is { } itemSchema) ValidateNode(obj, itemSchema, "", errors);
+        return errors;
+    }
+
     /// <summary>The `items` subschema (schemas are array-of-objects); null if unavailable.</summary>
     private JsonElement? ItemSchema(string type)
     {
