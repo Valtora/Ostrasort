@@ -409,6 +409,10 @@
                         <Button x:Name="BtnProfileRename" Content="Rename…" Padding="10,4" Margin="8,0,0,0" Click="ProfileRename_Click"/>
                         <Button x:Name="BtnProfileDelete" Content="Delete" Padding="10,4" Margin="8,0,0,0" Click="ProfileDelete_Click"
                                 ToolTip="Delete the saved profile. This removes only the profile, never any mods."/>
+                        <Button x:Name="BtnProfileShare" Content="Share…" Padding="10,4" Margin="8,0,0,0" Click="ProfileShare_Click"
+                                ToolTip="Copy the selected profile as a share code, or save it as a file, for another player."/>
+                        <Button x:Name="BtnProfileImport" Content="Import…" Padding="10,4" Margin="8,0,0,0" Click="ProfileImport_Click"
+                                ToolTip="Make a profile from another player's share code or list file, or from a Steam Workshop collection."/>
                         <TextBlock x:Name="TxtProfileHint" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="14,0,0,0"/>
                     </StackPanel>
                     <ListBox x:Name="ListProfiles" Margin="8" SelectionChanged="Profiles_SelectionChanged"

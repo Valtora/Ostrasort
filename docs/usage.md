@@ -288,6 +288,17 @@ switch, Ostrasort re-checks whether the new setup needs a conflict patch and
 lights up the **Patch** tab if so. Profiles are stored per install under
 `%APPDATA%\Ostrasort\profiles`.
 
+**Share…** hands a profile to another player: **Copy share code** puts one
+line of text on the clipboard for a chat message, and **Save as file…** writes
+an `.ostrasort-list.json` file. **Import…** takes either of those, or a Steam
+Workshop collection link, and makes a profile from the mods this install has.
+Mods are matched by Workshop id, or by folder name for local mods, so the list
+works on any machine. Whatever is missing is listed with its Workshop page:
+Ostrasort cannot subscribe for you, so subscribe on Steam (a collection's page
+has **Subscribe to all**), let Steam download the mods, and press **Check**
+again. The compatibility patch and its decisions are not part of a shared
+list; Ostrasort works out the patch again after you switch.
+
 ## Saves
 
 The **Saves** tab keeps zipped copies of the game's whole Saves folder. With

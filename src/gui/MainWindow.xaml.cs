@@ -2036,6 +2036,8 @@ public partial class MainWindow : Window
         BtnProfileSwitch.IsEnabled = hasSel && !running && !rivalLock;
         BtnProfileRename.IsEnabled = hasSel;
         BtnProfileDelete.IsEnabled = hasSel;
+        BtnProfileShare.IsEnabled = hasSel && _state is not null;
+        BtnProfileImport.IsEnabled = _state is not null;
         TxtProfileHint.Text =
             _manualDirty ? "apply or reset your manual arrangement before saving a profile"
             : running ? "close the game to switch profiles"
@@ -2550,7 +2552,7 @@ public partial class MainWindow : Window
         Dictionary<string, WorkshopDetails> fetched;
         try
         {
-            fetched = await FetchWorkshopDetailsAsync(toFetch, cts.Token).ConfigureAwait(false);
+            fetched = await Workshop.FetchDetailsAsync(Http, toFetch, cts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -2590,46 +2592,5 @@ public partial class MainWindow : Window
             OpLog.Add($"Workshop: checked {fetched.Count} item(s) for updates" +
                       (updates > 0 ? $"; {updates} have a newer version published." : "."));
         });
-    }
-
-    /// <summary>Publish time (unix seconds) plus page description (BBCode) for one Workshop item.</summary>
-    private readonly record struct WorkshopDetails(long TimeUpdated, string? Description);
-
-    /// <summary>
-    /// Batched, key-less Steam Workshop lookup. Returns a map of published-file id
-    /// -> (time_updated, description) for every item Steam reported successfully;
-    /// ids Steam couldn't resolve are simply absent. The single call backs both the
-    /// "update available" flag and the Description column.
-    /// </summary>
-    private static async Task<Dictionary<string, WorkshopDetails>> FetchWorkshopDetailsAsync(
-        List<string> ids, System.Threading.CancellationToken token)
-    {
-        var form = new List<KeyValuePair<string, string>> { new("itemcount", ids.Count.ToString()) };
-        for (var i = 0; i < ids.Count; i++)
-            form.Add(new($"publishedfileids[{i}]", ids[i]));
-
-        using var content = new FormUrlEncodedContent(form);
-        using var resp = await Http.PostAsync(
-            "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/", content, token);
-        resp.EnsureSuccessStatusCode();
-        var json = await resp.Content.ReadAsStringAsync(token);
-
-        var result = new Dictionary<string, WorkshopDetails>();
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("response", out var respEl) ||
-            !respEl.TryGetProperty("publishedfiledetails", out var arr) ||
-            arr.ValueKind != JsonValueKind.Array)
-            return result;
-
-        foreach (var d in arr.EnumerateArray())
-        {
-            if (!d.TryGetProperty("publishedfileid", out var idEl) || idEl.GetString() is not { } id) continue;
-            if (d.TryGetProperty("result", out var rEl) && rEl.ValueKind == JsonValueKind.Number && rEl.GetInt32() != 1) continue;
-            var tu = d.TryGetProperty("time_updated", out var tuEl) && tuEl.TryGetInt64(out var t) && t > 0 ? t : 0;
-            var desc = d.TryGetProperty("description", out var deEl) && deEl.ValueKind == JsonValueKind.String
-                ? deEl.GetString() : null;
-            result[id] = new WorkshopDetails(tu, desc);
-        }
-        return result;
     }
 }
