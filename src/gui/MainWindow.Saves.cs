@@ -11,8 +11,12 @@ namespace Ostrasort.Gui;
 /// </summary>
 public partial class MainWindow
 {
-    private Task? _saveBackup;
+    private SaveBackupQueue? _saveBackupQueue;
     private readonly SaveModSets.Store _saveSets = SaveModSets.Load();
+
+    // every outcome comes back through this window's dispatcher (see UiThread)
+    private SaveBackupQueue BackupQueue =>
+        _saveBackupQueue ??= new SaveBackupQueue(reason => SaveBackups.Create(reason), ui => UiThread.Post(Dispatcher, ui));
 
     private sealed record SaveRow(string Name, string Detail, SaveModSets.SaveRecord? Record);
     private sealed record SaveBackupRow(string Name, string Detail, SaveBackups.Backup Backup);
@@ -46,21 +50,24 @@ public partial class MainWindow
     /// Backs up the Saves folder in the background. Backups queue behind each
     /// other, and Launch waits for the last one, so the game never starts
     /// while a backup is still reading the saves.
+    ///
+    /// The outcome is handled on this window's thread whatever thread the
+    /// backup finished on. The first-scan-after-a-game-update backup is queued
+    /// from the constructor, before Application.Run, where an await has no
+    /// context to return to and would resume on the pool (and the first UI
+    /// touch would throw and end the process).
     /// </summary>
-    private async void BackupSaves(string reason, bool manual = false)
+    private void BackupSaves(string reason, bool manual = false)
     {
         if (!manual && !_settings.BackupSaves) return;
-        var previous = _saveBackup;
-        var task = Task.Run(async () =>
+        BackupQueue.Enqueue(reason, (b, ex) =>
         {
-            if (previous is not null) try { await previous; } catch { /* reported by its own caller */ }
-            return SaveBackups.Create(reason);
-        });
-        _saveBackup = task;
-        try
-        {
-            var b = await task;
-            if (b is not null)
+            if (ex is not null)
+            {
+                OpLog.Add($"Save backup failed ({reason}): {ex.Message}");
+                if (manual) MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            else if (b is not null)
             {
                 OpLog.Add($"Backed up the Saves folder ({reason}): {Path.GetFileName(b.Path)}, {b.Bytes / (1024 * 1024)} MB.");
                 if (manual) { RunStatus.Text = "Saves backed up.  "; RunStatus.Foreground = Good; }
@@ -70,18 +77,13 @@ public partial class MainWindow
                 RunStatus.Text = "No save changed since the last backup, so there was nothing new to back up.  ";
                 RunStatus.Foreground = Dim;
             }
-        }
-        catch (Exception ex)
-        {
-            OpLog.Add($"Save backup failed ({reason}): {ex.Message}");
-            if (manual) MessageBox.Show(this, ex.Message, "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        RenderSaves();
+            RenderSaves();
+        });
     }
 
     private async Task WaitForSaveBackupAsync()
     {
-        if (_saveBackup is not { IsCompleted: false } pending) return;
+        if (BackupQueue.Last is not { IsCompleted: false } pending) return;
         RunStatus.Text = "Finishing the save backup first…  ";
         RunStatus.Foreground = Dim;
         try { await pending; } catch { /* already logged */ }
@@ -103,10 +105,16 @@ public partial class MainWindow
         }
         if (game is null) return;
         using (game) await game.WaitForExitAsync();
-        SaveModSets.CloseFinished(_saveSets, gameRunning: false, null, DateTime.UtcNow);
-        SaveModSets.Link(_saveSets, SaveBackups.DefaultSavesDir, DateTime.UtcNow);
-        SaveModSets.Save(_saveSets);
-        RenderSaves();
+        // started from Launch, so the awaits come back to the dispatcher today;
+        // posted anyway, so the store and the Saves tab are only ever touched on
+        // the window's thread, whoever starts this
+        UiThread.Post(Dispatcher, () =>
+        {
+            SaveModSets.CloseFinished(_saveSets, gameRunning: false, null, DateTime.UtcNow);
+            SaveModSets.Link(_saveSets, SaveBackups.DefaultSavesDir, DateTime.UtcNow);
+            SaveModSets.Save(_saveSets);
+            RenderSaves();
+        });
     }
 
     private void RecordLaunch()

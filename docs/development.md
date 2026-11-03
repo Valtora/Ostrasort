@@ -89,6 +89,7 @@ Operational gotchas:
 | `src\gui\VeloUpdate.cs` | Velopack update wrapper: check + background download + apply-and-restart (null for an unmanaged/dev copy) |
 | `src\gui\LegacyInstall.cs` | one-time cleanup of the pre-0.23 self-install (`%LOCALAPPDATA%\Programs\Ostrasort`) and its stale shortcuts |
 | `src\gui\SingleInstance.cs` | one instance per session (named mutex + activate signal event); a second launch focuses the first window |
+| `src\gui\SaveBackupQueue.cs` | save backups queued one at a time on the thread pool, each outcome handed back through the window's Dispatcher (`UiThread.Post`, never blocking), because the first scan runs in the constructor before `Application.Run`, where an await has no context to return to |
 
 `--smoke-gui` (hidden flag) constructs the WPF windows without showing them —
 used for headless verification. `--smoke-undo` exercises the snapshot
