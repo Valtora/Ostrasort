@@ -9,8 +9,10 @@ shortcuts, and opens the window. An installed copy keeps itself up to date (see
 below).
 
 Ostrasort finds your Ostranauts install by itself through the Steam registry and
-`libraryfolders.vdf`, whatever drive it is on. (For an unusual install, point it
-manually with `--game <path>`.)
+`libraryfolders.vdf`, whatever drive it is on. It only counts a folder that holds
+the game itself and prefers the library Steam records the game in, so a leftover
+Ostranauts folder from an old install is never picked. (For an unusual install,
+point it manually with `--game <path>`.)
 
 On first run Windows SmartScreen may warn because the installer is not
 code-signed. Choose **More info**, then **Run anyway**, or unblock it in the
@@ -60,7 +62,10 @@ Ostrasort, uninstall it from **Apps & features** (or delete that folder).
 4. **Fix automatically** (the button on the card) applies the suggested load
    order and creates or refreshes the compatibility patch in one go. You are
    only asked when a genuine decision is needed, and every write keeps a backup
-   (`loading_order.json.bak`).
+   (`loading_order.json.bak`). It is turned off, along with the patch buttons,
+   while the game folder Ostrasort opened is not a complete install. The card
+   and the first warning say so, and hovering the button says why. Pick the
+   folder the game runs from with **Manage…** and it comes back.
 5. **What went wrong?** appears on the card when the game itself reported
    problems from a mod on its last launch. It names the mod and offers the
    obvious next steps. Once you have dealt with them, **dismiss** next to the
@@ -83,7 +88,9 @@ The window has four parts, top to bottom.
 
 - **The header** picks the game install and shows its version. **Auto-detect**
   finds your Steam install and its mods folder (honouring the game's own
-  `strPathMods`). **Manage…** saves named installs, each with its own game
+  `strPathMods`). If `strPathMods` still names an old install's Mods folder, or
+  the game folder is not a complete install, the health card says so first and the
+  Warnings tab explains the fix. **Manage…** saves named installs, each with its own game
   folder and mods folder, which can live on different disks; each keeps its own
   load order, profiles and backups. The **(i)** button shows the folders (with
   links to open them), how the install was found, and the base game's data.
@@ -479,6 +486,8 @@ Ostrasort.exe --json      like --headless but prints ONE machine-readable JSON d
 Ostrasort.exe --apply     write the suggested load order (loading_order.json.bak kept)
 Ostrasort.exe --patch     generate/refresh the patch; contested items open the
                           resolver window unless headless
+                          (--apply and --patch refuse, exit 1, on a game folder that is
+                          not a complete install; reports and --unpatch still run)
 Ostrasort.exe --fresh     with --patch: discard all stored decisions and rebuild
 Ostrasort.exe --unpatch   remove the generated patch mod
 Ostrasort.exe --install-zip <p>

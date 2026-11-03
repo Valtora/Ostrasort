@@ -1,6 +1,5 @@
 using System.IO;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace Ostrasort;
 
@@ -77,16 +76,13 @@ public static class ManagerProfiles
         return app;
     }
 
-    private static readonly Regex MonoPath = new(@"^Mono path\[0\] = '(.+?)[/\\]Ostranauts_Data[/\\]Managed'", RegexOptions.Compiled);
-
     /// <summary>The profile that ran this install's last session, or null.</summary>
     public static ManagerProfile? Active(string gameRoot, string playerLogPath, string? appData = null)
     {
         try
         {
-            if (!File.Exists(playerLogPath)) return null;
-            var writer = File.ReadLines(playerLogPath).Take(20).Select(l => MonoPath.Match(l)).FirstOrDefault(m => m.Success)?.Groups[1].Value;
-            if (writer is null || !SamePath(writer, gameRoot)) return null;
+            var writer = GameEnv.LastRunRoot(playerLogPath);
+            if (writer is null || !GameEnv.SamePath(writer, gameRoot)) return null;
             var session = File.GetLastWriteTimeUtc(playerLogPath);
             var ownLog = Path.Combine(gameRoot, "BepInEx", "LogOutput.log");
             var ownWrite = File.Exists(ownLog) ? File.GetLastWriteTimeUtc(ownLog) : DateTime.MinValue;
@@ -106,8 +102,4 @@ public static class ManagerProfiles
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
-
-    private static bool SamePath(string a, string b) =>
-        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
-                      Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)), StringComparison.OrdinalIgnoreCase);
 }

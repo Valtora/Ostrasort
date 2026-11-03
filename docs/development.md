@@ -70,7 +70,7 @@ Operational gotchas:
 
 | File | Responsibility |
 |---|---|
-| `src\GameEnv.cs` | install discovery (Steam registry → `libraryfolders.vdf`), game version |
+| `src\GameEnv.cs` | install discovery (Steam registry → `libraryfolders.vdf`, real installs only, Steam's own record of the library first), `strPathMods` from the game's `settings.json`, game version. `LocateSources` injects the Steam folder, `settings.json` and `Player.log` for tests |
 | `src\Mods.cs` | mod model + the scanner that classifies and indexes each mod |
 | `src\Analysis.cs` | collision detection, sorting rules, manual-order validation |
 | `src\GameJson.cs` | reads JSON the way the game's own parser does: repairs the unescaped control characters, single-quoted strings and `\'` escapes LitJson accepts and System.Text.Json rejects |
@@ -111,7 +111,11 @@ logic — the field-merge engine (including FFU fragment semantics), the schema
 validator, the guarded `loading_order.json` read/write, the sort rules
 (including the FFU block), `Autoload.Meta.toml` parsing, FFU classification,
 autoloader detection, the roaming-data migration (`AppPathsTests`, including the
-partial-destination merge that must not strand data), and the update guard
+partial-destination merge that must not strand data), install discovery against
+a fake Steam layout (`SteamLocateTests`, and `InstallCheckTests` for the
+incomplete-install and stale `strPathMods` warnings and the refusal to fix an
+incomplete install, which drives the CLI through `Program.Run` so `Main`'s
+legacy data move never runs in a test), and the update guard
 (`UpdaterTests`: `VeloUpdate.Create` declines for an unmanaged copy). The
 Velopack check/download/apply steps are integration-level and verified
 manually:
@@ -134,7 +138,9 @@ The analysis and patch paths can be exercised against a fake install with
 `Ostranauts_Data\Mods\` with mod folders and a `loading_order.json`, and a
 `globalgamemanagers` file with a version string. This isolates tests from the
 real install (and `strPathMods` is ignored when `--game` is passed, so
-fixtures stay self-contained).
+fixtures stay self-contained). A fixture without `StreamingAssets\data` or
+`globalgamemanagers` opens, but leads its warnings with "not a complete Ostranauts
+install" and drops the BepInEx-not-installed warning.
 
 ## Releasing
 

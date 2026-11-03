@@ -194,10 +194,60 @@ define collides (last-loaded wins). Ostrasort reports these as additive-at-load
 and **never folds them into the patch**, because unioning a fixed-width `aValues`
 would scramble the packing and crash the game on load.
 
+## Finding the install
+
+Auto-detect reads the Steam folder from the registry, then every library listed
+in its `libraryfolders.vdf`, and looks in each for `steamapps\common\Ostranauts`.
+A folder only counts when it holds the game itself (`Ostranauts.exe` or
+`Ostranauts_Data\globalgamemanagers`). Steam's uninstall leaves behind files it did
+not install, and the game recreates its mods folder whenever it saves the mod
+list, so an old install's folder can survive with nothing in it but
+`Ostranauts_Data\Mods`. Such a folder is never picked. When more than one library
+holds the game, the one Steam records it in wins (its
+`steamapps\appmanifest_1022980.acf`, or the game listed in that library's `apps`
+block), then the folder that wrote the last `Player.log`, then the order Steam
+lists the libraries in. A game folder you name yourself (`--game`, or a saved
+installation) is used as given.
+
+The mods folder is the game's own `Ostranauts_Data\Mods` unless the game's
+`strPathMods` setting moves it. The game keeps that setting in `settings.json`
+(beside `Player.log`, in `%USERPROFILE%\AppData\LocalLow\Blue Bottle Games\Ostranauts`),
+writes it once on its first run, and never resets it, not on a reinstall and not on
+a file check. Ostrasort reads and writes `loading_order.json` wherever
+`strPathMods` points, because that is the file the game loads.
+
 ## Hygiene checks
 
 Surfaced in the same pass.
 
+- **an incomplete game folder**. When the game folder has no
+  `Ostranauts_Data\StreamingAssets\data` or no `Ostranauts_Data\globalgamemanagers`,
+  the first warning says so and gives the number of base game objects Ostrasort
+  read (usually 0). With no base game there is nothing to compare mods against, so
+  conflicts, merges and the game update checks are not reliable. The health card
+  leads with it, and the "BepInEx is NOT installed" and missing bridge patcher
+  warnings are left out, since that folder never had BepInEx. The fix is to pick
+  the folder the game runs from (**Manage…** next to Installation, or `--game`).
+  Until then Ostrasort only reports. **Fix automatically** and the patch buttons
+  are turned off (hovering one says why), and `--patch` and `--apply` refuse
+  before writing anything. Applying the suggested order is off as well, although
+  most of its rules read only the mods. Its tidy grouping tells overriding mods
+  from additive ones by the base game, and it registers subscribed Workshop items
+  from the library beside the game folder, which is not the library the game runs
+  from. **Remove patch** (`--unpatch`), an order you arranged yourself and a
+  profile switch stay available
+- **`strPathMods` left on another install**. When `strPathMods` names the
+  `Ostranauts_Data\Mods` folder of a different Ostranauts folder from the one
+  Ostrasort opened, it is almost always left over from an old install, and it is
+  why the game's Options, Files tab, shows a mods folder on another drive. While
+  that folder exists, Ostrasort follows it (the game does too, so mods still load)
+  and the warning explains how to move back: close the game, copy
+  `loading_order.json` and any hand-added mod folders across, set `strPathMods` to
+  this install's own `Ostranauts_Data/Mods/loading_order.json` (forward slashes, as
+  the game writes it) and restart the game. When that folder is gone, the game
+  loads no mods at all, and the warning says that instead. A mods folder you moved
+  somewhere that is not an Ostranauts folder is a deliberate setup and raises
+  nothing
 - **dead `aLoadOrder` paths**, entries pointing at unsubscribed or removed items
 - **unregistered local mods**, folders under `Mods\` missing from `aLoadOrder`
   (invisible to the MODS screen)
@@ -466,6 +516,10 @@ patch straight away.
 ## Safety model
 
 - **Analysis never writes anything** and is safe to run while the game is open.
+- **No fixes on an incomplete game folder.** When the game folder has no base
+  game data or no `globalgamemanagers` (see the hygiene checks), building or
+  refreshing the patch and applying the suggested order are refused, in the GUI
+  and on the command line. Removing the patch is still allowed.
 - **Every write path** (apply order, generate or refresh or remove patch, restore
   `.bak`) refuses while Ostranauts is running, saves the previous
   `loading_order.json` as `loading_order.json.bak` first, keeps the file a

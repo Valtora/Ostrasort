@@ -65,6 +65,8 @@ public partial class MainWindow : Window
     private bool _busy;
     private bool _ffuBannerDismissed;
     private int _attentionCount;
+    // the buttons' own tooltips, restored once a fix is allowed again (see UpdateActionBar)
+    private object? _tipHealthFix, _tipPatchGenerate, _tipPatchFresh;
     private DateTime _lastScan = DateTime.MinValue;
     private Point _dragStart;
     private ModRow? _dragRow;
@@ -95,6 +97,9 @@ public partial class MainWindow : Window
         _installs = installs ?? InstallationStore.Load();
         _activeInstall = activeInstall;
         InitializeComponent();
+        _tipHealthFix = BtnHealthFix.ToolTip;
+        _tipPatchGenerate = BtnPatchGenerate.ToolTip;
+        _tipPatchFresh = BtnPatchFresh.ToolTip;
         RestoreWindowState();
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         // Single-instance signal fires on a background thread - marshal to the UI.
@@ -285,12 +290,25 @@ public partial class MainWindow : Window
         var logMods = logDismissed
             ? new List<ModEntry>()
             : a.AllMods.Where(m => m.LogNotes.Count > 0).ToList();
-        // broken code mods get their own line below, so they are not counted twice
+        // broken code mods and the two install problems get their own lines below,
+        // so they are not counted twice
         var warnCount = a.Warnings.Count - a.CodeModIssues.Count + a.AllMods.Sum(m => m.JsonErrors.Count)
+                        - (a.IncompleteInstallWarning is null ? 0 : 1) - (a.StrPathModsWarning is null ? 0 : 1)
                         + (logDismissed ? 0 : a.LogWarnings.Count);
         var fixable = a.OrderChanged || Patcher.HasWork(a) || s.Patch.Stale || s.Patch.Obsolete;
 
         var issues = new List<string>();
+        // first, because every other result depends on it
+        if (a.IncompleteInstallWarning is not null)
+            issues.Add($"{_env.GameRoot} is not a complete Ostranauts install, so Ostrasort read " +
+                       $"{s.Scanner.CoreIndex.Count:N0} base game objects and cannot check your mods against the base game. " +
+                       "Use Manage next to Installation to pick the folder the game runs from");
+        if (a.StrPathModsWarning is not null && _env.StrPathModsOtherRoot is { } otherRoot)
+            issues.Add(_env.ModsDirFromStrPathMods
+                ? $"the game reads its mod list from another Ostranauts folder ({otherRoot}), usually left over from an old install. " +
+                  "The Warnings tab says how to move it back"
+                : $"the game reads its mod list from a folder that does not exist ({Path.Combine(otherRoot, "Ostranauts_Data", "Mods")}), " +
+                  "so it loads no mods. The Warnings tab says how to fix it");
         if (attention > 0)
             issues.Add(attention == 1 ? "1 mod conflict needs your attention"
                                       : $"{attention} mod conflicts need your attention");
@@ -341,7 +359,7 @@ public partial class MainWindow : Window
             HealthBanner.Background = severe ? ThemeManager.BannerAlarmBg : ThemeManager.BannerInfoBg;
             HealthBanner.BorderBrush = severe ? ThemeManager.BannerAlarmBorder : ThemeManager.BannerInfoBorder;
             TxtHealthTitle.Text = (issues.Count == 1 ? "1 issue found" : $"{issues.Count} issues found")
-                                  + (fixable ? " (Ostrasort can fix part of this automatically)." : ".");
+                                  + (fixable && a.IncompleteInstallWarning is null ? " (Ostrasort can fix part of this automatically)." : ".");
             TxtHealthTitle.Foreground = severe ? Bad : Warn;
             TxtHealthDetail.Text = string.Join(" ", issues.Select(i => Capitalize(i) + "."));
             TxtHealthDetail.Foreground = Normal;
@@ -363,7 +381,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void HealthFix_Click(object sender, RoutedEventArgs e)
     {
-        if (_state is null || !GateRunning() || !GateRival()) return;
+        if (_state is null || !GateRunning() || !GateRival() || !GateCompleteInstall()) return;
         if (_manualDirty)
         {
             MessageBox.Show(this, "You have an unapplied manual arrangement. Apply or reset it first.",
@@ -428,7 +446,8 @@ public partial class MainWindow : Window
         if (_state is null) return;
         var a = _state.Analysis;
         Tabs.SelectedItem =
-            a.Collisions.Any(CollisionView.NeedsAttention) ? TabCollisions
+            a.IncompleteInstallWarning is not null ? TabWarnings   // nothing else can be trusted until it is fixed
+            : a.Collisions.Any(CollisionView.NeedsAttention) ? TabCollisions
             : a.OrderChanged ? TabOrder
             : _state.Patch.Stale || _state.Patch.Obsolete ? TabPatch
             : TabWarnings;
@@ -857,12 +876,18 @@ public partial class MainWindow : Window
         // is installed every write is futile, so the GUI is analysis-only
         var rivalLock = a.Ffu is { AutoloaderActive: true };
 
-        BtnHealthFix.IsEnabled = !running && !rivalLock && !_manualDirty;
+        // an incomplete install only reports: no patch, and no suggested order
+        // (removing a patch and applying your own arrangement stay allowed)
+        var blocked = Engine.FixesBlockedReason(_env);
+        BtnHealthFix.IsEnabled = !running && !rivalLock && !_manualDirty && blocked is null;
         BtnApplyManual.Visibility = _manualDirty ? Visibility.Visible : Visibility.Collapsed;
         BtnApplyManual.IsEnabled = _manualDirty && !running && !rivalLock;
-        BtnPatchGenerate.IsEnabled = Patcher.HasWork(a) && !running && !rivalLock;
+        BtnPatchGenerate.IsEnabled = Patcher.HasWork(a) && !running && !rivalLock && blocked is null;
         BtnPatchGenerate.Content = s.Patch.Stale ? "Refresh patch (decisions kept)" : "Resolve conflicts & generate patch";
         BtnPatchFresh.IsEnabled = BtnPatchGenerate.IsEnabled;
+        BlockedTip(BtnHealthFix, blocked, _tipHealthFix);
+        BlockedTip(BtnPatchGenerate, blocked, _tipPatchGenerate);
+        BlockedTip(BtnPatchFresh, blocked, _tipPatchFresh);
         BtnPatchDelete.IsEnabled = s.Patch.Exists && !running && !rivalLock;
         BtnLaunch.IsEnabled = !running;
         LinkReset.IsEnabled = _manualDirty;
@@ -900,6 +925,12 @@ public partial class MainWindow : Window
             RunStatus.Foreground = issues.Count == 0 ? Warn : Bad;
             ((TextBlock)RunStatus.Parent!).ToolTip = issues.Count == 0 ? null : string.Join("\n", issues);
         }
+        else if (blocked is not null)
+        {
+            RunStatus.Text = "This game folder is not a complete Ostranauts install, so Fix automatically and the patch are off. See the first warning.  ";
+            RunStatus.Foreground = Bad;
+            ((TextBlock)RunStatus.Parent!).ToolTip = null;
+        }
         else if (_attentionCount > 0)
         {
             RunStatus.Text = $"{_attentionCount} thing(s) need attention. See the highlighted tabs.  ";
@@ -915,6 +946,17 @@ public partial class MainWindow : Window
         LinkReset.Inlines.Add(_manualDirty ? "reset arrangement" : "");
 
         UpdateProfileButtons();
+    }
+
+    /// <summary>
+    /// Shows why a write button is off. WPF hides a disabled button's tooltip
+    /// unless told otherwise, so the reason is shown on hover too; once the
+    /// action is allowed again the button gets its own tooltip back.
+    /// </summary>
+    private static void BlockedTip(Button button, string? reason, object? own)
+    {
+        ToolTipService.SetShowOnDisabled(button, reason is not null);
+        button.ToolTip = reason ?? own;
     }
 
     private static LineVm L(string text, Brush brush, int indent = 0, bool bold = false) =>
@@ -1086,6 +1128,19 @@ public partial class MainWindow : Window
             "OstraAutoloader manages this install. It regenerates loading_order.json on every launch, " +
             "so Ostrasort is analysis-only here (see the banner). Nothing was written.",
             "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
+        return false;
+    }
+
+    /// <summary>
+    /// Blocks the patch and Fix automatically on a game folder that is not a
+    /// complete install (see <see cref="Engine.FixesBlockedReason"/>). Their
+    /// buttons are disabled then, but like <see cref="GateRival"/> the handlers
+    /// check for themselves.
+    /// </summary>
+    private bool GateCompleteInstall()
+    {
+        if (Engine.FixesBlockedReason(_env) is not { } reason) return true;
+        MessageBox.Show(this, reason + " Nothing was written.", "Ostrasort", MessageBoxButton.OK, MessageBoxImage.Warning);
         return false;
     }
 
@@ -1320,7 +1375,7 @@ public partial class MainWindow : Window
 
     private void GeneratePatch(bool fresh)
     {
-        if (_state is null || !GateRunning() || !GateRival()) return;
+        if (_state is null || !GateRunning() || !GateRival() || !GateCompleteInstall()) return;
         _busy = true;
         try
         {

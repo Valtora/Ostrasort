@@ -32,7 +32,11 @@ public static class Program
         Velopack.VelopackApp.Build().Run();
 
         AttachConsoleIfLaunchedFromTerminal(args);   // before any Console access
-        try { return Run(args); }
+        try
+        {
+            AppPaths.MigrateLegacyData();   // one-time move of pre-0.23 data to roaming AppData (no-op after the first run)
+            return Run(args);
+        }
         catch (Exception e)
         {
             Console.Error.WriteLine($"ostrasort: {e.Message}");
@@ -40,9 +44,15 @@ public static class Program
         }
     }
 
-    private static int Run(string[] args)
+    /// <summary>
+    /// Everything after start-up: argument parsing, the stand-alone verbs and the
+    /// report/apply pipeline. Main adds the Velopack hooks, the console attach,
+    /// the one-time legacy data move and the "ostrasort: " error line around it,
+    /// so tests can drive the CLI here without moving a real user's data.
+    /// A refusal or a failure throws.
+    /// </summary>
+    public static int Run(string[] args)
     {
-        AppPaths.MigrateLegacyData();   // one-time move of pre-0.23 data to roaming AppData (no-op after the first run)
 
         bool report = false, apply = false, patch = false, unpatch = false, noGui = false, gui = false, smokeGui = false, smokeUndo = false, headless = false, tidy = false, fresh = false, allowRival = false, json = false, profileList = false, merge = false, holdNew = false;
         string? gameRoot = null, modsDir = null, installName = null, profileSave = null, profileLoad = null, installZip = null, markFfu = null, unmarkFfu = null;
@@ -617,6 +627,10 @@ public static class Program
 
         if (apply || patch || unpatch || profileLoad is not null)
             GateNoRival(state.Analysis.Ffu, allowRival, "modify");
+        // before any write, so a refused command leaves everything as it was;
+        // --unpatch and --profile-load stay allowed (cleanup, and an order the player chose)
+        if (patch) Engine.RefuseIncompleteInstall(env, "build the compatibility patch");
+        if (apply) Engine.RefuseIncompleteInstall(env, "apply the suggested load order");
 
         if (profileLoad is not null)
         {

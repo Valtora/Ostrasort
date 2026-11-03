@@ -19,7 +19,14 @@ public static class Engine
         ignore ??= IgnoreList.LoadDefault();
         ffuOverrides ??= FfuOverrideList.LoadDefault();
         categoryOverrides ??= CategoryOverrideList.LoadDefault();
-        var lo = LoadOrderFile.Read(env.LoadingOrderPath);
+        LoadOrderFile lo;
+        try { lo = LoadOrderFile.Read(env.LoadingOrderPath); }
+        catch (FileNotFoundException) when (!env.ModsDirFromStrPathMods && StrPathModsText(env) is { } stale)
+        {
+            // the game reads a strPathMods folder that is gone, so it never writes a
+            // list here, and "launch the game once" would not help
+            throw new FileNotFoundException($"loading_order.json not found at '{env.LoadingOrderPath}'. {stale}", env.LoadingOrderPath);
+        }
         var analysis = new Analysis
         {
             Registered = lo.Order.Select(raw => ModEntry.Parse(raw, env)).ToList(),
@@ -44,6 +51,7 @@ public static class Engine
         FieldDiff.Annotate(env, analysis);
         OverrideAudit.Annotate(env, analysis);   // overrides that undo the last game update, or match the game exactly
         analysis.MarkOrderResolved();   // final-say (late-tier) mods that win by loading last - after FieldDiff so it overrides "mergeable"
+        CheckInstall(env, scanner, analysis);
         CheckImages(analysis);
         CheckBepInEx(env, analysis);
         CheckCodeMods(env, analysis);
@@ -103,6 +111,99 @@ public static class Engine
                            $"their objects never load: {Sample(m.IgnoredFiles)}");
     }
 
+    /// <summary>
+    /// Problems with the install itself, listed ahead of every other warning
+    /// because they decide whether the rest can be trusted: a game folder that is
+    /// not a complete install (so nothing was compared with the base game), and a
+    /// strPathMods that names another Ostranauts folder's Mods folder. Both are the
+    /// player's to fix, and the text says how.
+    /// </summary>
+    private static void CheckInstall(GameEnv env, Scanner scanner, Analysis a)
+    {
+        var first = new List<string>();
+        if (!env.IsCompleteInstall)
+            first.Add(a.IncompleteInstallWarning = IncompleteInstallText(env, scanner.CoreIndex.Count));
+        if (env.StrPathModsOtherRoot is not null && StrPathModsText(env) is { } stale)
+            first.Add(a.StrPathModsWarning = stale);
+        a.Warnings.InsertRange(0, first);
+    }
+
+    private static string MissingPartsPhrase(GameEnv env)
+    {
+        var parts = env.MissingInstallParts;
+        return parts.Count == 1 ? $"{parts[0]} is missing" : $"{string.Join(" and ", parts)} are missing";
+    }
+
+    /// <summary>The incomplete-install warning, naming the missing parts and the size of the core index.</summary>
+    public static string IncompleteInstallText(GameEnv env, int coreObjects)
+    {
+        return $"{env.GameRoot} is not a complete Ostranauts install ({MissingPartsPhrase(env)}). " +
+               $"Ostrasort read {coreObjects:N0} base game objects from it, so it has nothing to compare your mods with, " +
+               "and the conflict, merge and game update checks are not reliable. " +
+               "Use Manage next to Installation to add the folder the game runs from " +
+               "(in Steam, right click Ostranauts and choose Manage, then Browse local files), " +
+               "or pass it with --game from a terminal.";
+    }
+
+    /// <summary>
+    /// Why the fixes are off on this install, or null when they are allowed. On a
+    /// folder that is not a complete install Ostrasort only reports: the
+    /// compatibility patch merges every mod against the base game, which is not
+    /// there, and the suggested order is built from that folder too (its tidy
+    /// grouping tells overriding mods from additive ones by the base game, and it
+    /// registers Workshop items from the library beside the folder, which is not
+    /// the one the game runs from). Removing an existing patch, applying an order
+    /// you arranged yourself and switching profiles stay allowed. The GUI shows
+    /// this on the disabled buttons; the CLI refuses with <see cref="RefuseIncompleteInstall"/>.
+    /// </summary>
+    public static string? FixesBlockedReason(GameEnv env) => env.IsCompleteInstall ? null :
+        "Turned off because this game folder is not a complete Ostranauts install, so there is no base game " +
+        "to merge mods against. The first warning on the Warnings tab says how to pick the folder the game runs from.";
+
+    /// <summary>
+    /// The CLI's refusal to <paramref name="action"/> (a verb phrase, such as "build
+    /// the compatibility patch") on an incomplete install. Throws before anything
+    /// is written; does nothing on a complete install.
+    /// </summary>
+    public static void RefuseIncompleteInstall(GameEnv env, string action)
+    {
+        if (env.IsCompleteInstall) return;
+        throw new InvalidOperationException(
+            $"{env.GameRoot} is not a complete Ostranauts install ({MissingPartsPhrase(env)}), so Ostrasort will not " +
+            $"{action} there. Without the base game, and without the folder the game runs from, its merges and " +
+            "suggestions cannot be trusted. Pick that folder with --game, or with Manage next to Installation in the " +
+            "window, then run the command again. Reports still run, and nothing was written.");
+    }
+
+    /// <summary>
+    /// The stale-strPathMods warning, or null when strPathMods names no other
+    /// install. Two cases: the other folder exists (ModsDir follows it, as the game
+    /// does, so mods still load), or it is gone (the game loads no mods at all).
+    /// </summary>
+    public static string? StrPathModsText(GameEnv env)
+    {
+        if (env.StrPathModsOtherRoot is not { } other || env.StrPathMods is not { } raw) return null;
+        var ownMods = Path.Combine(env.GameRoot, "Ostranauts_Data", "Mods");
+        var otherMods = Path.Combine(other, "Ostranauts_Data", "Mods");
+        var value = env.GameRoot.Replace('\\', '/') + "/Ostranauts_Data/Mods/loading_order.json";
+        const string why = "This is usually left over from an old install, because the game keeps strPathMods " +
+                           "in its settings.json through every reinstall. ";
+        const string where = " The Files tab of the game's Options shows the current path, and its Settings button " +
+                             "opens the folder that holds settings.json.";
+        var set = $"set strPathMods in settings.json to {value} (forward slashes, exactly as shown), " +
+                  "then start the game again and reopen Ostrasort.";
+        return env.ModsDirFromStrPathMods
+            ? $"The game reads its mod list from {raw}, which is the Mods folder of a different Ostranauts folder " +
+              $"({other}), not of the install Ostrasort opened ({env.GameRoot}). " + why +
+              "Ostrasort reads and writes the same folder as the game, so your mods still load. " +
+              $"To go back to this install's own Mods folder, close the game, copy loading_order.json and any mod " +
+              $"folders you added by hand from {otherMods} to {ownMods}, " + set + where
+            : $"The game reads its mod list from {raw}, the Mods folder of a different Ostranauts folder ({other}), " +
+              "and that folder does not exist, so the game loads no mods at all. " +
+              $"Ostrasort opens this install's own Mods folder ({ownMods}) instead, which the game is not reading. " + why +
+              "To fix it, close the game, " + set + where;
+    }
+
     /// <summary>Two mods shipping the same relative image path - last loaded wins the whole file.</summary>
     private static void CheckImages(Analysis a)
     {
@@ -133,10 +234,14 @@ public static class Engine
                            || File.Exists(Path.Combine(env.GameRoot, "winhttp.dll"));
         var bridgePresent = a.AllMods.Any(m => m.HasPatchers)
                          || Directory.Exists(Path.Combine(env.CodeBepInExDir, "patchers"));
-        if (modsWithPlugins.Count > 0 && !loaderInstalled)
+        // a folder that is not a real install has no BepInEx either, and telling
+        // the player to install it again would be wrong; the incomplete-install
+        // warning (CheckInstall) says what to fix instead
+        var realFolder = env.IsCompleteInstall;
+        if (realFolder && modsWithPlugins.Count > 0 && !loaderInstalled)
             a.Warnings.Add($"{modsWithPlugins.Count} mod(s) ship BepInEx plugins but BepInEx is NOT installed in the game folder " +
                            "- none of their code will load (subscribe to the BepInEx Mod Loader and finish its setup)");
-        else if (modsWithPlugins.Any(m => m.Kind == EntryKind.Workshop) && !bridgePresent)
+        else if (realFolder && modsWithPlugins.Any(m => m.Kind == EntryKind.Workshop) && !bridgePresent)
             a.Warnings.Add("Workshop code mods are subscribed but the Workshop bridge patcher is missing " +
                            "- their plugins will not load (subscribe to the BepInEx Mod Loader)");
 

@@ -126,6 +126,20 @@ public sealed class Analysis
     /// <summary>Plugins that use game code the installed build no longer has (see <see cref="CodeModCheck"/>).</summary>
     public List<CodeModIssue> CodeModIssues { get; } = new();
 
+    /// <summary>
+    /// The opened game folder is not a complete install, so nothing was compared
+    /// with the base game (see <see cref="Engine"/>). The warning's text, also in
+    /// <see cref="Warnings"/>; null for a complete install.
+    /// </summary>
+    public string? IncompleteInstallWarning { get; set; }
+
+    /// <summary>
+    /// The game's strPathMods names another Ostranauts folder's Mods folder (see
+    /// <see cref="GameEnv.StrPathModsOtherRoot"/>). The warning's text, also in
+    /// <see cref="Warnings"/>; null otherwise.
+    /// </summary>
+    public string? StrPathModsWarning { get; set; }
+
     public IEnumerable<ModEntry> AllMods =>
         Registered.Concat(UnregisteredLocal).Concat(UnregisteredWorkshop);
 
