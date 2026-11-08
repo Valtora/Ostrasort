@@ -129,3 +129,5 @@ Released under the [MIT License](LICENSE). Do what you like with it, just keep
 the copyright notice. Provided as is, with no warranty and no liability for
 damage to your game, mods, or saves (see the notice above). Not affiliated with
 Blue Bottle Games.
+
+If Ostrasort is useful to you, please consider [buying me a coffee](https://ko-fi.com/valtorra).
