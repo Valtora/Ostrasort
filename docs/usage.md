@@ -14,8 +14,9 @@ the game itself and prefers the library Steam records the game in, so a leftover
 Ostranauts folder from an old install is never picked. (For an unusual install,
 point it manually with `--game <path>`.)
 
-On first run Windows SmartScreen may warn because the installer is not
-code-signed. Choose **More info**, then **Run anyway**, or unblock it in the
+Ostrasort is not code-signed, so on first run Windows SmartScreen will warn and
+other antivirus tools may flag it. That is normal for unsigned open-source
+software. Choose **More info**, then **Run anyway**, or unblock it in the
 file's Properties.
 
 Ostrasort opens straight to its window (no console window appears). It also

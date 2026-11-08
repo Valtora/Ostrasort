@@ -170,6 +170,14 @@ The repo is public. To cut a release:
    the installer `Ostrasort-win-Setup.exe`, so the plain `gh` upload above is used
    instead to ship the trimmed, version-named set.)
 
+   The notes always end with this notice, word for word:
+
+   ```markdown
+   ---
+
+   **The installer and the app are not code-signed.** Windows SmartScreen will warn the first time you run them (choose **More info**, then **Run anyway**), and other antivirus tools may flag them too. This is normal for unsigned binaries and for open-source projects. The full source is in this repository and free to audit, and if you are unsure, you can ask an AI assistant to review it.
+   ```
+
 Installed copies pick the update up on their next launch: `UpdateManager` reads
 `releases.win.json`, compares its own version against the newest release, and
 downloads the `full.nupkg` it names. A release whose `<Version>` didn't move will

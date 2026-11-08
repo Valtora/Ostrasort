@@ -104,8 +104,10 @@ one-click way out. The [documentation](#documentation) covers the details.
 Your settings, profiles, and backups live in `%APPDATA%\Ostrasort`, so they
 survive updates and reinstalls.
 
-> Windows SmartScreen may warn on first run because the installer is not
-> code-signed. Choose **More info**, then **Run anyway**.
+> Ostrasort is not code-signed, so Windows SmartScreen will warn on first run
+> and other antivirus tools may flag it. That is normal for unsigned binaries
+> and for open-source projects. Choose **More info**, then **Run anyway**. The
+> source is all here and free to audit, or ask an AI assistant to review it.
 
 Full walkthrough in **[docs/usage.md](docs/usage.md)**.
 
