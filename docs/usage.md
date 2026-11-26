@@ -141,7 +141,11 @@ count, and the window opens on it.
   this), code mods broken by a game update (their plugin uses game code the
   installed version no longer has, which also gets its own line on the health
   card and a section in the mod's detail panel, so you can update the mod or
-  turn it off before the game crashes on it), and any load errors the **game
+  turn it off before the game crashes on it. A plugin sitting in
+  `BepInEx\plugins` that no mod in your list owns is flagged the same way, since
+  BepInEx loads it regardless. It has no row to turn off, so remove it from that
+  folder instead. **Show me** on the health card selects the broken mod's row, or
+  opens the plugin's folder in Explorer), and any load errors the **game
   itself** logged at the last launch, attributed to the mod responsible where
   Ostrasort can pin them down (see the Logs tab for the rest).
 - **Load order** shows the current order and the suggested order side by side.

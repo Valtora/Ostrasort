@@ -319,12 +319,19 @@ public partial class MainWindow : Window
             issues.Add("Ostranauts reported problems from " +
                        string.Join(", ", logMods.Take(3).Select(m => m.DisplayName ?? m.Name)) +
                        (logMods.Count > 3 ? $" (and {logMods.Count - 3} more)" : "") + " on its last launch");
-        if (a.CodeModIssues.Count > 0)
-        {
-            var broken = a.CodeModIssues.Select(i => Engine.CodeModOwnerName(a, i)).Distinct().ToList();
+        // a plugin no mod in the list owns has no row to turn off, so it gets its
+        // own line that says where it is and to remove it instead
+        var broken = a.CodeModIssues.Select(i => Engine.CodeModOwner(a, i)).OfType<ModEntry>()
+            .Select(m => m.DisplayName ?? m.Name).Distinct().ToList();
+        if (broken.Count > 0)
             issues.Add((broken.Count == 1 ? $"code mod {broken[0]} uses" : $"{broken.Count} code mods ({string.Join(", ", broken.Take(3))}{(broken.Count > 3 ? ", ..." : "")}) use")
                        + " game code this version no longer has. " + (broken.Count == 1 ? "Update it or turn it off" : "Update them or turn them off"));
-        }
+        var loose = a.CodeModIssues.Where(i => Engine.CodeModOwner(a, i) is null).Select(i => i.Owner).Distinct().ToList();
+        if (loose.Count > 0)
+            issues.Add((loose.Count == 1 ? $"plugin {loose[0]} is" : $"{loose.Count} plugins ({string.Join(", ", loose.Take(3))}{(loose.Count > 3 ? ", ..." : "")}) are")
+                       + @" in BepInEx\plugins but not in your mod list, so the game still loads "
+                       + (loose.Count == 1 ? "it" : "them") + ", and " + (loose.Count == 1 ? "it uses" : "they use")
+                       + " game code this version no longer has. " + (loose.Count == 1 ? "Update it or remove it" : "Update them or remove them"));
         if (warnCount > 0)
             issues.Add(warnCount == 1 ? "1 warning (see the Warnings tab)" : $"{warnCount} warnings (see the Warnings tab)");
 
@@ -439,7 +446,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Open the tab that explains the current issues, most pressing first.</summary>
-    private void HealthShow_Click(object sender, RoutedEventArgs e) => ShowAttentionTab();
+    private void HealthShow_Click(object sender, RoutedEventArgs e)
+    {
+        ShowAttentionTab();
+        // only on the click: at startup the tab is enough, and Explorer must not open by itself
+        if (_state is not null && Tabs.SelectedItem == TabWarnings) ShowBrokenCodeMods(_state.Analysis);
+    }
 
     private void ShowAttentionTab()
     {
@@ -451,6 +463,33 @@ public partial class MainWindow : Window
             : a.OrderChanged ? TabOrder
             : _state.Patch.Stale || _state.Patch.Obsolete ? TabPatch
             : TabWarnings;
+    }
+
+    /// <summary>
+    /// Points at the code mods the warning names, since the Warnings tab may
+    /// already be open and switching to it would show nothing new: an owned
+    /// plugin's row is selected, an unowned one is revealed in Explorer, where
+    /// it can be removed.
+    /// </summary>
+    private void ShowBrokenCodeMods(Analysis a)
+    {
+        if (a.CodeModIssues.Count == 0) return;
+        var owned = a.CodeModIssues.Select(i => Engine.CodeModOwner(a, i)).OfType<ModEntry>().FirstOrDefault();
+        if (owned is not null && _rows.FirstOrDefault(r => ReferenceEquals(r.M, owned)) is { } row)
+        {
+            ModsGrid.SelectedItem = row;
+            ModsGrid.ScrollIntoView(row);
+        }
+        if (a.CodeModIssues.FirstOrDefault(i => Engine.CodeModOwner(a, i) is null) is { } loose)
+            RevealInExplorer(Engine.UnownedPluginTarget(_env, loose));
+    }
+
+    /// <summary>Opens the containing folder with the item selected.</summary>
+    private static void RevealInExplorer(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path)) return;
+        try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true }); }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { }
     }
 
     /// <summary>

@@ -275,18 +275,47 @@ public static class Engine
     /// Plugins compiled against game code the installed build no longer has.
     /// The player cannot fix the plugin, so the advice is to update it or turn
     /// it off. Names the Workshop item when the plugin is a bridge copy of one.
+    /// A plugin no mod in the list owns (copied into BepInEx\plugins by hand)
+    /// still loads, but has no row to turn off, so the advice is to remove it
+    /// from that folder instead.
     /// </summary>
     private static void CheckCodeMods(GameEnv env, Analysis a)
     {
         a.CodeModIssues.AddRange(CodeModCheck.CheckInstall(env));
         foreach (var issue in a.CodeModIssues)
         {
-            CodeModOwner(a, issue)?.MissingGameCode.AddRange(issue.Missing);
-            var name = CodeModOwnerName(a, issue);
+            var owner = CodeModOwner(a, issue);
+            owner?.MissingGameCode.AddRange(issue.Missing);
             var sample = string.Join(", ", issue.Missing.Take(3)) + (issue.Missing.Count > 3 ? $", +{issue.Missing.Count - 3} more" : "");
-            a.Warnings.Add($"code mod '{name}' ({Path.GetFileName(issue.PluginPath)}) uses game code this version no longer has " +
-                           $"({sample}) - it will likely fail or crash the game, so update it or turn it off");
+            a.Warnings.Add(owner is not null
+                ? $"code mod '{owner.DisplayName ?? owner.Name}' ({Path.GetFileName(issue.PluginPath)}) uses game code this version no longer has " +
+                  $"({sample}) - it will likely fail or crash the game, so update it or turn it off"
+                : $"plugin '{issue.Owner}' ({PluginDisplayPath(env, issue.PluginPath)}) is not part of any mod in your list, but BepInEx loads it anyway. " +
+                  $"It uses game code this version no longer has ({sample}) - it will likely fail or crash the game, " +
+                  @"so update it or remove it from BepInEx\plugins");
         }
+    }
+
+    /// <summary>A plugin's path relative to the game folder when it sits inside it, else in full.</summary>
+    public static string PluginDisplayPath(GameEnv env, string pluginPath)
+    {
+        var rel = Path.GetRelativePath(env.GameRoot, pluginPath);
+        return rel.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(rel) ? pluginPath : rel;
+    }
+
+    /// <summary>
+    /// What the player opens to deal with an unowned plugin: its own folder under
+    /// plugins, or the DLL itself when it sits loose in the plugins root.
+    /// </summary>
+    public static string UnownedPluginTarget(GameEnv env, CodeModIssue issue)
+    {
+        var plugins = Path.GetFullPath(Path.Combine(env.CodeBepInExDir, "plugins"));
+        var rel = Path.GetRelativePath(plugins, issue.PluginPath);
+        var parts = rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (rel.StartsWith("..", StringComparison.Ordinal) || parts.Length < 2) return issue.PluginPath;
+        // a bridge copy lives two levels down (Workshop\<id>), anything else one
+        var depth = parts[0].Equals("Workshop", StringComparison.OrdinalIgnoreCase) && parts.Length >= 3 ? 2 : 1;
+        return Path.Combine(plugins, Path.Combine(parts.Take(depth).ToArray()));
     }
 
     /// <summary>

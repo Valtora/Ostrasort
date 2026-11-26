@@ -282,7 +282,10 @@ Surfaced in the same pass.
   name. Base classes are followed into the other assemblies in
   `Ostranauts_Data\Managed`, and when one of those cannot be read the member is
   left unflagged. The player cannot repair a plugin, so the advice is to update
-  it or turn it off. After a launch, a `MissingMethodException` that names a
+  it or turn it off. A plugin that no mod in the list owns (one copied into
+  `BepInEx\plugins` by hand) still loads, but has no row to turn off, so its
+  warning names its path and the advice is to update it or remove it from that
+  folder. After a launch, a `MissingMethodException` that names a
   flagged member is attributed to that mod. The check cannot see string lookups
   such as `AccessTools.Method("Name")`, and it does not check MonoMod patches
 - **overrides after a game update** (`src\CoreHistory.cs`, `src\OverrideAudit.cs`).
